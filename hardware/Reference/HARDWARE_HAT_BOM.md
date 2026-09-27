@@ -96,11 +96,11 @@
 | J6 | 1 | 1 × 8 female 2.54 mm (BOOMELE) | C27438 | Ext | EMAX UM981, 8.5 mm body |
 | J7 | 1 | 2 × 14 female **2.0 mm** (Hong Cheng HC-PM200-4.3H-2x14PZ) | C22436146 | Ext | UM982EB, **4.3 mm body**, low stock (~1.1k) |
 | J8 | 1 | 1 × 3 female 2.54 mm | C146690 | Ext | console, **optional** |
-| SW1 | 1 | C&K PTS645VH83-2LFS | C221889 | Ext | reset, **optional** |
+| SW1 | 1 | TS-1088-AR02016, SMD tactile 3.9 × 3.0 × 2 mm, 2-pin | C720477 | **Basic** | reset, **optional**. Place outside the GNSS footprint so it stays reachable |
 | BZ1 | 1 | TDK PS1240P02BT, passive piezo 4 kHz | C76871 | Ext | |
 | SJ1–SJ3 | 3 | solder jumper (footprint only) | — | — | CAN termination, open by default |
 | H1–H4 | 4 | M2.5 plated hole | — | — | HAT mounting |
-| H5–H10 | 6 | M3 plated hole | — | — | GNSS standoffs |
+| H5, H6, H9, H10 | 4 | M3 plated hole, Ø 3.3 | — | — | GNSS standoffs: H5/H6 UM982EB (antenna end), H5/H9/H10 EMAX. No holes at the UM982EB header end (J7 holds it) |
 
 ## 6. Hand-fit and off-board items
 

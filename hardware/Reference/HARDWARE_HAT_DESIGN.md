@@ -81,7 +81,6 @@ so the board lies at negative Y. **X_editor = x, Y_editor = −(y + 16).** The b
 | H1 / H2 (HAT mount) | 3.50 / 61.50 | −19.50 | 2.7 |
 | H3 / H4 (HAT mount) | 3.50 / 61.50 | −68.50 | 2.7 |
 | H5 / H6 (GNSS A / B) | 22.00 / 56.30 | −4.00 | 3.3 |
-| H7 / H8 (GNSS C / D) | 22.00 / 56.30 | −68.60 | 3.2 |
 | H9 / H10 (GNSS E / F) | 22.00 / 58.00 | −40.00 / −39.50 | 3.6 |
 | J1 pin 1 / pin 2 | 8.37 | −20.82 / −18.28 | |
 | J2 pin 1 | 18.04 | −48.00 | |
@@ -166,8 +165,6 @@ top view, with antennas toward the HAT's top edge. They share hole H5.
 |---|---|---|---|
 | H5 | 22.00, −4.00 | 22.0, −12.0 | **both** |
 | H6 | 56.30, −4.00 | 56.3, −12.0 | UM982EB |
-| H7 | 22.00, −68.60 | 22.0, 52.6 | UM982EB |
-| H8 | 56.30, −68.60 | 56.3, 52.6 | UM982EB |
 | H9 | 22.00, −40.00 | 22.0, 24.0 | EMAX |
 | H10 | 58.00, −40.00 | 58.0, 24.0 | EMAX |
 | **J6** pin 1 → pin 8 (pins run +X) | 31.12 → 48.90, −41.20 | 31.12 → 48.90, 25.2 | EMAX |
@@ -180,10 +177,12 @@ top view, with antennas toward the HAT's top edge. They share hole H5.
   EMAX's own holes are 3.1.
 - **The EMAX sits on 3 standoffs** (H5, H9, H10), all on its square corners. Its odd, off-square
   hole (§3.2) isn't used.
+- **The UM982EB is held by standoffs at its antenna end only (H5, H6).** At the header end the J7
+  socket holds it firmly, so the board has **no holes there**: H7/H8 were deleted on 2026-09-25.
+  The refs H7/H8 are left unused, so the other holes keep their numbers.
 - The UM982EB's J7 pad spacing matches both the library part and AgOpenGPS AiO v5.0i (a built
   board), which uses the same layout rotated by 90°.
 - **Checks:**
-  - J7's end pads clear H7 and H8 by ≥ 1.6 mm.
   - Nothing lands on J1's pin band (Y −17.4 … −21.7) or on J2.
 - During layout the library outline parts ("UM982-NO-PADS", "UM981 EMAX") are only placement guides.
   **Delete them before fabrication:** they carry their own holes and pads (duplicate drills), and

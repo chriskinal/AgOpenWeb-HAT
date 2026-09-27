@@ -19,7 +19,7 @@
 |---|---|---|---|
 | **H1** | Vehicle power path | ~~J4 on the HAT, switched through Q2 to the IO board~~ → **12 V straight to the IO board's J20**. The HAT switches only its own 5 V (Q2) and holds the CM4 off via `GLOBAL_EN` (Q1). J4, J5 and the reverse-polarity stage removed; J3.1 becomes a 12 V sense wire. | **decided 2026-09-25:** direct power (design §4) |
 | **H2** | CAN transceiver current | The 5 V budget assumes ~70 mA per MCP251863 transceiver when dominant (design §4.7). Check the datasheet figure. | open |
-| **H3** | GNSS board dimensions | Measure on real boards: the EMAX's square hole pattern (36.0 × 36.0 on H5/H9/H10; its odd fourth hole is unused) and its left-edge connector; the UM982EB hole pattern (34.3 × 64.6 in the part, matching v5.0; another footprint says 34.0 × 64.75). With Ø 3.3 holes and M3 screws there's only ~±0.15 mm of play. | open |
+| **H3** | GNSS board dimensions | Measure on real boards: the EMAX's square hole pattern (36.0 × 36.0 on H5/H9/H10; its odd fourth hole is unused) and its left-edge connector; the UM982EB's antenna-end hole spacing (34.3 mm in the part, matching v5.0; another footprint says 34.0) and the distance from those holes to its header (64.6 mm). With Ø 3.3 holes and M3 screws there's only ~±0.15 mm of play. | open |
 | **H4** | GNSS UART logic level | Confirm both boards' TX1/RX1 are 3.3 V, not shifted to 5 V. | open |
 | **H6** | NVMe standby draw | The 150 µA IO-board figure (B13) — check whether an NVMe in the PCIe slot adds to it; the slot's 3.3 V converter runs from 12 V. | open |
 | **H5** | LCSC stock and fees | Re-check stock at order time (the 2026-09-23 figures are a snapshot), especially J7 (C22436146, ~1.1k). Confirm whether "Pref-Ext" parts carry the extended fee. | open |

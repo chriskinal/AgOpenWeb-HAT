@@ -270,7 +270,7 @@ Vehicle 12 V goes **straight to the IO board's J20**, not through the HAT. The H
 | U11 | C7484 |
 | D19–D22 | C5378721 |
 | Q10 | C8545 |
-| SW1 | C221889 (optional) |
+| SW1 | C720477 (optional) |
 | BZ1 | C76871 |
 | R37 | C2906869 |
 | R38, R39 | C25104 |
@@ -284,7 +284,7 @@ Vehicle 12 V goes **straight to the IO board's J20**, not through the HAT. The H
 |---|---|
 | `WDT_EN` | J1.5, U10.3, R37.1 |
 | `WDT_WDI` | J1.15, U10.4 |
-| `RUN_PG_G` | U10.1, R38.1, SW1.1, SW1.2 |
+| `RUN_PG_G` | U10.1, R38.1, SW1.1 |
 | `RUN_PG` | R38.2, J2.3 |
 | `LED_DATA` | J1.40, U11.2 |
 | `LED_DATA_OUT` | U11.4, R39.1 |
@@ -297,5 +297,5 @@ Vehicle 12 V goes **straight to the IO board's J20**, not through the HAT. The H
 | `PZ_DRAIN` | Q10.D, BZ1.2, R42.2 |
 | `+3V3` | U10.5, R37.2, C43.1, C44.1 |
 | `5V_MAIN` | U11.5, C45.1, D19.2, D20.2, D21.2, D22.2, C46.1, C47.1, C48.1, C49.1, C50.1, BZ1.1, R42.1 |
-| GND | U10.2, C43.2, C44.2, U11.1, U11.3, C45.2, D19.4, D20.4, D21.4, D22.4, C46.2, C47.2, C48.2, C49.2, C50.2, R41.2, Q10.S, SW1.3, SW1.4 |
+| GND | U10.2, C43.2, C44.2, U11.1, U11.3, C45.2, D19.4, D20.4, D21.4, D22.4, C46.2, C47.2, C48.2, C49.2, C50.2, R41.2, Q10.S, SW1.2 |
 | no connect | D22.3 |
