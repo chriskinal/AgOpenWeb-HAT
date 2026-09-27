@@ -23,6 +23,14 @@
 | **H4** | GNSS UART logic level | Confirm both boards' TX1/RX1 are 3.3 V, not shifted to 5 V. | open |
 | **H6** | NVMe standby draw | The 150 µA IO-board figure (B13) — check whether an NVMe in the PCIe slot adds to it; the slot's 3.3 V converter runs from 12 V. | open |
 | **H5** | LCSC stock and fees | Re-check stock at order time (the 2026-09-23 figures are a snapshot), especially J7 (C22436146, ~1.1k). Confirm whether "Pref-Ext" parts carry the extended fee. | open |
+| **H7** | `SW_REMOTE` on GPIO2 can't go low | GPIO2 (J1.3) has a 1.8 kΩ pull-up on the CM4. With R30 at 1 kΩ, a closed switch gives ~1.3 V, not a valid low. Move `SW_REMOTE` to another GPIO and put a driven signal on GPIO2 (a CAN interrupt or `MOT_DIR`). | open (audit 2026-09-26) |
+| **H8** | GPIO swap for routing | Switches on pins 11/13/15, `CAN2_INT`/`CAN3_INT` on pins 35/38, `MOT_DIR` on pin 3, `PIEZO_PWM` on pin 16, `WDT_WDI` on pin 31. Cuts ratsnest crossings from 446 to 350 (with H11) and fixes H7. Needs schematic, software pin map and doc changes. | open |
+| **H9** | D2 / D5 leakage | The B5819W Schottky clamps leak when hot and can lift `KEY_SENSE` toward the 0.61 V key-on threshold. The dividers never exceed ~3 V, so leave D2/D5 unfitted or fit 1N4148W (C81598). | open |
+| **H10** | J1.17 on `CM4_3V3` | J1.1 and J1.17 are the same rail on the IO board. Drop J1.17 from the net to save a route. | open |
+| **H11** | Placement moves for routing | U7 block to X 38–50, Y −28…−38; X1 block into U7's old spot; U4 block to X 43–48, Y −55…−65; U11 below J1 beside R39; SW1 beside U10; R27 beside C33. Keep X 33–38 below J1 clear. Checked for overlaps and net length only, not routed. Scripts: `tools/hat-audit/`. | open |
+| **H12** | Routing rules | The 2026-09-26 PCB has no GND pour and uses 0.125 mm tracks / 0.10 mm clearance everywhere, power included; 23 of 98 nets are incomplete. Pour GND on the bottom layer, use 0.2 / 0.2 mm with 0.5 mm power, and hand-route power, SPI, CAN pairs and clock first. Consider 4 layers. | open |
+| **H13** | J3 and H10 positions | On the PCB J3 pin 1 is at X 3.93 (design §2: 4.63) and H10 is at Y −40.0 (design §2: −39.5). Confirm which is intended. | open |
+| **H14** | WAS / current-sense input protection | D13/D14 (ESD9B5V) sit before R26/R27, so a 12 V short on J3.4 or J3.6 would destroy them. Accept, or note it in the harness doc. | open |
 
 ## 2. Bench checks
 
@@ -52,3 +60,4 @@ this bench that lost the saved Wi-Fi profile. Use `rpiboot` instead (design §7)
 | **B10** | **Crank test on a machine** with the keyed feed on IGN/RUN: no dropouts, no false trips | | open |
 | **B11** | **Shutdown time** on the production image (key-off → halt) | the key monitor and the UI should know it | open |
 | **B12** | **5 V current** on the built system (the CM4 busy, CAN traffic, GNSS running) against the ≈ 1.6 A typical / 2.77 A worst estimate | | open |
+| **B15** | **Back-powering at halt:** with the HAT fitted and the key off, `CM4_3V3` falls to 0 V after halt and the latch releases | U9 and the CAN chips still drive high into the unpowered CM4 pins, which may hold `CM4_3V3` and `HOLD_G` up | open, needs the built HAT |

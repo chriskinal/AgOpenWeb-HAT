@@ -432,8 +432,8 @@ three unpopulated pads under the HAT: 1 = `GLOBAL_EN`, 2 = GND, 3 = `RUN_PG`.
 
 | Pin | GPIO | Net | | Pin | GPIO | Net |
 |---|---|---|---|---|---|---|
-| 1 | — | `CM4_3V3` | | 2 | — | `5V_MAIN` |
-| 3 | 2 | `SW_REMOTE` | | 4 | — | `5V_MAIN` |
+| 1 | — | `CM4_3V3` | | 2 | — | `5V_IO` |
+| 3 | 2 | `SW_REMOTE` | | 4 | — | `5V_IO` |
 | 5 | 3 | `WDT_EN` | | 6 | — | GND |
 | 7 | 4 | `RS232_2_TX` | | 8 | 14 | `CON_TX` |
 | 9 | — | GND | | 10 | 15 | `CON_RX` |
