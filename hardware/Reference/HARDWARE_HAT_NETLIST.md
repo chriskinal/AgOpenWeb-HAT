@@ -66,8 +66,7 @@ Vehicle 12 V goes **straight to the IO board's J20**, not through the HAT. The H
 | U3 | C2870632 |
 | U4 | C841192 |
 | TV1, TV2 | C908801 |
-| D2, D5 | C8598 |
-| D4 | C81598 |
+| D2, D4, D5 | C81598 |
 | R11, R12, R14 | C26083 |
 | R3, R5, R7, R16 | C25741 |
 | R4, R17 | C25924 |

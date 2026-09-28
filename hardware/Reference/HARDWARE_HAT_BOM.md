@@ -40,7 +40,7 @@
 | Ref | Qty | Part | Package | LCSC | Type | Notes |
 |---|---|---|---|---|---|---|
 | TV1, TV2 | 2 | SMBJ24A | SMB | C908801 | Ext | 12 V sense (J3.1) and keyed (J3.21) inputs |
-| D2, D5 | 2 | B5819W | SOD-123 | C8598 | Basic | `KEY_SENSE` and `VIN_SENSE` clamps |
+| D2, D5 | 2 | 1N4148W | SOD-123 | C81598 | Basic | `KEY_SENSE` and `VIN_SENSE` clamps; low leakage. Fitted on the existing SOD-123 pads |
 | D4 | 1 | 1N4148W | SOD-123 | C81598 | Basic | hold diode |
 | D6, D7, D8 | 3 | NUP2105L | SOT-23 | C284104 | Ext | CAN bus TVS |
 | D9–D12 | 4 | SMAJ12CA-13-F | SMA | C134948 | Ext | RS-232 line TVS |
