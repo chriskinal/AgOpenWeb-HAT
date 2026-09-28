@@ -1,0 +1,46 @@
+#include "aow/pgn.h"
+
+#include <cstring>
+
+namespace aow::pgn {
+
+uint8_t crc(const uint8_t* frame, size_t frameLen) {
+    uint8_t sum = 0;
+    for (size_t i = 2; i + 1 < frameLen; ++i) sum = static_cast<uint8_t>(sum + frame[i]);
+    return sum;
+}
+
+size_t build(uint8_t src, uint8_t pgn, const uint8_t* data, uint8_t len,
+             uint8_t* out, size_t outCap) {
+    const size_t total = kOverhead + len;
+    if (outCap < total || (len && !data)) return 0;
+    out[0] = kHeader0;
+    out[1] = kHeader1;
+    out[2] = src;
+    out[3] = pgn;
+    out[4] = len;
+    if (len) std::memcpy(out + 5, data, len);
+    out[total - 1] = crc(out, total);
+    return total;
+}
+
+bool parse(const uint8_t* buf, size_t bufLen, Frame& f) {
+    if (!buf || bufLen < kOverhead) return false;
+    if (buf[0] != kHeader0 || buf[1] != kHeader1) return false;
+    const uint8_t len = buf[4];
+    const size_t total = kOverhead + len;
+    if (bufLen < total) return false;
+
+    const uint8_t got = buf[total - 1];
+    const uint8_t pgn = buf[3];
+    const bool fixedCrc = (pgn == Hello || pgn == SubnetChange || pgn == Scan) && got == 0x47;
+    if (!fixedCrc && got != crc(buf, total)) return false;
+
+    f.src = buf[2];
+    f.pgn = pgn;
+    f.len = len;
+    f.data = buf + 5;
+    return true;
+}
+
+}  // namespace aow::pgn

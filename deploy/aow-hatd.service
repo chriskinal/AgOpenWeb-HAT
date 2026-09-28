@@ -1,0 +1,24 @@
+[Unit]
+Description=AOW HAT hardware daemon (steering, GNSS, CAN)
+Before=agopenweb.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/aow-hatd
+Restart=always
+RestartSec=1
+
+# Steering must be off whenever the daemon is not running, however it stopped.
+# GPIO24 = STEER_EN, GPIO18 = STEER_PWM. TO VERIFY on the board: that `pinctrl`
+# is present on the chosen Raspberry Pi OS release and releases cleanly on restart.
+ExecStopPost=/usr/bin/pinctrl set 24 op dl
+ExecStopPost=/usr/bin/pinctrl set 18 op dl
+
+# Real-time scheduling for the control loop (needs the PREEMPT_RT kernel to mean much).
+CPUSchedulingPolicy=fifo
+CPUSchedulingPriority=80
+LimitRTPRIO=90
+LimitMEMLOCK=infinity
+
+[Install]
+WantedBy=multi-user.target
