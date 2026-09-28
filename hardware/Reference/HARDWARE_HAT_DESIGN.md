@@ -376,7 +376,7 @@ three unpopulated pads under the HAT: 1 = `GLOBAL_EN`, 2 = GND, 3 = `RUN_PG`.
 - **J2 pin 3 `RUN_PG`** ← R38 330 Ω ← `RUN_PG_G`, the node shared by U10's WDO and SW1. Resetting
   through 330 Ω follows the CM4 datasheet's advice not to pull `RUN_PG` hard to ground.
 - **Watchdog U10** STWD100NYWY3F: 1.6 s timeout (range 1.12–2.24 s), open-drain.
-  - WDI ← `WDT_WDI` (GPIO22).
+  - WDI ← `WDT_WDI` (GPIO6).
   - EN ← `WDT_EN` (GPIO3; low = watchdog on). R37 4.7 k plus GPIO3's own pull-up keep it **off
     through boot**, until Linux enables it.
   - On timeout it pulls `RUN_PG` low for ~210 ms.
@@ -392,7 +392,7 @@ three unpopulated pads under the HAT: 1 = `GLOBAL_EN`, 2 = GND, 3 = `RUN_PG`.
   giving SocketCAN `can0..2`.
   - CS: `NCS_CAN1` = GPIO8 (CE0), `NCS_CAN2` = GPIO7 (CE1), `NCS_CAN3` = GPIO25 (a GPIO CS, with
     R18 pull-up).
-  - Interrupts: GPIO16/17/27.
+  - Interrupts: GPIO16 (CAN1), GPIO19 (CAN2), GPIO20 (CAN3).
   - **STBY (pin 5) goes to GND.** The pin is pulled up internally, and normal mode needs it low.
   - One 40 MHz oscillator (X1) is star-fed through 33 Ω (R20–R22) to each OSC1.
   - Each bus gets a NUP2105L TVS (D6–D8) and a **120 Ω termination in series with a solder jumper**
@@ -409,17 +409,20 @@ three unpopulated pads under the HAT: 1 = `GLOBAL_EN`, 2 = GND, 3 = `RUN_PG`.
     - IN3 and IN5–IN7: grounded
 - **RS-232 × 2:** U9 SP3232EEN at 3.3 V. UART2 (GPIO0/1) and UART3 (GPIO4/5). SMAJ12CA on each
   line (D9–D12). Non-isolated.
-- **Switch inputs** (work, engage, remote): **contact-to-ground only.**
+- **Switch inputs** (work GPIO17, engage GPIO27, remote GPIO22): **contact-to-ground only.**
+  - None may sit on GPIO2 or GPIO3: the CM4's 1.8 kΩ pull-ups there stop a switch behind 1 kΩ
+    reaching a valid low. GPIO2 carries `MOT_DIR` instead (an output; high at boot is harmless
+    while EN is low).
   - Each input: SMAJ16A at the line, 1 k in series, 10 k pull-up to `+3V3`, 100 nF, and an SRV05-4
     (D18).
   - **Don't apply 12 V-level signals.** They'd clamp at ~4 V, above the CM4's GPIO maximum. Say so
     in the harness notes.
-- **Steering outputs:** PWM (GPIO18, hardware PWM0), DIR (GPIO23) and EN (GPIO24; low at boot means
+- **Steering outputs:** PWM (GPIO18, hardware PWM0), DIR (GPIO2) and EN (GPIO24; low at boot means
   steering off). Direct 3.3 V logic through 330 Ω (R34–R36), for MD13S / IBT-2 style drivers.
 - **Status LEDs:** 4 × SK6812SIDE-A (D19–D22) on `5V_MAIN`.
   - Data comes from **GPIO21**, whose PCM function gives the WS2812-class timing.
   - U11 SN74AHCT1G125 shifts it from 3.3 V to 5 V, through R39 330 Ω.
-- **Piezo:** BZ1 driven by Q10 2N7002 from GPIO6 (software PWM). R40 100 Ω gate, R41 10 k
+- **Piezo:** BZ1 driven by Q10 2N7002 from GPIO23 (software PWM; pulled down at boot, so silent). R40 100 Ω gate, R41 10 k
   pull-down, R42 470 Ω across the piezo.
 - **No power LED:** the CM4's `PI_LED_nPWR` isn't on the header, and the IO board has its own.
 
@@ -433,13 +436,13 @@ three unpopulated pads under the HAT: 1 = `GLOBAL_EN`, 2 = GND, 3 = `RUN_PG`.
 | Pin | GPIO | Net | | Pin | GPIO | Net |
 |---|---|---|---|---|---|---|
 | 1 | — | `CM4_3V3` | | 2 | — | `5V_IO` |
-| 3 | 2 | `SW_REMOTE` | | 4 | — | `5V_IO` |
+| 3 | 2 | `MOT_DIR` | | 4 | — | `5V_IO` |
 | 5 | 3 | `WDT_EN` | | 6 | — | GND |
 | 7 | 4 | `RS232_2_TX` | | 8 | 14 | `CON_TX` |
 | 9 | — | GND | | 10 | 15 | `CON_RX` |
-| 11 | 17 | `CAN2_INT` | | 12 | 18 | `PWM_MOTA` |
-| 13 | 27 | `CAN3_INT` | | 14 | — | GND |
-| 15 | 22 | `WDT_WDI` | | 16 | 23 | `MOT_DIR` |
+| 11 | 17 | `SW_WORK` | | 12 | 18 | `PWM_MOTA` |
+| 13 | 27 | `SW_ENGAGE` | | 14 | — | GND |
+| 15 | 22 | `SW_REMOTE` | | 16 | 23 | `PIEZO_PWM` |
 | 17 | — | `CM4_3V3` | | 18 | 24 | `STEER_EN` |
 | 19 | 10 | `SPI0_MOSI` | | 20 | — | GND |
 | 21 | 9 | `SPI0_MISO` | | 22 | 25 | `NCS_CAN3` |
@@ -447,10 +450,10 @@ three unpopulated pads under the HAT: 1 = `GLOBAL_EN`, 2 = GND, 3 = `RUN_PG`.
 | 25 | — | GND | | 26 | 7 | `NCS_CAN2` |
 | 27 | 0 | `RS232_1_TX` | | 28 | 1 | `RS232_1_RX` |
 | 29 | 5 | `RS232_2_RX` | | 30 | — | GND |
-| 31 | 6 | `PIEZO_PWM` | | 32 | 12 | `GPS_TX` |
+| 31 | 6 | `WDT_WDI` | | 32 | 12 | `GPS_TX` |
 | 33 | 13 | `GPS_RX` | | 34 | — | GND |
-| 35 | 19 | `SW_WORK` | | 36 | 16 | `CAN1_INT` |
-| 37 | 26 | `NCS_ADC` | | 38 | 20 | `SW_ENGAGE` |
+| 35 | 19 | `CAN2_INT` | | 36 | 16 | `CAN1_INT` |
+| 37 | 26 | `NCS_ADC` | | 38 | 20 | `CAN3_INT` |
 | 39 | — | GND | | 40 | 21 | `LED_DATA` |
 
 **Linux / boot configuration:**

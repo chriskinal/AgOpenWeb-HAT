@@ -14,6 +14,7 @@ Inputs come from environment variables (defaults point at `~/Downloads`):
 | Script | What it does |
 |---|---|
 | `sch.py` | parses the schematic; lists pins with no net or more than one |
+| `doccheck.py` | schematic export against `HARDWARE_HAT_NETLIST.md` |
 | `pcb.py` | parses the PCB; compares pad nets with the schematic |
 | `conn.py` | routing completeness: nets still split into islands |
 | `rats.py` | ratsnest length, crossing count, nets crossing the J1 row |

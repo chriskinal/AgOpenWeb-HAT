@@ -26,13 +26,13 @@ J1 and J2: footprints on the **top** layer (don't flip; that mirrors the pins). 
 | Pin | Net | | Pin | Net |
 |---|---|---|---|---|
 | 1 | `CM4_3V3` | | 2 | `5V_IO` |
-| 3 | `SW_REMOTE` | | 4 | `5V_IO` |
+| 3 | `MOT_DIR` | | 4 | `5V_IO` |
 | 5 | `WDT_EN` | | 6 | GND |
 | 7 | `RS232_2_TX` | | 8 | `CON_TX` |
 | 9 | GND | | 10 | `CON_RX` |
-| 11 | `CAN2_INT` | | 12 | `PWM_MOTA` |
-| 13 | `CAN3_INT` | | 14 | GND |
-| 15 | `WDT_WDI` | | 16 | `MOT_DIR` |
+| 11 | `SW_WORK` | | 12 | `PWM_MOTA` |
+| 13 | `SW_ENGAGE` | | 14 | GND |
+| 15 | `SW_REMOTE` | | 16 | `PIEZO_PWM` |
 | 17 | `CM4_3V3` | | 18 | `STEER_EN` |
 | 19 | `SPI0_MOSI` | | 20 | GND |
 | 21 | `SPI0_MISO` | | 22 | `NCS_CAN3` |
@@ -40,10 +40,10 @@ J1 and J2: footprints on the **top** layer (don't flip; that mirrors the pins). 
 | 25 | GND | | 26 | `NCS_CAN2` |
 | 27 | `RS232_1_TX` | | 28 | `RS232_1_RX` |
 | 29 | `RS232_2_RX` | | 30 | GND |
-| 31 | `PIEZO_PWM` | | 32 | `GPS_TX` |
+| 31 | `WDT_WDI` | | 32 | `GPS_TX` |
 | 33 | `GPS_RX` | | 34 | GND |
-| 35 | `SW_WORK` | | 36 | `CAN1_INT` |
-| 37 | `NCS_ADC` | | 38 | `SW_ENGAGE` |
+| 35 | `CAN2_INT` | | 36 | `CAN1_INT` |
+| 37 | `NCS_ADC` | | 38 | `CAN3_INT` |
 | 39 | GND | | 40 | `LED_DATA` |
 
 **J2:** 1 `GLOBAL_EN`, 2 GND, 3 `RUN_PG`
@@ -141,8 +141,8 @@ Vehicle 12 V goes **straight to the IO board's J20**, not through the HAT. The H
 | `NCS_CAN3` | J1.22, U7.13, R18.1 |
 | `NCS_ADC` | J1.37, U8.1, R19.1 |
 | `CAN1_INT` | J1.36, U5.19 |
-| `CAN2_INT` | J1.11, U6.19 |
-| `CAN3_INT` | J1.13, U7.19 |
+| `CAN2_INT` | J1.35, U6.19 |
+| `CAN3_INT` | J1.38, U7.19 |
 | `U5_TX` | U5.15, U5.23 |
 | `U5_RX` | U5.16, U5.28 |
 | `U6_TX` | U6.15, U6.23 |
@@ -245,14 +245,14 @@ Vehicle 12 V goes **straight to the IO board's J20**, not through the HAT. The H
 | `WAS_IN` | J3.4, D13.1, R26.1 |
 | `ISENSE_IN` | J3.6, D14.1, R27.1 |
 | `SW_WORK_IN` | J3.7, D15.K, R28.1 |
-| `SW_WORK` | R28.2, R31.1, C40.1, D18.1, J1.35 |
+| `SW_WORK` | R28.2, R31.1, C40.1, D18.1, J1.11 |
 | `SW_ENGAGE_IN` | J3.8, D16.K, R29.1 |
-| `SW_ENGAGE` | R29.2, R32.1, C41.1, D18.3, J1.38 |
+| `SW_ENGAGE` | R29.2, R32.1, C41.1, D18.3, J1.13 |
 | `SW_REMOTE_IN` | J3.9, D17.K, R30.1 |
-| `SW_REMOTE` | R30.2, R33.1, C42.1, D18.4, J1.3 |
+| `SW_REMOTE` | R30.2, R33.1, C42.1, D18.4, J1.15 |
 | `PWM_MOTA` | J1.12, R34.1 |
 | `STEER_PWM` | R34.2, J3.10 |
-| `MOT_DIR` | J1.16, R35.1 |
+| `MOT_DIR` | J1.3, R35.1 |
 | `STEER_DIR` | R35.2, J3.11 |
 | `STEER_EN` | J1.18, R36.1 |
 | `STEER_EN_OUT` | R36.2, J3.12 |
@@ -283,7 +283,7 @@ Vehicle 12 V goes **straight to the IO board's J20**, not through the HAT. The H
 | Net | Pins |
 |---|---|
 | `WDT_EN` | J1.5, U10.3, R37.1 |
-| `WDT_WDI` | J1.15, U10.4 |
+| `WDT_WDI` | J1.31, U10.4 |
 | `RUN_PG_G` | U10.1, R38.1, SW1.1 |
 | `RUN_PG` | R38.2, J2.3 |
 | `LED_DATA` | J1.40, U11.2 |
@@ -292,7 +292,7 @@ Vehicle 12 V goes **straight to the IO board's J20**, not through the HAT. The H
 | `LED1_DOUT` | D19.3, D20.1 |
 | `LED2_DOUT` | D20.3, D21.1 |
 | `LED3_DOUT` | D21.3, D22.1 |
-| `PIEZO_PWM` | J1.31, R40.1 |
+| `PIEZO_PWM` | J1.16, R40.1 |
 | `PZ_GATE` | R40.2, R41.1, Q10.G |
 | `PZ_DRAIN` | Q10.D, BZ1.2, R42.2 |
 | `+3V3` | U10.5, R37.2, C43.1, C44.1 |
