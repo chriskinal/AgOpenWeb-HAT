@@ -33,7 +33,7 @@ J1 and J2: footprints on the **top** layer (don't flip; that mirrors the pins). 
 | 11 | `SW_WORK` | | 12 | `PWM_MOTA` |
 | 13 | `SW_ENGAGE` | | 14 | GND |
 | 15 | `SW_REMOTE` | | 16 | `PIEZO_PWM` |
-| 17 | `CM4_3V3` | | 18 | `STEER_EN` |
+| 17 | no connect | | 18 | `STEER_EN` |
 | 19 | `SPI0_MOSI` | | 20 | GND |
 | 21 | `SPI0_MISO` | | 22 | `NCS_CAN3` |
 | 23 | `SPI0_SCLK` | | 24 | `NCS_CAN1` |
@@ -96,7 +96,7 @@ Vehicle 12 V goes **straight to the IO board's J20**, not through the HAT. The H
 | `KEY_IN` | J3.21, TV2.K, R3.1, R5.1 |
 | `KEY_SENSE` | R3.2, R4.1, C5.1, D2.A, U8.8 |
 | `KEY_DIV` | R5.2, R6.1, C6.1, Q3.G, Q6.G, Q7.G |
-| `CM4_3V3` | J1.1, J1.17, R9.1 |
+| `CM4_3V3` | J1.1, R9.1 |
 | `ALIVE_R` | R9.2, D4.A |
 | `HOLD_G` | D4.K, C8.1, R10.1, Q4.G, U2.2, Q8.D |
 | `DEAD` | U2.4, C10.1 |
@@ -111,7 +111,7 @@ Vehicle 12 V goes **straight to the IO board's J20**, not through the HAT. The H
 | `VIN_SENSE` | R16.2, R17.1, C14.1, D5.A, U8.6 |
 | `+3V3` | U4.5, C17.1, C18.1, C19.1, D2.K, D5.K |
 | GND | TV1.A, TV2.A, C3.2, U1.3, U1.4, C4.2, R4.2, C5.2, R6.2, C6.2, Q1.S, Q3.S, Q4.S, C8.2, R10.2, U2.3, C9.2, R11.2, Q6.S, U3.2, C11.2, R13.2, C12.2, Q7.S, C13.2, Q9.S, R17.2, C14.2, U4.2, C15.2, C16.2, C17.2, C18.2, C19.2 |
-| no connect | U1.2, U2.1, U4.4 |
+| no connect | U1.2, U2.1, U4.4, J1.17 |
 
 ---
 

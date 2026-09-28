@@ -264,7 +264,7 @@ This works because the IO board draws only **~150 µA at 12 V with the CM4 off**
 | `5V_MAIN` | **Q2**, the HAT's 5 V load switch | key on, or CM4 running | CAN transceivers, ADC reference, GNSS, LEDs, piezo, WAS supply, U4 |
 | `+3V3` | U4 RT9080-33 from `5V_MAIN` | with `5V_MAIN` | CAN controllers, X1, SP3232, watchdog, pull-ups |
 | `VIN` | the **12 V sense wire**, J3 pin 1 (constant 12 V, ~0.1 mA) | always | `VIN_SENSE` and the low-voltage cut-off dividers only |
-| `CM4_3V3` | the CM4's own 3.3 V output, header pins 1 and 17 | **CM4 running only**: drops to 0 V at halt | the hold circuit only (§4.4) |
+| `CM4_3V3` | the CM4's own 3.3 V output, header pin 1 (pin 17 is the same rail, left unconnected) | **CM4 running only**: drops to 0 V at halt | the hold circuit only (§4.4) |
 
 ### 4.2 Input protection
 
@@ -443,7 +443,7 @@ three unpopulated pads under the HAT: 1 = `GLOBAL_EN`, 2 = GND, 3 = `RUN_PG`.
 | 11 | 17 | `SW_WORK` | | 12 | 18 | `PWM_MOTA` |
 | 13 | 27 | `SW_ENGAGE` | | 14 | — | GND |
 | 15 | 22 | `SW_REMOTE` | | 16 | 23 | `PIEZO_PWM` |
-| 17 | — | `CM4_3V3` | | 18 | 24 | `STEER_EN` |
+| 17 | — | no connect | | 18 | 24 | `STEER_EN` |
 | 19 | 10 | `SPI0_MOSI` | | 20 | — | GND |
 | 21 | 9 | `SPI0_MISO` | | 22 | 25 | `NCS_CAN3` |
 | 23 | 11 | `SPI0_SCLK` | | 24 | 8 | `NCS_CAN1` |

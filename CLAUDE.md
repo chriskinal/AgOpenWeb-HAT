@@ -39,9 +39,10 @@ The Teensy firmware is not being rewritten and nothing is ported back to it.
 
 ## Status
 
-- **Board:** schematic verified against the netlist doc (2026-09-27 export). Placement done. PCB
-  routing in progress: moving to 4 layers (Inner1 GND plane, Inner2 `5V_MAIN` / `+3V3`), rules
-  0.2 mm track and clearance, 0.5 mm power.
+- **Board:** routed, audit clean (2026-09-28 export); DRC and Gerber check before ordering.
+  4 layers: Top, Inner1 GND plane, Inner2 signal with a GND pour, Bottom. Rules 0.2 mm track and
+  clearance, 0.5 mm power. Routed with EasyEDA's JLCPCB router, GND skipped; GND vias placed by
+  hand, including one at each J3 protection diode. J1.17 left unconnected (issues H10).
 - **Daemon:** skeleton. `core/pgn` works and is tested; nothing drives hardware yet.
 
 ## Layout
