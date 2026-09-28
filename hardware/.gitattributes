@@ -1,0 +1,4 @@
+*.csv -text
+*.json -text
+*.net -text
+*.svg -text

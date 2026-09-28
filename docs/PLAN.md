@@ -2,7 +2,7 @@
 
 > Decisions, scope and build order for `aow-hatd`. Written 2026-09-28.
 > Source being ported: `Firmware_Teensy_AiO_26` v26.5.5 (Teensy 4.1).
-> HAT hardware: AgOpenWeb `Reference/HARDWARE_HAT_DESIGN.md`.
+> HAT hardware: `hardware/hat/HARDWARE_HAT_DESIGN.md`.
 
 ## 1. Decisions
 

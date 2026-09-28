@@ -1,5 +1,5 @@
 // AOW HAT pin map (BCM GPIO numbers).
-// Source: AgOpenWeb Reference/HARDWARE_HAT_DESIGN.md section 7, as of 2026-09-27.
+// Source: hardware/hat/HARDWARE_HAT_DESIGN.md section 7. Change both together.
 #pragma once
 
 namespace aow::hat {

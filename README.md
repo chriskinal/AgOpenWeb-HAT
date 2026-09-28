@@ -1,14 +1,17 @@
-# AgOpenWeb HAT daemon (`aow-hatd`)
+# AgOpenWeb HAT
 
-The hardware daemon for the **AOW HAT**, a 40-pin HAT for the Raspberry Pi CM4 IO Board. The HAT
-replaces an AgOpenGPS AiO board; this daemon does the work the AiO board's Teensy firmware did:
-steering, wheel-angle sensing, GNSS, RTK corrections and tractor CAN.
+The **AOW HAT** board design and its hardware daemon, `aow-hatd`.
+
+The HAT is a 40-pin board for the Raspberry Pi CM4 IO Board. It replaces an AgOpenGPS AiO board,
+and the daemon does the work the AiO board's Teensy firmware did: steering, wheel-angle sensing,
+GNSS, RTK corrections and tractor CAN.
 
 It talks to [AgOpenWeb](https://github.com/AgOpenGPS-Official/AgOpenWeb) in the AgOpenGPS PGN
 protocol over UDP on the loopback interface, so to the app it looks like an AiO board.
 
-**Status: skeleton.** PGN framing and the hardware interfaces exist; nothing drives hardware yet.
-The plan is in [docs/PLAN.md](docs/PLAN.md).
+**Status.** Board: schematic verified, PCB routing in progress (see `hardware/hat/`).
+Daemon: skeleton only; PGN framing and the hardware interfaces exist, nothing drives hardware yet.
+The software plan is in [docs/PLAN.md](docs/PLAN.md).
 
 ## Two ways to run AgOpenWeb on a Pi
 
@@ -29,6 +32,9 @@ The installer asks once which one applies. With no HAT the daemon stays disabled
 | `daemon/` | the Linux executable |
 | `tests/` | unit tests for core |
 | `deploy/` | installer and systemd unit |
+| `hardware/hat/` | the HAT board: design, netlist, BOM, open issues |
+| `hardware/aio/` | the earlier AiO board design (parked), with its EasyEDA parts and exports |
+| `hardware/tools/` | schematic and PCB audit scripts, EasyEDA net-colouring extension |
 
 ## Build and test
 

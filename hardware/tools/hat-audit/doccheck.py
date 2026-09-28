@@ -2,7 +2,7 @@ import re,sys,collections
 sys.path.insert(0,'.')
 from sch import load_sch
 import os
-DOC=os.path.join(os.path.dirname(os.path.abspath(__file__)),'..','..','HARDWARE_HAT_NETLIST.md')
+DOC=os.path.join(os.path.dirname(os.path.abspath(__file__)),'..','..','hat','HARDWARE_HAT_NETLIST.md')
 doc=open(DOC).read()
 exp={}
 def add(p,n): exp[p]=n

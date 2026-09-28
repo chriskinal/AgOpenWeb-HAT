@@ -456,7 +456,7 @@ the whole design rests on.
 - **All 14 high-speed nets connected end to end** (6 PCIe, 8 Ethernet): each forms a single group from
   the connector pad through to the M.2 socket or RJ45. No re-routing was needed.
 
-Parts used: `Reference/EasyEDA parts/` (symbols with CM4 pin names/numbers, footprints derived from
+Parts used: `hardware/aio/EasyEDA parts/` (symbols with CM4 pin names/numbers, footprints derived from
 U19's pads). Placement gotcha recorded there: EasyEDA's Y axis in this project reads **from the bottom
 edge** (Y_editor = 119.00 − Y_from_top).
 

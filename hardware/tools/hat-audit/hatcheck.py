@@ -1,6 +1,6 @@
 import re,sys,collections
 import os
-DOC=os.path.join(os.path.dirname(os.path.abspath(__file__)),'..','..','HARDWARE_HAT_NETLIST.md')
+DOC=os.path.join(os.path.dirname(os.path.abspath(__file__)),'..','..','hat','HARDWARE_HAT_NETLIST.md')
 doc=open(DOC).read()
 # ---- expected: pin -> net
 exp={}
