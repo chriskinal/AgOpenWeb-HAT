@@ -22,7 +22,7 @@ fills=[]
 for sh in d['shape']:
     q=sh.split('~')
     if q[0]=='COPPERAREA' and q[10] not in('','[[]]'):
-        fills.append((q[1],q[3],[p for f in json.loads(q[10]) for t in f for p in paths(t)]))
+        fills.append((q[2],q[3],[p for f in json.loads(q[10]) for t in f for p in paths(t)]))
     elif q[0]=='PLANEZONE':
         fills.append((q[1],q[2],[p for t in sh.split('#@$')[1:] for p in paths(t.split('~',1)[1])]))
 def island(fi,p):
