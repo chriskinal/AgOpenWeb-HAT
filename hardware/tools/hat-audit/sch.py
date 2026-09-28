@@ -14,7 +14,7 @@ def load_sch():
                 kind=h[1]; x,y=float(h[2]),float(h[3])
                 name=seg[2].split('~')[0]
                 flags.append((x,y,name,kind,h[5]))
-            elif s.startswith('LIB'):
+            elif s.startswith('LIB') and 'frame_lib' not in s.split('#@$')[0]:  # skip the sheet frame
                 P=s.split('#@$'); h=P[0].split('~')
                 attrs=h[3].split('`'); a=dict(zip(attrs[0::2],attrs[1::2]))
                 ref=None;val=None
