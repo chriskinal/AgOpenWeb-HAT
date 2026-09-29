@@ -28,9 +28,15 @@ bool SettingsFile::load(Settings& s, std::string& error) const {
     return true;
 }
 
-bool SettingsFile::save(const Settings& s, std::string& error) const {
+std::string SettingsFile::canConfigPath() const {
+    const size_t slash = path.rfind('/');
+    return (slash == std::string::npos ? std::string(".") : path.substr(0, slash)) + "/can_config.json";
+}
+
+bool SettingsFile::save(const Settings& s, std::string& error) const { return writeFileAtomically(path, toJson(s), error); }
+
+bool writeFileAtomically(const std::string& path, const std::string& json, std::string& error) {
     const std::string tmp = path + ".tmp";
-    const std::string json = toJson(s);
 
     // Create the directory on first save (/etc/aow-hat).
     const size_t slash = path.rfind('/');

@@ -2,6 +2,7 @@
 
 #include <cstring>
 #include <deque>
+#include <string>
 #include <vector>
 
 #include "aow/pgn.h"
@@ -148,6 +149,14 @@ int main() {
     link.sendTurnSensor(123);
     CHECK(udp.out.size() == 1 && parsed(udp.out[0], f) && f.src == pgn::SrcSteer && f.pgn == pgn::TurnSensor);
     CHECK(f.len == 8 && f.data[0] == 123 && f.data[1] == 0);
+
+    // PGN 221 popup; long messages are cut at 110 characters.
+    udp.out.clear();
+    link.sendPopup("Fendt steering valve not ready!", 5, 1);
+    CHECK(udp.out.size() == 1 && parsed(udp.out[0], f) && f.pgn == pgn::HardwareMessage);
+    CHECK(f.len == 2 + 31 && f.data[0] == 5 && f.data[1] == 1 && std::memcmp(f.data + 2, "Fendt", 5) == 0);
+    link.sendPopup(std::string(200, 'x').c_str(), 3, 2);
+    CHECK(parsed(udp.out[1], f) && f.len == 112);
 
     return finish("app_link");
 }

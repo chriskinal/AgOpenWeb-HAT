@@ -11,6 +11,7 @@ namespace aow {
 
 struct WebOptions {
     uint16_t httpPort = 80;  // 0: no pages, but logs still go out
+    uint16_t gvretPort = 23;  // SavvyCAN; 0: off
     const char* version = "";
     SettingsFile settingsFile;
 };

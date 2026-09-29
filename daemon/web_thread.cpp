@@ -14,10 +14,13 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <cerrno>
 #include <fstream>
+#include <sstream>
 #include <map>
 
 #include "api.h"
+#include "aow/gvret.h"
 #include "aow/log.h"
 #include "server.h"
 
@@ -75,6 +78,80 @@ private:
     char host_[64] = {};
 };
 
+uint32_t nowMicros() {
+    return static_cast<uint32_t>(std::chrono::duration_cast<std::chrono::microseconds>(
+                                     std::chrono::steady_clock::now().time_since_epoch()).count());
+}
+
+// GVRET on TCP: one SavvyCAN client at a time, as the firmware.
+class GvretServer {
+public:
+    GvretServer(Shared& shared, uint16_t port) : shared_(shared) {
+        if (!port) return;
+        fd_ = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0);
+        const int one = 1;
+        setsockopt(fd_, SOL_SOCKET, SO_REUSEADDR, &one, sizeof one);
+        sockaddr_in a{};
+        a.sin_family = AF_INET;
+        a.sin_port = htons(port);
+        if (fd_ < 0 || bind(fd_, reinterpret_cast<sockaddr*>(&a), sizeof a) < 0 || listen(fd_, 1) < 0) {
+            LOG_ERROR(Can, "GVRET: cannot listen on port %u: %s", port, std::strerror(errno));
+            if (fd_ >= 0) close(fd_);
+            fd_ = -1;
+            return;
+        }
+        LOG_INFO(Can, "GVRET (SavvyCAN) on port %u", port);
+    }
+    ~GvretServer() {
+        dropClient();
+        if (fd_ >= 0) close(fd_);
+    }
+
+    void poll() {
+        if (fd_ < 0) return;
+        if (client_ < 0) {
+            client_ = accept4(fd_, nullptr, nullptr, SOCK_NONBLOCK | SOCK_CLOEXEC);
+            if (client_ < 0) return;
+            proto_.reset();
+            LOG_INFO(Can, "GVRET client connected");
+        }
+        uint8_t buf[512];
+        ssize_t n;
+        while ((n = recv(client_, buf, sizeof buf, 0)) > 0) out_ += proto_.input(buf, static_cast<size_t>(n), nowMicros());
+        if (n == 0 || (n < 0 && errno != EAGAIN && errno != EWOULDBLOCK)) {
+            dropClient();
+            return;
+        }
+        shared_.gvretListening = proto_.binaryMode();
+        MirrorFrame frames[128];
+        size_t got;
+        while ((got = shared_.takeMirror(frames, 128)) > 0)
+            for (size_t i = 0; i < got; ++i)
+                gvret::encodeFrame(out_, frames[i].bus, frames[i].id, frames[i].extended, frames[i].data,
+                                   frames[i].len, frames[i].micros);
+        if (!out_.empty()) {
+            const ssize_t w = send(client_, out_.data(), out_.size(), MSG_NOSIGNAL);
+            if (w > 0) out_.erase(0, static_cast<size_t>(w));
+            else if (errno != EAGAIN && errno != EWOULDBLOCK) dropClient();
+            if (out_.size() > (1u << 20)) out_.clear();  // a stalled client loses frames, not memory
+        }
+    }
+
+private:
+    void dropClient() {
+        if (client_ < 0) return;
+        close(client_);
+        client_ = -1;
+        out_.clear();
+        shared_.gvretListening = false;
+        LOG_INFO(Can, "GVRET client disconnected");
+    }
+    Shared& shared_;
+    int fd_ = -1, client_ = -1;
+    gvret::Protocol proto_;
+    std::string out_;
+};
+
 class DaemonBackend : public web::Backend {
 public:
     DaemonBackend(Shared& shared, const SettingsFile& file) : shared_(shared), file_(file) {}
@@ -100,6 +177,21 @@ public:
         kill(getpid(), SIGTERM);
     }
 
+    std::string customCanConfig() override {
+        std::ifstream in(canPath());
+        std::stringstream s;
+        s << in.rdbuf();
+        return s.str();
+    }
+    bool writeCustomCanConfig(const std::string& json, std::string& error) override {
+        return writeFileAtomically(canPath(), json, error);
+    }
+    bool deleteCustomCanConfig(std::string& error) override {
+        if (unlink(canPath().c_str()) == 0 || errno == ENOENT) return true;
+        error = std::strerror(errno);
+        return false;
+    }
+
     std::vector<Interface> interfaces() override {
         std::vector<Interface> out;
         ifaddrs* list = nullptr;
@@ -119,6 +211,7 @@ public:
     }
 
 private:
+    std::string canPath() const { return file_.canConfigPath(); }
     Shared& shared_;
     const SettingsFile& file_;
 };
@@ -143,6 +236,7 @@ void WebThread::run() {
         if (pages) LOG_INFO(Network, "Web pages on port %u", opt_.httpPort);
     }
 
+    GvretServer gvretServer(shared_, opt_.gvretPort);
     SyslogOut syslog;
     log::Logger::Outputs outputs;
     outputs.console = consoleOut;
@@ -157,6 +251,7 @@ void WebThread::run() {
     auto nextTelemetry = Clock::now();
     while (!shared_.stop.load()) {
         server.poll(5);
+        gvretServer.poll();
         if (shared_.takeSaveRequest()) {
             std::string err;
             if (opt_.settingsFile.save(shared_.settings(), err)) LOG_INFO(Config, "Settings from the app saved");

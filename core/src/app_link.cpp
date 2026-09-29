@@ -67,6 +67,11 @@ void AppLink::sendTurnSensor(uint8_t value) {
     send(out, pgn::buildTurnSensor(value, out, sizeof out));
 }
 
+void AppLink::sendPopup(const char* message, uint8_t seconds, uint8_t color) {
+    uint8_t out[128];
+    send(out, pgn::buildHardwareMessage(message, seconds, color, out, sizeof out));
+}
+
 void AppLink::send(const uint8_t* frame, size_t len) {
     if (!len || !udp_.send(frame, len)) ++counters_.sendErrors;
 }

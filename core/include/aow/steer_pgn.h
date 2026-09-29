@@ -37,6 +37,9 @@ size_t buildFromSteer(const SteerStatus& s, uint8_t* out, size_t cap);
 // PGN 250, 10 Hz: turn sensor reading (the firmware sends motor current, 0..255).
 size_t buildTurnSensor(uint8_t value, uint8_t* out, size_t cap);
 
+// PGN 221: a popup in the app. message up to 110 characters; color 0 info, 1 warning, 2 error.
+size_t buildHardwareMessage(const char* message, uint8_t seconds, uint8_t color, uint8_t* out, size_t cap);
+
 // Hello reply: PGN = src (126 steer, 120 GPS, 121 IMU), five zero data bytes.
 size_t buildHelloReply(uint8_t src, uint8_t* out, size_t cap);
 

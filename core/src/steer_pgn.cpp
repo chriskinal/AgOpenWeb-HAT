@@ -2,6 +2,8 @@
 
 #include "aow/pgn.h"
 
+#include <cstring>
+
 namespace aow::pgn {
 
 bool decodeSteerCommand(const uint8_t* data, size_t len, SteerCommand& d) {
@@ -33,6 +35,16 @@ size_t buildFromSteer(const SteerStatus& s, uint8_t* out, size_t cap) {
 size_t buildTurnSensor(uint8_t value, uint8_t* out, size_t cap) {
     const uint8_t data[8] = {value};
     return build(SrcSteer, TurnSensor, data, sizeof data, out, cap);
+}
+
+size_t buildHardwareMessage(const char* message, uint8_t seconds, uint8_t color, uint8_t* out, size_t cap) {
+    size_t n = std::strlen(message);
+    if (n > 110) n = 110;  // the firmware's MAX_MESSAGE_LENGTH
+    uint8_t data[112];
+    data[0] = seconds;
+    data[1] = color;
+    std::memcpy(data + 2, message, n);
+    return build(SrcSteer, HardwareMessage, data, static_cast<uint8_t>(n + 2), out, cap);
 }
 
 size_t buildHelloReply(uint8_t src, uint8_t* out, size_t cap) {

@@ -15,10 +15,15 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <fstream>
+#include <memory>
+#include <sstream>
+#include <string>
 
 #include "aow/app_link.h"
 #include "aow/gnss_link.h"
 #include "aow/log.h"
+#include "aow/motor.h"
 #include "aow/steer.h"
 #include "board.h"
 #include "linux_io.h"
@@ -40,7 +45,10 @@ struct Options {
     uint16_t rtcmPort = 2233;
     const char* config = "/etc/aow-hat/settings.json";
     uint16_t webPort = 80;
+    uint16_t gvretPort = 23;
     const char* board = "sim";
+    const char* canIfaces = "can0,can1,can2";  // CAN1 (K_Bus), CAN2 (ISO_Bus), CAN3 (V_Bus)
+    const char* keyaSerial = nullptr;          // RS-232 #2 on the HAT
     bool verbose = false;
 };
 
@@ -57,6 +65,9 @@ void usage() {
         "  --web-port N      web pages (default 80; 0 = none). WebSockets stay on 8082/8083\n"
         "  --board NAME      sim (default until the HAT drivers exist): no hardware, the\n"
         "                    wheel angle follows the motor command\n"
+        "  --can A,B,C       SocketCAN interfaces for CAN1-3 (default can0,can1,can2)\n"
+        "  --gvret-port N    SavvyCAN (GVRET) over TCP (default 23; 0 = off)\n"
+        "  --keya-serial DEV probe for a Keya motor on this serial port at startup\n"
         "  -v, --verbose     status summary every 5 s instead of every 60 s\n"
         "  --version");
 }
@@ -74,6 +85,9 @@ bool parseArgs(int argc, char** argv, Options& o) {
         else if (!std::strcmp(a, "--config") && hasValue) o.config = argv[++i];
         else if (!std::strcmp(a, "--web-port") && hasValue) o.webPort = static_cast<uint16_t>(std::atoi(argv[++i]));
         else if (!std::strcmp(a, "--board") && hasValue) o.board = argv[++i];
+        else if (!std::strcmp(a, "--can") && hasValue) o.canIfaces = argv[++i];
+        else if (!std::strcmp(a, "--gvret-port") && hasValue) o.gvretPort = static_cast<uint16_t>(std::atoi(argv[++i]));
+        else if (!std::strcmp(a, "--keya-serial") && hasValue) o.keyaSerial = argv[++i];
         else if (!std::strcmp(a, "-v") || !std::strcmp(a, "--verbose")) o.verbose = true;
         else if (!std::strcmp(a, "--version")) { std::printf("aow-hatd %s\n", kVersion); std::exit(0); }
         else { usage(); return false; }
@@ -124,6 +138,13 @@ private:
     aow::Shared& shared_;
 };
 
+std::string readFile(const std::string& path) {
+    std::ifstream in(path);
+    std::stringstream s;
+    s << in.rdbuf();
+    return s.str();
+}
+
 void logSummary(const aow::AppLink& app, const aow::GnssLink* gnss, const aow::steer::Autosteer& a) {
     LOG_INFO(Autosteer, "Steer: %s, guidance %s, motor %s, WAS %.1f, target %.1f, speed %.1f", a.armed() ? "armed" : "disarmed",
              a.guidanceActive() ? "on" : "off", a.motorState() == aow::steer::MotorState::Disabled ? "off" : "on",
@@ -165,7 +186,7 @@ int main(int argc, char** argv) {
     const int tickFd = openTickTimer();
 
     // The web thread also writes the log out, so it starts before anything can fail.
-    aow::WebThread web(shared, {opt.webPort, kVersion, settingsFile});
+    aow::WebThread web(shared, {opt.webPort, opt.gvretPort, kVersion, settingsFile});
     web.start();
     auto fail = [&](int code) {
         shared.stop = true;
@@ -203,12 +224,65 @@ int main(int argc, char** argv) {
     }
     aow::SimBoard simBoard;
     aow::Board& board = simBoard;
-    aow::steer::Autosteer autosteer(clock, shared.settings());
+    board.drive({});  // motor off until the controller says otherwise
+    LOG_INFO(Autosteer, "Board: %s", board.name());
+
+    // CAN buses. The bit rate comes from the settings, applied at startup (a change needs a
+    // restart, as in the firmware).
+    const aow::Settings startSettings = shared.settings();
+    aow::linux_io::SocketCan can[3];
+    CanCompatHooks hooks;
+    hooks.clock = &clock;
+    hooks.popup = [&app](const char* msg, uint8_t seconds, uint8_t color) { app.sendPopup(msg, seconds, color); };
+    hooks.mirror = [&shared, &clock](uint8_t bus, const CAN_message_t& msg, bool) {
+        if (!shared.gvretListening.load(std::memory_order_relaxed)) return;
+        aow::MirrorFrame f;
+        f.bus = bus;
+        f.id = msg.id;
+        f.extended = msg.flags.extended;
+        f.len = msg.len > 8 ? 8 : msg.len;
+        std::memcpy(f.data, msg.buf, f.len);
+        f.micros = static_cast<uint32_t>(clock.nowUs());
+        shared.pushMirror(f);
+    };
+    {
+        std::string list = opt.canIfaces;
+        for (int i = 0; i < 3; ++i) {
+            const size_t comma = list.find(',');
+            const std::string name = list.substr(0, comma);
+            list = comma == std::string::npos ? "" : list.substr(comma + 1);
+            const uint32_t bitrate = startSettings.can.bus[i].speed ? 500000 : 250000;
+            if (!name.empty() && can[i].open(name.c_str(), bitrate)) {
+                hooks.bus[i] = &can[i];
+                LOG_INFO(Can, "CAN%d on %s, %u bit/s", i + 1, name.c_str(), bitrate);
+            }
+        }
+    }
+    canCompatSetup(hooks);
+
+    // The motor, chosen as the firmware's MotorDriverManager: tractor CAN if a brand is set,
+    // else a Keya on RS-232 if one answers, else the board's PWM output.
+    aow::linux_io::SerialPort keyaPort;
+    std::unique_ptr<aow::motor::Motor> motor;
+    if (startSettings.can.brand != 0) {
+        const std::string path = settingsFile.canConfigPath();
+        const std::string json = readFile(path);
+        if (!json.empty()) LOG_INFO(Can, "Custom CAN config %s (%zu bytes)", path.c_str(), json.size());
+        motor = std::make_unique<aow::motor::TractorCanMotor>(aow::motor::canSteerConfig(startSettings), json);
+    } else if (opt.keyaSerial && keyaPort.open(opt.keyaSerial, 115200) &&
+               aow::motor::KeyaSerialMotor::probe(keyaPort, clock)) {
+        motor = std::make_unique<aow::motor::KeyaSerialMotor>(keyaPort, clock);
+    } else {
+        motor = std::make_unique<aow::PwmMotor>(board);
+    }
+    LOG_INFO(Autosteer, "Motor: %s", motor->name());
+
+    aow::steer::Autosteer autosteer(clock, startSettings);
+    autosteer.setMotor(motor.get());
+    autosteer.setPopup(hooks.popup);
     unsigned settingsSeen = shared.settingsVersion();
     SteerAdapter steerAdapter(autosteer, shared);
     app.setSteerModule(&steerAdapter);
-    board.drive({});  // motor off until the controller says otherwise
-    LOG_INFO(Autosteer, "Board: %s", board.name());
 
     LOG_INFO(Network, "Listening on :%u, replying to %s:%u", opt.listenPort, opt.appHost, opt.appPort);
     if (opt.gnssDevice) LOG_INFO(Gnss, "GNSS on %s at %u baud, RTCM on :%u", opt.gnssDevice, opt.gnssBaud, opt.rtcmPort);
@@ -220,7 +294,7 @@ int main(int argc, char** argv) {
                     {gnssPort.fd(), POLLIN, 0}, {rtcm.fd(), POLLIN, 0}};
     const uint64_t startUs = clock.nowUs();
     const uint64_t summaryTicks = opt.verbose ? 500 : 6000;
-    uint64_t ticks = 0, nextSummary = summaryTicks, nextTurnSensor = 0;
+    uint64_t ticks = 0, nextSummary = summaryTicks, nextTurnSensor = 0, nextMotorProcess = 0;
     int code = 0;
     for (;;) {
         if (poll(fds, 5, -1) < 0) {
@@ -256,7 +330,12 @@ int main(int argc, char** argv) {
                 autosteer.setSettings(shared.settings());
             }
             const aow::Settings& settings = autosteer.settings();
-            board.drive(autosteer.tick(board.read(settings)));
+            const aow::steer::Output out = autosteer.tick(board.read(settings));
+            motor->command(out.enable, out.pwm);
+            if (ticks >= nextMotorProcess) {  // 50 Hz, as the firmware's motor task
+                nextMotorProcess = ticks + 2;
+                motor->process();
+            }
             if (ticks >= nextTurnSensor) {  // PGN 250, 10 Hz
                 nextTurnSensor = ticks + 10;
                 app.sendTurnSensor(autosteer.turnSensorReading());
@@ -286,7 +365,11 @@ int main(int argc, char** argv) {
         }
     }
 
-    board.drive({});  // motor off; the service unit's ExecStopPost is the backstop
+    // Motor off: the CAN or serial motor gets its "disabled" command out before we go.
+    motor->command(false, 0);
+    motor->process();
+    motor->process();
+    board.drive({});  // the service unit's ExecStopPost is the backstop
     close(tickFd);
     close(sigFd);
     return fail(code);

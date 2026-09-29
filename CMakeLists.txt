@@ -17,7 +17,16 @@ add_library(aow_core
   core/src/gnss_link.cpp
   core/src/log.cpp
   core/src/settings.cpp
-  core/src/steer.cpp)
+  core/src/steer.cpp
+  core/src/motor.cpp
+  core/src/gvret.cpp
+  core/src/can/teensy_compat.cpp
+  core/src/can/CANConfigParser.cpp
+  core/src/can/CANProtocolEngine.cpp
+  core/src/can/TractorCANDriver.cpp)
+# The firmware's CAN files are ported near-verbatim; keep them quiet about their unused bits.
+set_source_files_properties(core/src/can/CANConfigParser.cpp core/src/can/CANProtocolEngine.cpp
+  core/src/can/TractorCANDriver.cpp PROPERTIES COMPILE_OPTIONS "-Wno-unused-parameter;-Wno-unused-private-field;-Wno-unknown-warning-option")
 target_include_directories(aow_core PUBLIC core/include hal/include third_party/ArduinoJson/src)
 
 # web: the firmware's pages and API on POSIX sockets. No hardware; builds on any POSIX system.
@@ -36,7 +45,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
 endif()
 
 enable_testing()
-foreach(t pgn app_link gnss gnss_link log settings steer web_server web_api)
+foreach(t pgn app_link gnss gnss_link log settings steer steer_motor can gvret web_server web_api)
   add_executable(test_${t} tests/test_${t}.cpp)
   target_link_libraries(test_${t} PRIVATE aow_web)
   add_test(NAME ${t} COMMAND test_${t})

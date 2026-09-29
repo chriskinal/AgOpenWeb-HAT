@@ -1,6 +1,10 @@
 #include "linux_io.h"
 
 #include <arpa/inet.h>
+#include <linux/can.h>
+#include <linux/can/raw.h>
+#include <net/if.h>
+#include <sys/ioctl.h>
 #include <fcntl.h>
 #include <sys/socket.h>
 #include <termios.h>
@@ -10,6 +14,8 @@
 #include <cstdio>
 #include <cstring>
 #include <ctime>
+#include <fstream>
+#include <string>
 
 #include "aow/log.h"
 
@@ -65,6 +71,72 @@ bool UdpLink::send(const uint8_t* buf, size_t len) {
     if (!haveDest_) return false;
     return sendto(fd_, buf, len, 0, reinterpret_cast<const sockaddr*>(&dest_), sizeof dest_) ==
            static_cast<ssize_t>(len);
+}
+
+SocketCan::~SocketCan() {
+    if (fd_ >= 0) close(fd_);
+}
+
+bool SocketCan::open(const char* ifname, uint32_t bitrate) {
+    std::snprintf(name_, sizeof name_, "%s", ifname);
+    std::ifstream type(std::string("/sys/class/net/") + ifname + "/type");
+    int t = 0;
+    if (!(type >> t) || t != 280) {  // ARPHRD_CAN
+        LOG_WARNING(Can, "%s: no such CAN interface", ifname);
+        return false;
+    }
+    // A real controller (vcan has no device) gets the configured bit rate. Needs root.
+    std::ifstream dev(std::string("/sys/class/net/") + ifname + "/device/uevent");
+    if (dev) {
+        char cmd[160];
+        std::snprintf(cmd, sizeof cmd,
+                      "ip link set %s down && ip link set %s type can bitrate %u restart-ms 100 && ip link set %s up",
+                      ifname, ifname, bitrate, ifname);
+        if (std::system(cmd) != 0) LOG_WARNING(Can, "%s: could not set %u bit/s", ifname, bitrate);
+    } else {
+        std::string up = std::string("ip link set ") + ifname + " up 2>/dev/null";
+        if (std::system(up.c_str()) != 0) {}  // vcan: usually up already
+    }
+
+    fd_ = socket(PF_CAN, SOCK_RAW | SOCK_NONBLOCK | SOCK_CLOEXEC, CAN_RAW);
+    if (fd_ < 0) {
+        LOG_ERROR(Can, "%s: socket: %s", ifname, std::strerror(errno));
+        return false;
+    }
+    sockaddr_can addr{};
+    addr.can_family = AF_CAN;
+    addr.can_ifindex = static_cast<int>(if_nametoindex(ifname));
+    if (!addr.can_ifindex || bind(fd_, reinterpret_cast<sockaddr*>(&addr), sizeof addr) < 0) {
+        LOG_ERROR(Can, "%s: bind: %s", ifname, std::strerror(errno));
+        close(fd_);
+        fd_ = -1;
+        return false;
+    }
+    return true;
+}
+
+bool SocketCan::read(hal::CanFrame& f) {
+    can_frame fr;
+    for (;;) {
+        const ssize_t n = ::read(fd_, &fr, sizeof fr);
+        if (n != static_cast<ssize_t>(sizeof fr)) return false;
+        if (fr.can_id & (CAN_ERR_FLAG | CAN_RTR_FLAG)) continue;  // error and remote frames: skip
+        f.extended = fr.can_id & CAN_EFF_FLAG;
+        f.id = fr.can_id & (f.extended ? CAN_EFF_MASK : CAN_SFF_MASK);
+        f.len = fr.can_dlc > 8 ? 8 : fr.can_dlc;
+        std::memcpy(f.data, fr.data, f.len);
+        return true;
+    }
+}
+
+bool SocketCan::write(const hal::CanFrame& f) {
+    can_frame fr{};
+    fr.can_id = f.extended ? ((f.id & CAN_EFF_MASK) | CAN_EFF_FLAG) : (f.id & CAN_SFF_MASK);
+    fr.can_dlc = f.len > 8 ? 8 : f.len;
+    std::memcpy(fr.data, f.data, fr.can_dlc);
+    if (::write(fd_, &fr, sizeof fr) == static_cast<ssize_t>(sizeof fr)) return true;
+    ++writeErrors_;  // bus off, no ACK (nothing listening), or the queue is full
+    return false;
 }
 
 namespace {

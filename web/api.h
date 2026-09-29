@@ -22,6 +22,11 @@ struct Backend {
     virtual Status status() = 0;
     virtual void restart() = 0;  // restart the daemon (the firmware rebooted the Teensy)
 
+    // The uploaded CAN brand file (the firmware's LittleFS /can_config.json). "" if none.
+    virtual std::string customCanConfig() = 0;
+    virtual bool writeCustomCanConfig(const std::string& json, std::string& error) = 0;
+    virtual bool deleteCustomCanConfig(std::string& error) = 0;
+
     struct Interface { std::string name, ip; bool up; int speedMbps; };
     virtual std::vector<Interface> interfaces() = 0;
 };

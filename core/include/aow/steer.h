@@ -8,8 +8,10 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 
 #include "aow/hal.h"
+#include "aow/motor.h"
 #include "aow/settings.h"
 #include "aow/steer_pgn.h"
 
@@ -23,6 +25,7 @@ constexpr uint32_t kGuidanceOffDisarmMs = 300;    // guidance off this long (no 
 constexpr uint32_t kKickoutGraceMs = 5000;        // re-arming within this clears the kickout
 constexpr uint32_t kGuidanceToggleMs = 1000;      // guidance off-on within this clears a kickout
 constexpr uint32_t kCurrentSpikeFilterMs = 1000;  // current must stay high this long to kick out
+constexpr uint32_t kDisarmHandshakeMs = 200;      // CAN valve not ready: armed this long, for the app's button
 
 // Current in the firmware's units: Teensy ADC counts above a 77-count baseline, full scale
 // 1680 counts. Keeping the unit keeps the app's current threshold meaning the same.
@@ -46,7 +49,7 @@ struct Output {
 };
 
 enum class MotorState : uint8_t { Disabled, SoftStart, SoftAccel, Normal };
-enum class Kickout : uint8_t { None, CurrentHigh };
+enum class Kickout : uint8_t { None, CurrentHigh, Can };
 
 class Debouncer {
 public:
@@ -65,6 +68,13 @@ float wasAngle(uint16_t counts, const Settings& s);
 class Autosteer {
 public:
     explicit Autosteer(hal::Clock& clock, const Settings& s = Settings());
+
+    // The motor, for CAN readiness, engage buttons, kickouts, wheel angle and errors. Without
+    // one (or with a PWM motor) none of those apply.
+    void setMotor(motor::Motor* m) { motor_ptr_ = m; }
+    // PGN 221 popups to the app.
+    using Popup = std::function<void(const char* message, uint8_t seconds, uint8_t color)>;
+    void setPopup(Popup p) { popup_ = std::move(p); }
 
     // From the app, per frame.
     void onSteerData(const pgn::SteerCommand& c);
@@ -106,9 +116,16 @@ private:
     Output updateMotor(uint64_t now);
     void emergencyStop(uint64_t now);
     void disarm(const char* why);
+    bool canNotReady() const { return motor_ptr_ && motor_ptr_->isTractorCan() && !motor_ptr_->ready(); }
+    void popup(const char* message);
 
     hal::Clock& clock_;
     Settings s_;
+    motor::Motor* motor_ptr_ = nullptr;
+    Popup popup_;
+    bool pendingDisarm_ = false;
+    uint64_t pendingDisarmAtMs_ = 0;
+    bool switchBlockedShown_ = false;
 
     // From PGN 254.
     pgn::SteerCommand cmd_;

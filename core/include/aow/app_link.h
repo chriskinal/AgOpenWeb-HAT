@@ -32,6 +32,8 @@ public:
 
     // PGN 250, sent by the caller at 10 Hz.
     void sendTurnSensor(uint8_t value);
+    // PGN 221: a popup in the app.
+    void sendPopup(const char* message, uint8_t seconds, uint8_t color);
 
     bool haveCommand() const { return haveCommand_; }
     const pgn::SteerCommand& command() const { return command_; }

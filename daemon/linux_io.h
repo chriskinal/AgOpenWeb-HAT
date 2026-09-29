@@ -37,6 +37,31 @@ private:
     bool haveDest_ = false;
 };
 
+// A SocketCAN interface (can0..2 on the HAT's MCP251863s; vcan for tests). Classic CAN only,
+// as the firmware. Non-blocking.
+class SocketCan : public hal::CanBus {
+public:
+    SocketCan() = default;
+    ~SocketCan() override;
+    SocketCan(const SocketCan&) = delete;
+    SocketCan& operator=(const SocketCan&) = delete;
+
+    // Sets the bit rate (not on vcan) and brings the interface up, then opens it. Returns false
+    // and logs why if the interface is missing.
+    bool open(const char* ifname, uint32_t bitrate);
+    int fd() const { return fd_; }
+    const char* name() const { return name_; }
+
+    bool read(hal::CanFrame& f) override;
+    bool write(const hal::CanFrame& f) override;
+    uint32_t writeErrors() const { return writeErrors_; }
+
+private:
+    int fd_ = -1;
+    char name_[16] = {};
+    uint32_t writeErrors_ = 0;
+};
+
 // A tty in raw 8N1 mode, non-blocking.
 class SerialPort : public hal::SerialPort {
 public:

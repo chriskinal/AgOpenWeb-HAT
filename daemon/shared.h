@@ -3,6 +3,8 @@
 #pragma once
 
 #include <atomic>
+#include <cstddef>
+#include <cstdint>
 #include <mutex>
 #include <string>
 
@@ -11,6 +13,16 @@
 #include "aow/status.h"
 
 namespace aow {
+
+// A CAN frame the control thread read or wrote, for the GVRET stream.
+struct MirrorFrame {
+    uint8_t bus = 0;  // 0..2 = CAN1..3
+    bool extended = false;
+    uint8_t len = 0;
+    uint32_t id = 0;
+    uint32_t micros = 0;
+    uint8_t data[8] = {};
+};
 
 class Shared {
 public:
@@ -29,6 +41,27 @@ public:
     void requestSave() { saveRequested_.store(true); }
     bool takeSaveRequest() { return saveRequested_.exchange(false); }
 
+    // GVRET: the control thread queues frames only while a SavvyCAN client listens.
+    std::atomic<bool> gvretListening{false};
+    void pushMirror(const MirrorFrame& f) {
+        std::lock_guard<PiMutex> l(mirrorMu_);
+        if (mirrorCount_ == kMirror) {  // full: drop the oldest
+            mirrorHead_ = (mirrorHead_ + 1) % kMirror;
+            --mirrorCount_;
+        }
+        mirror_[(mirrorHead_ + mirrorCount_++) % kMirror] = f;
+    }
+    size_t takeMirror(MirrorFrame* out, size_t cap) {
+        std::lock_guard<PiMutex> l(mirrorMu_);
+        size_t n = 0;
+        while (n < cap && mirrorCount_) {
+            out[n++] = mirror_[mirrorHead_];
+            mirrorHead_ = (mirrorHead_ + 1) % kMirror;
+            --mirrorCount_;
+        }
+        return n;
+    }
+
     std::atomic<bool> stop{false};  // set by either thread to end the daemon
 
 private:
@@ -37,6 +70,10 @@ private:
     Status status_;
     std::atomic<unsigned> settingsVersion_{0};
     std::atomic<bool> saveRequested_{false};
+    static constexpr size_t kMirror = 1024;
+    PiMutex mirrorMu_;
+    MirrorFrame mirror_[kMirror];
+    size_t mirrorHead_ = 0, mirrorCount_ = 0;
 };
 
 // The settings file. Save writes a temporary file and renames it over the old one, so a power
@@ -46,6 +83,11 @@ struct SettingsFile {
     // Missing file: defaults, and true. Unreadable or broken: defaults, false, and a reason.
     bool load(Settings& s, std::string& error) const;
     bool save(const Settings& s, std::string& error) const;
+    // The uploaded CAN brand file, beside the settings.
+    std::string canConfigPath() const;
 };
+
+// Writes a temporary file, fsyncs it and renames it over path.
+bool writeFileAtomically(const std::string& path, const std::string& data, std::string& error);
 
 }  // namespace aow

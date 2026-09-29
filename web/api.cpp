@@ -6,6 +6,9 @@
 
 #include <cstring>
 
+#include "pages/CANConfigUploadPage.h"
+#include "pages/CANInfoJSON.h"
+#include "pages/DragDropCANConfigPage.h"
 #include "pages/TouchFriendlyDeviceSettingsPage.h"
 #include "pages/TouchFriendlyEventLoggerPage.h"
 #include "pages/TouchFriendlyHomePage.h"
@@ -179,6 +182,86 @@ Response networkConfig(Backend& b, const Request& r) {
     return Response::json(R"({"status":"error","error":"On the HAT the CM4's network is set up in the operating system (Wi-Fi and Ethernet settings), not here. The HAT talks to AgOpenWeb on the same machine, so it needs no address of its own."})");
 }
 
+Response canConfig(Backend& b, const Request& r) {
+    Settings s = b.settings();
+    if (r.method == "GET") {
+        JsonDocument doc;
+        doc["brand"] = s.can.brand;
+        for (int i = 0; i < 3; ++i) {
+            const std::string n = "can" + std::to_string(i + 1);
+            doc[n + "Speed"] = s.can.bus[i].speed;
+            doc[n + "Function"] = s.can.bus[i].function;
+            doc[n + "Name"] = s.can.bus[i].name;
+        }
+        doc["moduleID"] = s.can.moduleId;
+        return Response::json(toString(doc));
+    }
+    if (r.method != "POST") return methodNotAllowed();
+    JsonDocument doc;
+    if (deserializeJson(doc, r.body) || !doc.is<JsonObject>()) return Response::json(R"({"status":"error","message":"Invalid JSON"})");
+    auto take = [&](const std::string& key, uint8_t& v) {
+        if (doc[key].is<uint8_t>()) v = doc[key].as<uint8_t>();
+    };
+    take("brand", s.can.brand);
+    for (int i = 0; i < 3; ++i) {
+        const std::string n = "can" + std::to_string(i + 1);
+        take(n + "Speed", s.can.bus[i].speed);
+        take(n + "Function", s.can.bus[i].function);
+        take(n + "Name", s.can.bus[i].name);
+    }
+    take("moduleID", s.can.moduleId);
+    for (int i = 0; i < 3; ++i)
+        for (int j = i + 1; j < 3; ++j)
+            if (s.can.bus[i].name != 0 && s.can.bus[i].name == s.can.bus[j].name)
+                return Response::json(R"({"status":"error","message":"Each bus name can only be used once"})");
+    std::string err;
+    if (!b.applySettings(s, err)) return Response::json(R"({"status":"error","message":"Could not save"})", 500);
+    LOG_INFO(Network, "CAN config saved - Brand: %u, CAN1: %u/%u, CAN2: %u/%u, CAN3: %u/%u", s.can.brand,
+             s.can.bus[0].speed, s.can.bus[0].function, s.can.bus[1].speed, s.can.bus[1].function,
+             s.can.bus[2].speed, s.can.bus[2].function);
+    return Response::json(R"({"status":"ok","message":"Configuration saved. Restart required."})");
+}
+
+Response canInfo(Backend& b) {
+    const std::string custom = b.customCanConfig();
+    return Response::json(custom.empty() ? std::string(CAN_INFO_JSON) : custom);
+}
+
+Response canUpload(Backend& b, const Request& r) {
+    if (r.method != "POST") return methodNotAllowed();
+    if (r.body.empty()) return Response::text("No content received", 400);
+    JsonDocument test;
+    const DeserializationError e = deserializeJson(test, r.body, DeserializationOption::NestingLimit(20));
+    if (e) return Response::text(std::string("Invalid JSON: ") + e.c_str(), 400);
+    std::string err;
+    if (!b.writeCustomCanConfig(r.body, err)) return Response::text("Failed to write: " + err, 500);
+    LOG_INFO(Network, "Custom CAN config uploaded (%zu bytes)", r.body.size());
+    return Response::text("Upload successful");
+}
+
+Response canRestore(Backend& b, const Request& r) {
+    if (r.method != "POST") return methodNotAllowed();
+    std::string err;
+    if (!b.deleteCustomCanConfig(err)) return Response::text("Failed to restore default: " + err, 500);
+    LOG_INFO(Network, "Custom CAN config deleted, restored to default");
+    return Response::text("Default configuration restored");
+}
+
+Response canStatus(Backend& b) {
+    const std::string custom = b.customCanConfig();
+    JsonDocument doc;
+    doc["custom"] = !custom.empty();
+    if (custom.empty()) {
+        doc["version"] = "2.0";
+    } else {
+        JsonDocument cfg;
+        doc["version"] = !deserializeJson(cfg, custom) && !cfg["version"].isNull() ? cfg["version"].as<std::string>()
+                                                                                   : std::string("Unknown");
+        doc["size"] = custom.size();
+    }
+    return Response::json(toString(doc));
+}
+
 void put(std::string& out, size_t at, const void* v, size_t n) { std::memcpy(&out[at], v, n); }
 
 }  // namespace
@@ -195,6 +278,13 @@ void addRoutes(Server& server, Backend& b, const char* version) {
     page(server, "/eventlogger", TOUCH_FRIENDLY_EVENT_LOGGER_PAGE);
     page(server, "/logs", TOUCH_FRIENDLY_LOG_VIEWER_PAGE);
     page(server, "/network", TOUCH_FRIENDLY_NETWORK_PAGE);
+    page(server, "/can", DRAG_DROP_CAN_CONFIG_PAGE);
+    page(server, "/can/upload", CAN_CONFIG_UPLOAD_PAGE);
+    server.route("/api/can/config", [&b](const Request& r) { return canConfig(b, r); });
+    server.route("/api/can/info", [&b](const Request&) { return canInfo(b); });
+    server.route("/api/can/config/upload", [&b](const Request& r) { return canUpload(b, r); });
+    server.route("/api/can/config/restore", [&b](const Request& r) { return canRestore(b, r); });
+    server.route("/api/can/config/status", [&b](const Request&) { return canStatus(b); });
 
     server.route("/api/status", [&b, version](const Request&) { return status(b, version); });
     server.route("/api/restart", [&b](const Request& r) {

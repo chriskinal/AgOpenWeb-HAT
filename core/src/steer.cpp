@@ -107,6 +107,11 @@ bool Autosteer::onSteerSettings(const uint8_t* d, size_t len) {
     return changed;
 }
 
+void Autosteer::popup(const char* message) {
+    LOG_WARNING(Autosteer, "%s", message);
+    if (popup_) popup_(message, 5, 1);  // 5 s, warning colour, as the firmware
+}
+
 void Autosteer::disarm(const char* why) {
     if (armed_) LOG_INFO(Autosteer, "Autosteer DISARMED - %s", why);
     armed_ = false;
@@ -121,25 +126,51 @@ void Autosteer::emergencyStop(uint64_t now) {
 }
 
 void Autosteer::updateArming(uint64_t now) {
-    // Physical button (toggles) or switch (follows).
+    // Physical button (toggles) or switch (follows). A CAN steer button counts as the button.
     if (s_.steer.steerButton) {
         const bool pressed = steerSw_.state();
-        if (pressed && !lastButtonPressed_) {
-            armed_ = !armed_;
-            LOG_INFO(Autosteer, "Autosteer %s via button", armed_ ? "ARMED" : "DISARMED");
+        std::string label = "button";
+        const bool canPress = motor_ptr_ && motor_ptr_->takeEngageEvent(label);
+        if ((pressed && !lastButtonPressed_) || canPress) {
+            if (canNotReady()) {
+                popup(motor_ptr_->notReadyMessage());
+            } else {
+                armed_ = !armed_;
+                LOG_INFO(Autosteer, "Autosteer %s via %s", armed_ ? "ARMED" : "DISARMED", label.c_str());
+            }
         }
         lastButtonPressed_ = pressed;
     } else if (s_.steer.steerSwitch) {
         const bool on = steerSw_.state();
         if (on != lastSwitchOn_) {
-            armed_ = on;
-            LOG_INFO(Autosteer, "Autosteer %s via switch", armed_ ? "ARMED" : "DISARMED");
-            lastSwitchOn_ = on;
+            if (on && canNotReady()) {
+                // Blocked; retried every tick like the firmware, but the popup shows once.
+                if (!switchBlockedShown_) popup(motor_ptr_->notReadyMessage());
+                switchBlockedShown_ = true;
+            } else {
+                armed_ = on;
+                LOG_INFO(Autosteer, "Autosteer %s via switch", armed_ ? "ARMED" : "DISARMED");
+                lastSwitchOn_ = on;
+                switchBlockedShown_ = false;
+            }
         }
     }
 
-    // Guidance switched on in the app: arm, and clear a kickout.
-    if (guidanceRose_ && guidance_) {
+    // Deferred disarm: the handshake that lets the app's steer button toggle back off.
+    if (pendingDisarm_ && now - pendingDisarmAtMs_ >= kDisarmHandshakeMs) {
+        pendingDisarm_ = false;
+        armed_ = false;
+        LOG_INFO(Autosteer, "Deferred disarm complete - motor/valve was not ready");
+    }
+
+    // Guidance switched on in the app: arm, and clear a kickout. With a CAN valve not ready,
+    // arm only briefly so the app sees the change, then disarm.
+    if (guidanceRose_ && guidance_ && canNotReady()) {
+        popup(motor_ptr_->notReadyMessage());
+        armed_ = true;
+        pendingDisarm_ = true;
+        pendingDisarmAtMs_ = now;
+    } else if (guidanceRose_ && guidance_) {
         armed_ = true;
         LOG_INFO(Autosteer, "Autosteer ARMED via AgOpenGPS (Guidance ON)");
         if (kickout_ != Kickout::None) {
@@ -195,15 +226,30 @@ bool Autosteer::checkCurrentKickout(uint64_t now) {
 }
 
 void Autosteer::updateKickout(uint64_t now) {
-    // KickoutMonitor::process: detect, or clear once the condition has gone.
+    // KickoutMonitor::process: detect, or clear once the condition has gone. Keya and tractor
+    // CAN motors report their own; the current sensor is not used with them.
+    const bool motorOwns = motor_ptr_ && motor_ptr_->ownsKickout();
+    const bool tractorCan = motor_ptr_ && motor_ptr_->isTractorCan();
+    auto canKickout = [&] {
+        if (!tractorCan || !motor_ptr_->canKickout()) return false;
+        motor_ptr_->clearCanKickout();  // TractorCANDriver::resetKickoutDetected
+        return true;
+    };
     if (kickout_ == Kickout::None) {
-        if (s_.steer.currentSensor && checkCurrentKickout(now)) {
+        if (!motorOwns && s_.steer.currentSensor && checkCurrentKickout(now)) {
             kickout_ = Kickout::CurrentHigh;
             LOG_WARNING(Autosteer, "KICKOUT: Current High (%u counts)", currentCounts_);
+        } else if (canKickout()) {
+            kickout_ = Kickout::Can;
+            LOG_WARNING(Autosteer, "KICKOUT: CAN Kickout (Manual Steering)");
         }
-    } else if (!(kickout_ == Kickout::CurrentHigh && s_.steer.currentSensor && checkCurrentKickout(now))) {
-        kickout_ = Kickout::None;
-        currentHighSinceMs_ = 0;
+    } else {
+        const bool still = kickout_ == Kickout::CurrentHigh ? (!motorOwns && s_.steer.currentSensor && checkCurrentKickout(now))
+                                                            : canKickout();
+        if (!still) {
+            kickout_ = Kickout::None;
+            currentHighSinceMs_ = 0;
+        }
     }
 
     // AutosteerProcessor's handling.
@@ -235,6 +281,7 @@ bool Autosteer::shouldSteer() const {
     const uint64_t now = nowMs();
     if (kickoutAtMs_ && now - kickoutAtMs_ < kKickoutCooldownMs) return false;
     if (!haveCommand_ || now - commandAtMs_ > kSteerTimeoutMs) return false;
+    if (pendingDisarm_) return false;  // armed only for the app to see; the valve is not ready
     return guidance_ && armed_ && cmd_.speedKmh > s_.steer.minSpeed / 10.0f;
 }
 
@@ -313,10 +360,26 @@ Output Autosteer::tick(const Inputs& in) {
 
     updateArming(now);
 
+    // A CAN valve that stops being ready while armed: disarm and stop. Not during the arm/disarm
+    // handshake (the firmware's check cut its 200 ms to one tick, with a second popup).
+    if (armed_ && !pendingDisarm_ && canNotReady()) {
+        emergencyStop(now);
+        popup(motor_ptr_->notReadyMessage());
+        LOG_WARNING(Autosteer, "Autosteer DISARMED - valve/motor not ready during steering");
+    }
+    // A motor error while steering: stop, and skip the rest of this tick (as the firmware).
+    if (motor_ptr_ && motor_ptr_->hasError() && armed_ && guidance_) {
+        LOG_WARNING(Autosteer, "KICKOUT: Motor error detected");
+        emergencyStop(now);
+        guidanceRose_ = guidanceFell_ = false;
+        return {};
+    }
+
     updateCurrent(in.currentVolts);
     updateKickout(now);
 
-    wasAngle_ = wasAngle(in.wasCounts, s_);
+    float canDeg = 0;
+    wasAngle_ = motor_ptr_ && motor_ptr_->canWheelAngle(canDeg) ? canDeg : wasAngle(in.wasCounts, s_);
     actualAngle_ = wasAngle_ < 0 ? wasAngle_ * s_.gains.ackermanFix : wasAngle_;
 
     const Output out = updateMotor(now);

@@ -2,6 +2,7 @@
 // (boards/hat, when it exists) and a simulator for a CM4 with no HAT.
 #pragma once
 
+#include "aow/motor.h"
 #include "aow/settings.h"
 #include "aow/steer.h"
 
@@ -41,6 +42,17 @@ public:
 
 private:
     float angle_ = 0;
+};
+
+// The PWM motor: the board's own output (the HAT's PWM + DIR + EN, or the simulator's wheel).
+class PwmMotor : public motor::Motor {
+public:
+    explicit PwmMotor(Board& board) : board_(board) {}
+    const char* name() const override { return "PWM"; }
+    void command(bool enable, int16_t pwm) override { board_.drive({enable, pwm}); }
+
+private:
+    Board& board_;
 };
 
 }  // namespace aow

@@ -24,6 +24,10 @@ struct FakeBackend : Backend {
     }
     Status status() override { return st; }
     void restart() override { ++restarts; }
+    std::string canJson;
+    std::string customCanConfig() override { return canJson; }
+    bool writeCustomCanConfig(const std::string& j, std::string&) override { canJson = j; return true; }
+    bool deleteCustomCanConfig(std::string&) override { canJson.clear(); return true; }
     std::vector<Interface> interfaces() override {
         return {{"lo", "127.0.0.1", true, 0}, {"wlan0", "192.168.4.217", true, 0}, {"eth0", "", false, 0}};
     }
@@ -106,6 +110,29 @@ int main() {
     d = parse(request(s, port, "GET /api/network/config HTTP/1.1\r\n\r\n"));
     CHECK(d["ip"].size() == 4 && d["ip"][0] == 127);
     CHECK(parse(post(s, port, "/api/network/config", R"({"ip":[10,0,0]})"))["status"] == "error");
+
+    // CAN: the pages, settings in the firmware's field names, duplicate bus names refused.
+    CHECK(request(s, port, "GET /can HTTP/1.1\r\n\r\n").find("/api/can/info") != std::string::npos);
+    CHECK(request(s, port, "GET /can/upload HTTP/1.1\r\n\r\n").find("/api/can/config/upload") != std::string::npos);
+    d = parse(request(s, port, "GET /api/can/config HTTP/1.1\r\n\r\n"));
+    CHECK(d["brand"] == 0 && d["moduleID"] == 0x1C && d["can3Function"] == 0);
+    d = parse(post(s, port, "/api/can/config", R"({"brand":9,"can3Function":1,"can3Name":1,"can1Function":2,"can1Speed":1})"));
+    CHECK(d["status"] == "ok" && b.s.can.brand == 9 && b.s.can.bus[2].function == 1 && b.s.can.bus[0].speed == 1);
+    d = parse(post(s, port, "/api/can/config", R"({"can1Name":1})"));  // CAN3 already has name 1
+    CHECK(d["status"] == "error" && b.s.can.bus[0].name == 0);
+
+    // Brand file: the built-in list until one is uploaded; bad JSON refused; restore removes it.
+    d = parse(request(s, port, "GET /api/can/info HTTP/1.1\r\n\r\n"));
+    CHECK(d["brands"].size() >= 2);
+    d = parse(request(s, port, "GET /api/can/config/status HTTP/1.1\r\n\r\n"));
+    CHECK(d["custom"] == false);
+    CHECK(post(s, port, "/api/can/config/upload", "{\"brands\": [").rfind("HTTP/1.1 400", 0) == 0 && b.canJson.empty());
+    CHECK(body(post(s, port, "/api/can/config/upload", R"({"version":"2.1","brands":[{"id":9}]})")) == "Upload successful");
+    d = parse(request(s, port, "GET /api/can/config/status HTTP/1.1\r\n\r\n"));
+    CHECK(d["custom"] == true && d["version"] == "2.1" && d["size"] > 10);
+    d = parse(request(s, port, "GET /api/can/info HTTP/1.1\r\n\r\n"));
+    CHECK(d["version"] == "2.1");
+    CHECK(body(post(s, port, "/api/can/config/restore", "")) == "Default configuration restored" && b.canJson.empty());
 
     // Telemetry packet: 32 bytes, the firmware's offsets.
     Status st;
