@@ -49,6 +49,7 @@ struct Options {
     const char* board = "sim";
     const char* canIfaces = "can0,can1,can2";  // CAN1 (K_Bus), CAN2 (ISO_Bus), CAN3 (V_Bus)
     const char* keyaSerial = nullptr;          // RS-232 #2 on the HAT
+    const char* radio = nullptr;               // RS-232 #1 on the HAT: RTK radio
     bool verbose = false;
 };
 
@@ -68,6 +69,7 @@ void usage() {
         "  --can A,B,C       SocketCAN interfaces for CAN1-3 (default can0,can1,can2)\n"
         "  --gvret-port N    SavvyCAN (GVRET) over TCP (default 23; 0 = off)\n"
         "  --keya-serial DEV probe for a Keya motor on this serial port at startup\n"
+        "  --radio DEV       RTK radio serial port; its RTCM goes to the receiver\n"
         "  -v, --verbose     status summary every 5 s instead of every 60 s\n"
         "  --version");
 }
@@ -88,6 +90,7 @@ bool parseArgs(int argc, char** argv, Options& o) {
         else if (!std::strcmp(a, "--can") && hasValue) o.canIfaces = argv[++i];
         else if (!std::strcmp(a, "--gvret-port") && hasValue) o.gvretPort = static_cast<uint16_t>(std::atoi(argv[++i]));
         else if (!std::strcmp(a, "--keya-serial") && hasValue) o.keyaSerial = argv[++i];
+        else if (!std::strcmp(a, "--radio") && hasValue) o.radio = argv[++i];
         else if (!std::strcmp(a, "-v") || !std::strcmp(a, "--verbose")) o.verbose = true;
         else if (!std::strcmp(a, "--version")) { std::printf("aow-hatd %s\n", kVersion); std::exit(0); }
         else { usage(); return false; }
@@ -213,6 +216,13 @@ int main(int argc, char** argv) {
         if (!rtcm.open(opt.rtcmPort)) return fail(1);
     }
 
+    aow::linux_io::SerialPort radioPort;
+    unsigned radioBaud = shared.settings().gps.radioBaud;
+    if (opt.radio) {
+        if (radioPort.open(opt.radio, radioBaud)) LOG_INFO(Gnss, "Radio RTCM on %s at %u baud", opt.radio, radioBaud);
+        else LOG_ERROR(Gnss, "Radio port %s not opened", opt.radio);
+    }
+
     // The daemon answers from loopback, so the module IP it reports is loopback too.
     const uint8_t moduleIp[4] = {127, 0, 0, 1};
     aow::AppLink app(udp, clock, moduleIp);
@@ -283,21 +293,23 @@ int main(int argc, char** argv) {
     unsigned settingsSeen = shared.settingsVersion();
     SteerAdapter steerAdapter(autosteer, shared);
     app.setSteerModule(&steerAdapter);
+    gnss.setPassThrough(startSettings.gps.passThrough);
+    if (opt.gnssDevice) shared.gnssPort = &gnssPort;  // for the UM98x page
 
     LOG_INFO(Network, "Listening on :%u, replying to %s:%u", opt.listenPort, opt.appHost, opt.appPort);
     if (opt.gnssDevice) LOG_INFO(Gnss, "GNSS on %s at %u baud, RTCM on :%u", opt.gnssDevice, opt.gnssBaud, opt.rtcmPort);
     aow::log::global().setStartupDone();
 
     // Without GNSS the last two entries hold fd -1, which poll() skips.
-    enum { kApp, kTick, kSignal, kGnss, kRtcm };
+    enum { kApp, kTick, kSignal, kGnss, kRtcm, kRadio };
     pollfd fds[] = {{udp.fd(), POLLIN, 0}, {tickFd, POLLIN, 0}, {sigFd, POLLIN, 0},
-                    {gnssPort.fd(), POLLIN, 0}, {rtcm.fd(), POLLIN, 0}};
+                    {gnssPort.fd(), POLLIN, 0}, {rtcm.fd(), POLLIN, 0}, {radioPort.fd(), POLLIN, 0}};
     const uint64_t startUs = clock.nowUs();
     const uint64_t summaryTicks = opt.verbose ? 500 : 6000;
     uint64_t ticks = 0, nextSummary = summaryTicks, nextTurnSensor = 0, nextMotorProcess = 0;
     int code = 0;
     for (;;) {
-        if (poll(fds, 5, -1) < 0) {
+        if (poll(fds, 6, -1) < 0) {
             if (errno == EINTR) continue;
             LOG_ERROR(System, "poll: %s", std::strerror(errno));
             code = 1;
@@ -316,18 +328,47 @@ int main(int argc, char** argv) {
             break;
         }
         if (fds[kGnss].revents) gnss.pollReceiver();
+        // While the UM98x page has the receiver, RTCM and radio bytes are dropped: they would
+        // land in the middle of its commands.
+        const bool gnssLent = shared.gnssPaused.load();
         if (fds[kRtcm].revents) {
             uint8_t buf[2048];
             int n;
-            while ((n = rtcm.receive(buf, sizeof buf)) > 0) gnss.forwardRtcm(buf, static_cast<size_t>(n));
+            while ((n = rtcm.receive(buf, sizeof buf)) > 0)
+                if (!gnssLent) gnss.forwardRtcm(buf, static_cast<size_t>(n));
+        }
+        if (fds[kRadio].revents & (POLLERR | POLLHUP | POLLNVAL)) {
+            LOG_ERROR(Gnss, "Radio port %s went away", opt.radio);
+            fds[kRadio].fd = -1;
+        } else if (fds[kRadio].revents) {
+            uint8_t buf[1024];
+            int n;
+            while ((n = radioPort.read(buf, sizeof buf)) > 0)
+                if (opt.gnssDevice && !gnssLent) gnss.forwardRadio(buf, static_cast<size_t>(n));
         }
         if (fds[kTick].revents) {
             uint64_t expirations = 0;
             if (read(tickFd, &expirations, sizeof expirations) == sizeof expirations) ticks += expirations;
+            // The UM98x page borrowing the GNSS port, or giving it back.
+            if (shared.gnssPauseRequested.load() && !shared.gnssPaused.load()) {
+                fds[kGnss].fd = -1;  // not polled, so its bytes cannot spin the loop
+                shared.gnssPaused = true;
+            } else if (!shared.gnssPauseRequested.load() && shared.gnssPaused.load()) {
+                fds[kGnss].fd = gnssPort.fd();
+                shared.gnssPaused = false;
+            }
+
             // Settings changed on the web page: the controller picks them up here.
             if (shared.settingsVersion() != settingsSeen) {
                 settingsSeen = shared.settingsVersion();
-                autosteer.setSettings(shared.settings());
+                const aow::Settings s = shared.settings();
+                autosteer.setSettings(s);
+                gnss.setPassThrough(s.gps.passThrough);
+                if (opt.radio && s.gps.radioBaud != radioBaud) {  // live, as the firmware
+                    radioBaud = s.gps.radioBaud;
+                    if (radioPort.setBaud(radioBaud)) LOG_INFO(Gnss, "Radio baud now %u", radioBaud);
+                    else LOG_ERROR(Gnss, "Radio baud %u not supported", radioBaud);
+                }
             }
             const aow::Settings& settings = autosteer.settings();
             const aow::steer::Output out = autosteer.tick(board.read(settings));

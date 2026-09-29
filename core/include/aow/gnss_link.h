@@ -21,6 +21,12 @@ public:
 
     // One RTCM datagram from the app. Datagrams under 5 bytes are ignored, as the firmware.
     void forwardRtcm(const uint8_t* data, size_t len);
+    // Radio RTCM bytes (RS-232 #1): forwarded as they come.
+    void forwardRadio(const uint8_t* data, size_t len);
+
+    // The Device page's GPS passthrough: every sentence goes to the app as received, instead
+    // of PANDA/PAOGI.
+    void setPassThrough(bool on) { passThrough_ = on; }
 
     const gnss::State& state() const { return parser_.state(); }
 
@@ -30,17 +36,21 @@ public:
         uint32_t navSendErrors = 0;
         uint32_t rtcmPackets = 0;
         uint32_t rtcmBytesDropped = 0;  // serial port would not take them
+        uint32_t radioBytes = 0;
     };
     const Counters& counters() const { return counters_; }
     const nmea::SentenceReader& reader() const { return reader_; }
 
 private:
+    void sendRaw();
+
     hal::SerialPort& receiver_;
     hal::UdpLink& app_;
     hal::Clock& clock_;
     nmea::SentenceReader reader_;
     gnss::Parser parser_;
     Counters counters_;
+    bool passThrough_ = false;
 };
 
 }  // namespace aow

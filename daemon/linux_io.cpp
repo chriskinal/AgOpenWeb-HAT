@@ -144,11 +144,13 @@ namespace {
 speed_t baudConstant(unsigned baud) {
     switch (baud) {
     case 9600: return B9600;
+    case 14400: return B0;  // not a termios rate (the firmware's page offers it)
     case 19200: return B19200;
     case 38400: return B38400;
     case 57600: return B57600;
     case 115200: return B115200;
     case 230400: return B230400;
+    case 4800: return B4800;
     case 460800: return B460800;
     case 921600: return B921600;
     default: return B0;
@@ -188,6 +190,15 @@ bool SerialPort::open(const char* device, unsigned baud) {
     }
     tcflush(fd_, TCIOFLUSH);
     return true;
+}
+
+bool SerialPort::setBaud(unsigned baud) {
+    const speed_t speed = baudConstant(baud);
+    termios t{};
+    if (fd_ < 0 || speed == B0 || tcgetattr(fd_, &t) < 0) return false;
+    cfsetispeed(&t, speed);
+    cfsetospeed(&t, speed);
+    return tcsetattr(fd_, TCSANOW, &t) == 0;
 }
 
 int SerialPort::read(uint8_t* buf, size_t cap) {

@@ -80,5 +80,22 @@ int main() {
     link.forwardRtcm(rtcm, sizeof rtcm);
     CHECK(link.counters().rtcmBytesDropped == sizeof rtcm - 3);
 
+    // Passthrough: sentences go to the app as received (VTG too), not PANDA.
+    app.out.clear();
+    link.setPassThrough(true);
+    serial.rx = "$GPVTG,054.7,T,034.4,M,005.5,N,010.2,K*48\r\n"
+                "$GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,*47\r\n";
+    link.pollReceiver();
+    CHECK(app.out.size() == 2);
+    CHECK(app.out.size() == 2 && app.out[0] == "$GPVTG,054.7,T,034.4,M,005.5,N,010.2,K*48\r\n");
+    CHECK(app.out.size() == 2 && app.out[1].rfind("$GPGGA,123519,", 0) == 0 && app.out[1].find("*47\r\n") != std::string::npos);
+    link.setPassThrough(false);
+
+    // Radio RTCM goes straight through, however it is chunked.
+    serial.tx.clear();
+    serial.writeLimit = -1;
+    link.forwardRadio(rtcm, 3);
+    CHECK(serial.tx.size() == 3 && link.counters().radioBytes == 3);
+
     return finish("gnss_link");
 }

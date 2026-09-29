@@ -11,6 +11,7 @@
 #include "pages/DragDropCANConfigPage.h"
 #include "pages/TouchFriendlyDeviceSettingsPage.h"
 #include "pages/TouchFriendlyEventLoggerPage.h"
+#include "pages/TouchFriendlyGPSConfigPage.h"
 #include "pages/TouchFriendlyHomePage.h"
 #include "pages/TouchFriendlyLogViewerPage.h"
 #include "pages/TouchFriendlyNetworkPage.h"
@@ -262,6 +263,39 @@ Response canStatus(Backend& b) {
     return Response::json(toString(doc));
 }
 
+Response um98xRead(Backend& b) {
+    Um98x::Config cfg;
+    std::string err;
+    JsonDocument doc;
+    const bool ok = b.um98xRead(cfg, err);
+    doc["success"] = ok;
+    if (ok) {
+        doc["config"] = cfg.configCommands;
+        doc["mode"] = cfg.modeSettings;
+        doc["messages"] = cfg.messageSettings;
+    } else {
+        doc["error"] = err.empty() ? "Failed to read GPS configuration" : err;
+    }
+    return Response::json(toString(doc), ok ? 200 : 500);
+}
+
+Response um98xWrite(Backend& b, const Request& r) {
+    if (r.method != "POST") return methodNotAllowed();
+    JsonDocument in;
+    if (deserializeJson(in, r.body) || !in.is<JsonObject>())
+        return Response::json(R"({"success":false,"error":"Invalid JSON"})", 400);
+    Um98x::Config cfg;
+    cfg.configCommands = in["config"] | "";
+    cfg.modeSettings = in["mode"] | "";
+    cfg.messageSettings = in["messages"] | "";
+    std::string err;
+    JsonDocument doc;
+    const bool ok = b.um98xWrite(cfg, err);
+    doc["success"] = ok;
+    if (!ok) doc["error"] = err.empty() ? "Failed to write GPS configuration" : err;
+    return Response::json(toString(doc), ok ? 200 : 500);
+}
+
 void put(std::string& out, size_t at, const void* v, size_t n) { std::memcpy(&out[at], v, n); }
 
 }  // namespace
@@ -279,6 +313,10 @@ void addRoutes(Server& server, Backend& b, const char* version) {
     page(server, "/logs", TOUCH_FRIENDLY_LOG_VIEWER_PAGE);
     page(server, "/network", TOUCH_FRIENDLY_NETWORK_PAGE);
     page(server, "/can", DRAG_DROP_CAN_CONFIG_PAGE);
+    page(server, "/um98x-config", TOUCH_FRIENDLY_GPS_CONFIG_PAGE);
+    page(server, "/gps", TOUCH_FRIENDLY_GPS_CONFIG_PAGE);
+    server.route("/api/um98x/read", [&b](const Request&) { return um98xRead(b); });
+    server.route("/api/um98x/write", [&b](const Request& r) { return um98xWrite(b, r); });
     page(server, "/can/upload", CAN_CONFIG_UPLOAD_PAGE);
     server.route("/api/can/config", [&b](const Request& r) { return canConfig(b, r); });
     server.route("/api/can/info", [&b](const Request&) { return canInfo(b); });

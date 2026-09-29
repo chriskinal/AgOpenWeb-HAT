@@ -28,6 +28,13 @@ struct FakeBackend : Backend {
     std::string customCanConfig() override { return canJson; }
     bool writeCustomCanConfig(const std::string& j, std::string&) override { canJson = j; return true; }
     bool deleteCustomCanConfig(std::string&) override { canJson.clear(); return true; }
+    Um98x::Config um;
+    bool um98xRead(Um98x::Config& c, std::string&) override { c = um; return true; }
+    bool um98xWrite(const Um98x::Config& c, std::string& e) override {
+        if (c.modeSettings.empty()) { e = "no mode"; return false; }
+        um = c;
+        return true;
+    }
     std::vector<Interface> interfaces() override {
         return {{"lo", "127.0.0.1", true, 0}, {"wlan0", "192.168.4.217", true, 0}, {"eth0", "", false, 0}};
     }
@@ -133,6 +140,16 @@ int main() {
     d = parse(request(s, port, "GET /api/can/info HTTP/1.1\r\n\r\n"));
     CHECK(d["version"] == "2.1");
     CHECK(body(post(s, port, "/api/can/config/restore", "")) == "Default configuration restored" && b.canJson.empty());
+
+    // GPS (UM98x) page and API.
+    CHECK(request(s, port, "GET /um98x-config HTTP/1.1\r\n\r\n").find("/api/um98x/read") != std::string::npos);
+    CHECK(request(s, port, "GET /gps HTTP/1.1\r\n\r\n").rfind("HTTP/1.1 200", 0) == 0);
+    d = parse(post(s, port, "/api/um98x/write", R"({"config":"CONFIG COM1 460800","mode":"MODE ROVER","messages":"GPGGA COM1 0.1"})"));
+    CHECK(d["success"] == true && b.um.modeSettings == "MODE ROVER");
+    d = parse(request(s, port, "GET /api/um98x/read HTTP/1.1\r\n\r\n"));
+    CHECK(d["success"] == true && d["config"] == "CONFIG COM1 460800" && d["messages"] == "GPGGA COM1 0.1");
+    d = parse(post(s, port, "/api/um98x/write", R"({"config":"x"})"));
+    CHECK(d["success"] == false && d["error"] == "no mode");
 
     // Telemetry packet: 32 bytes, the firmware's offsets.
     Status st;

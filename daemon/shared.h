@@ -8,6 +8,7 @@
 #include <mutex>
 #include <string>
 
+#include "aow/hal.h"
 #include "aow/pi_mutex.h"
 #include "aow/settings.h"
 #include "aow/status.h"
@@ -61,6 +62,12 @@ public:
         }
         return n;
     }
+
+    // GNSS port hand-over for the UM98x page: the web thread requests, the control thread lets
+    // go of the port (no reads, no RTCM) and confirms, the web thread talks to the receiver.
+    std::atomic<hal::SerialPort*> gnssPort{nullptr};
+    std::atomic<bool> gnssPauseRequested{false};
+    std::atomic<bool> gnssPaused{false};
 
     std::atomic<bool> stop{false};  // set by either thread to end the daemon
 

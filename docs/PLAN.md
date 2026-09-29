@@ -32,11 +32,11 @@ and rates. Line counts are the firmware's (.h + .cpp).
 |---|---|---|---|
 | `PGNProcessor`, `PGNUtils` | 350 | `core/pgn`, `core/app_link` (done) | hello, scan, 253 per 254 |
 | `GNSSProcessor`, `NAVProcessor`, `NMEAMessageBuilder`, `calc_crc32` | 2,800 | `core/nmea`, `core/gnss`, `core/nav` (done) | one GNSS UART; the u-blox GPS2/UBX path drops (the UM982 gives heading) |
-| `RTCMProcessor` | 210 | `core/gnss_link` (done) | UDP 2233 and the radio (RS-232 #1) to the GNSS UART |
+| `RTCMProcessor` | 210 | `core/gnss_link` (done) | UDP 2233 and the radio (`--radio`, RS-232 #1) to the GNSS UART |
 | `EventLogger` | 600 | `core/log` + `daemon/web_thread` (done) | same levels, sources and rate limits; console → journald, UDP syslog, ring buffer, WebSocket 8083 |
 | `ConfigManager`, `EEPROMLayout` | 1,040 | `core/settings`, `daemon/shared` (done) | `/etc/aow-hat/settings.json`, written atomically; same fields and defaults |
 | `SimpleHTTPServer`, `SimpleWebSocket`, `SimpleWebManager`, `LogWebSocket`, `TelemetryWebSocket` | 3,000 | `web/server`, `web/api` (done for Home, Device, Event logger, Logs, Network) | same routes; ports 80, 8082, 8083 so the pages work unchanged |
-| `web_pages/*` (the served set, ~168 KB) | | `web/pages/` (9 of 11: GPS and update pages left) | copied as-is; HAT changes marked in each file |
+| `web_pages/*` (the served set, ~168 KB) | | `web/pages/` (10 of 11: the update page left) | copied as-is; HAT changes marked in each file |
 | `AutosteerProcessor` | 1,650 | `core/steer` (done, including CAN valve gating and engage buttons) | 100 Hz, P controller, min/high PWM, soft start, Ackermann, engage by switch or button, valve-ready gating |
 | `KickoutMonitor` | 700 | `core/steer` (done: current, CAN, motor error) | current-sense, CAN and Keya kickouts; PGN 250 from current |
 | `ADProcessor` | 840 | `core/steer` (done) + HAT ADC driver | WAS and current as the firmware; work switch digital only; adds remote, supply and key sense |
@@ -47,7 +47,7 @@ and rates. Line counts are the firmware's (.h + .cpp).
 | `MessageBuilder` | 140 | `core/steer_pgn`, `AppLink::sendPopup` (done) | PGN 221 popups |
 | `LEDManagerFSM` | 650 | core (states) + SK6812 driver | PWR, GPS, STEER, INS on the 4 LEDs |
 | `HardwareManager` buzzer | | piezo driver | same sounds and volume setting |
-| `UM98xManager` | 645 | core + GPS page | read/write receiver CONFIG, MODE, logs |
+| `UM98xManager` | 645 | `core/um98x` + GPS page (done) | read/write receiver CONFIG, MODE, logs; the control thread lends the GNSS port |
 | `CommandHandler` | 300 | `aow-hatctl` (later) | the console keys as CLI commands over a local socket |
 | `Version` | | `core` | |
 
@@ -86,7 +86,11 @@ second GPS UART. Sections stay on an external machine module or go over CAN.
 - HPR age stays in seconds; the firmware multiplies it by 100.
 - Sentences with no checksum are dropped; the firmware parsed them unchecked.
 - GPS passthrough (raw NMEA to the app, a Device page option) is kept for AgIO users, but AgOpenWeb
-  accepts only PANDA and PAOGI, so with it on AgOpenWeb loses GPS. The page says so.
+  accepts only PANDA and PAOGI, so with it on AgOpenWeb loses GPS. The page says so. Only
+  checksum-valid sentences are passed on (the firmware passed everything).
+- UM98x setup no longer freezes steering: the firmware blocked its whole loop for the seconds it
+  talks to the receiver; here the web thread does it while the control loop runs on, with the
+  GNSS stream (and RTCM into the receiver) paused.
 - Firmware bugs not carried over: the language byte and the CAN config both live at EEPROM 900, so
   a language click wipes the CAN config (settings are separate JSON keys here; the unused language
   setting is dropped); PGN 253 bit 2 (remote) is always 0 (wired to the remote input here); the
@@ -159,7 +163,7 @@ Hardware-free work goes first, while the board is being made.
 | 3 | Foundation: event logger, settings file, web server with Home, Device, Event logger and Logs pages, telemetry (done) | no | pages work on the dev CM4 |
 | 4 | Steering in core: PGN 251/252, controller, soft start, kickouts, timeouts, PGN 250 (done; `--board sim` closes the loop on a bare CM4); then the HAT drivers | drivers only | every stop path unit-tested (done, mutation-checked); bench motor follows the app |
 | 5 | CAN: SocketCAN, JSON engine, the 9 brands, Keya CAN and serial, CAN page and upload, GVRET (done on vcan) | bench tests only | one brand verified on a machine |
-| 6 | UM98x page, radio RTCM on RS-232 #1 | receiver | receiver config read and written from the page |
+| 6 | UM98x page, radio RTCM on RS-232 #1 (done, on ptys) | receiver | receiver config read and written from the page |
 | 7 | LEDs, piezo, `aow-hatctl`, update page, packaging, the AgOpenWeb changes | yes | clean install on a fresh image, both hardware choices |
 | 8 | Latency measurement under load | yes | worst case recorded; decide if anything more is needed |
 
@@ -172,6 +176,7 @@ Hardware-free work goes first, while the board is being made.
 | 2026-09-28 | `aow-hatd` at FIFO 80, `pgn_probe.py` 2000 x PGN 254 at 100 Hz | 2000/2000 answered, round trip median 0.18 ms, worst 0.35 ms |
 | 2026-09-28 | `gnss_probe.py` (pty as the receiver) | GGA -> PANDA 20/20, HPR -> PAOGI, RTCM 2233 -> serial byte-identical |
 | 2026-09-28 | `steer_probe.py`, service with `--board sim` | armed by guidance on, motor within 100 ms, wheel at 5 deg in 0.81 s and holding; 2 s timeout logged; PGN 252 gains saved |
+| 2026-09-29 | `um98x_probe.py` (ptys as receiver and radio) | page read in 0.3 s and write ending in SAVECONFIG, PANDA resumes after each; radio RTCM reaches the receiver byte for byte |
 | 2026-09-29 | `can_probe.py` on vcan0-2, Valtra/MF legacy code | valve commands 50 Hz with intent 252; PGN 253 angle from the CAN curve; engaged: intent 253 and PWM x 128; valve not ready: popup and back to 252; GVRET streams every frame once, 20 ms apart |
 | 2026-09-28 | `install.sh --hat` on the dev CM4, `web_probe.py` on port 80 | control thread FIFO 80, web thread normal; all pages and APIs; telemetry 101 Hz; log WebSocket; settings saved atomically to `/etc/aow-hat/settings.json`; Restart button -> systemd restart; journal priorities work |
 

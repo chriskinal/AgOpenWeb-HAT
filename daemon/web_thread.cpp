@@ -22,6 +22,7 @@
 #include "api.h"
 #include "aow/gvret.h"
 #include "aow/log.h"
+#include "linux_io.h"
 #include "server.h"
 
 namespace aow {
@@ -192,6 +193,13 @@ public:
         return false;
     }
 
+    bool um98xRead(Um98x::Config& c, std::string& error) override {
+        return withReceiver(error, [&](Um98x& um) { return um.readConfiguration(c); });
+    }
+    bool um98xWrite(const Um98x::Config& c, std::string& error) override {
+        return withReceiver(error, [&](Um98x& um) { return um.writeConfiguration(c); });
+    }
+
     std::vector<Interface> interfaces() override {
         std::vector<Interface> out;
         ifaddrs* list = nullptr;
@@ -211,6 +219,30 @@ public:
     }
 
 private:
+    // Borrows the GNSS port from the control thread for one UM98x operation.
+    template <typename Fn>
+    bool withReceiver(std::string& error, Fn fn) {
+        hal::SerialPort* port = shared_.gnssPort.load();
+        if (!port) {
+            error = "No GNSS receiver configured (aow-hatd --gnss)";
+            return false;
+        }
+        shared_.gnssPauseRequested = true;
+        for (int i = 0; i < 100 && !shared_.gnssPaused; ++i) std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        if (!shared_.gnssPaused) {
+            shared_.gnssPauseRequested = false;
+            error = "The control loop did not release the GNSS port";
+            return false;
+        }
+        LOG_INFO(Gnss, "UM98x: GNSS stream paused for receiver setup");
+        linux_io::MonotonicClock clock;
+        Um98x um(*port, clock, [](uint32_t ms) { std::this_thread::sleep_for(std::chrono::milliseconds(ms)); });
+        const bool ok = fn(um);
+        shared_.gnssPauseRequested = false;
+        LOG_INFO(Gnss, "UM98x: %s; GNSS stream resumed", ok ? "done" : "failed");
+        return ok;
+    }
+
     std::string canPath() const { return file_.canConfigPath(); }
     Shared& shared_;
     const SettingsFile& file_;

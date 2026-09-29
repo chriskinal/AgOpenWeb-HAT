@@ -20,6 +20,7 @@ add_library(aow_core
   core/src/steer.cpp
   core/src/motor.cpp
   core/src/gvret.cpp
+  core/src/um98x.cpp
   core/src/can/teensy_compat.cpp
   core/src/can/CANConfigParser.cpp
   core/src/can/CANProtocolEngine.cpp
@@ -45,7 +46,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
 endif()
 
 enable_testing()
-foreach(t pgn app_link gnss gnss_link log settings steer steer_motor can gvret web_server web_api)
+foreach(t pgn app_link gnss gnss_link log settings steer steer_motor can gvret um98x web_server web_api)
   add_executable(test_${t} tests/test_${t}.cpp)
   target_link_libraries(test_${t} PRIVATE aow_web)
   add_test(NAME ${t} COMMAND test_${t})

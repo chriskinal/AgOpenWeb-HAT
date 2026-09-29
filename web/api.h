@@ -9,6 +9,7 @@
 #include "aow/log.h"
 #include "aow/settings.h"
 #include "aow/status.h"
+#include "aow/um98x.h"
 #include "server.h"
 
 namespace aow::web {
@@ -26,6 +27,10 @@ struct Backend {
     virtual std::string customCanConfig() = 0;
     virtual bool writeCustomCanConfig(const std::string& json, std::string& error) = 0;
     virtual bool deleteCustomCanConfig(std::string& error) = 0;
+
+    // UM98x receiver setup (blocks for seconds; the web thread may).
+    virtual bool um98xRead(Um98x::Config& c, std::string& error) = 0;
+    virtual bool um98xWrite(const Um98x::Config& c, std::string& error) = 0;
 
     struct Interface { std::string name, ip; bool up; int speedMbps; };
     virtual std::vector<Interface> interfaces() = 0;
