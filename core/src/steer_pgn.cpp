@@ -30,6 +30,11 @@ size_t buildFromSteer(const SteerStatus& s, uint8_t* out, size_t cap) {
     return build(SrcSteer, FromSteer, data, sizeof data, out, cap);
 }
 
+size_t buildTurnSensor(uint8_t value, uint8_t* out, size_t cap) {
+    const uint8_t data[8] = {value};
+    return build(SrcSteer, TurnSensor, data, sizeof data, out, cap);
+}
+
 size_t buildHelloReply(uint8_t src, uint8_t* out, size_t cap) {
     const uint8_t data[5] = {};
     return build(src, src, data, sizeof data, out, cap);

@@ -10,6 +10,15 @@
 
 namespace aow {
 
+// Whatever steers: gets the app's steering PGNs and says what PGN 253 reports.
+struct SteerModule {
+    virtual ~SteerModule() = default;
+    virtual void onSteerData(const pgn::SteerCommand& c) = 0;
+    virtual void onSteerConfig(const uint8_t* data, size_t len) = 0;    // PGN 251
+    virtual void onSteerSettings(const uint8_t* data, size_t len) = 0;  // PGN 252
+    virtual pgn::SteerStatus steerStatus() = 0;
+};
+
 class AppLink {
 public:
     AppLink(hal::UdpLink& udp, hal::Clock& clock, const uint8_t moduleIp[4]);
@@ -17,8 +26,12 @@ public:
     // Drains every datagram waiting on the link and answers it. Call on each wakeup.
     void poll();
 
-    // What the next PGN 253 reports. The steering code keeps this current.
+    // Steering PGNs go to the module; without one, PGN 253 reports setStatus()'s value.
+    void setSteerModule(SteerModule* m) { steer_ = m; }
     void setStatus(const pgn::SteerStatus& s) { status_ = s; }
+
+    // PGN 250, sent by the caller at 10 Hz.
+    void sendTurnSensor(uint8_t value);
 
     bool haveCommand() const { return haveCommand_; }
     const pgn::SteerCommand& command() const { return command_; }
@@ -40,6 +53,7 @@ private:
     hal::UdpLink& udp_;
     hal::Clock& clock_;
     uint8_t ip_[4];
+    SteerModule* steer_ = nullptr;
     pgn::SteerStatus status_;
     pgn::SteerCommand command_;
     bool haveCommand_ = false;

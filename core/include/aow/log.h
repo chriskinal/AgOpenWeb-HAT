@@ -11,6 +11,8 @@
 #include <functional>
 #include <mutex>
 
+#include "aow/pi_mutex.h"
+
 namespace aow::log {
 
 enum class Severity : uint8_t { Emergency, Alert, Critical, Error, Warning, Notice, Info, Debug };
@@ -79,7 +81,7 @@ private:
     bool allow(Severity sev, uint32_t now);  // token bucket; caller holds mu_
 
     ClockMs clock_;
-    mutable std::mutex mu_;
+    mutable PiMutex mu_;  // shared with the real-time control thread
     Config config_;
     bool startup_ = true;
     uint32_t events_ = 0, rateDropped_ = 0, pendingDropped_ = 0;

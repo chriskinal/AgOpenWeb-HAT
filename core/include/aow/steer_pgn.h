@@ -34,6 +34,9 @@ struct SteerStatus {
 // Each writes a complete frame into out and returns its length, or 0 if out is too small.
 size_t buildFromSteer(const SteerStatus& s, uint8_t* out, size_t cap);
 
+// PGN 250, 10 Hz: turn sensor reading (the firmware sends motor current, 0..255).
+size_t buildTurnSensor(uint8_t value, uint8_t* out, size_t cap);
+
 // Hello reply: PGN = src (126 steer, 120 GPS, 121 IMU), five zero data bytes.
 size_t buildHelloReply(uint8_t src, uint8_t* out, size_t cap);
 

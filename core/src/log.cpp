@@ -78,7 +78,7 @@ void Logger::log(Severity sev, Source src, const char* fmt, ...) {
     va_end(ap);
 
     const uint32_t now = clock_();
-    std::lock_guard<std::mutex> lock(mu_);
+    std::lock_guard<PiMutex> lock(mu_);
     if (!allow(sev, now)) {
         ++rateDropped_;
         return;
@@ -107,7 +107,7 @@ size_t Logger::drain(const Outputs& out) {
         Config cfg;
         bool startup;
         {
-            std::lock_guard<std::mutex> lock(mu_);
+            std::lock_guard<PiMutex> lock(mu_);
             while (n < 32 && pendingCount_) {
                 batch[n++] = pending_[pendingHead_];
                 pendingHead_ = (pendingHead_ + 1) % kPending;
@@ -130,7 +130,7 @@ size_t Logger::drain(const Outputs& out) {
 void Logger::setStartupDone() {
     Severity level;
     {
-        std::lock_guard<std::mutex> lock(mu_);
+        std::lock_guard<PiMutex> lock(mu_);
         if (!startup_) return;
         startup_ = false;
         level = config_.consoleLevel;
@@ -140,42 +140,42 @@ void Logger::setStartupDone() {
 }
 
 bool Logger::startup() const {
-    std::lock_guard<std::mutex> lock(mu_);
+    std::lock_guard<PiMutex> lock(mu_);
     return startup_;
 }
 
 Config Logger::config() const {
-    std::lock_guard<std::mutex> lock(mu_);
+    std::lock_guard<PiMutex> lock(mu_);
     return config_;
 }
 
 void Logger::setConfig(const Config& c) {
-    std::lock_guard<std::mutex> lock(mu_);
+    std::lock_guard<PiMutex> lock(mu_);
     config_ = c;
 }
 
 uint32_t Logger::eventCount() const {
-    std::lock_guard<std::mutex> lock(mu_);
+    std::lock_guard<PiMutex> lock(mu_);
     return events_;
 }
 
 void Logger::resetEventCount() {
-    std::lock_guard<std::mutex> lock(mu_);
+    std::lock_guard<PiMutex> lock(mu_);
     events_ = 0;
 }
 
 uint32_t Logger::droppedByRateLimit() const {
-    std::lock_guard<std::mutex> lock(mu_);
+    std::lock_guard<PiMutex> lock(mu_);
     return rateDropped_;
 }
 
 uint32_t Logger::droppedPending() const {
-    std::lock_guard<std::mutex> lock(mu_);
+    std::lock_guard<PiMutex> lock(mu_);
     return pendingDropped_;
 }
 
 size_t Logger::history(Entry* out, size_t cap) const {
-    std::lock_guard<std::mutex> lock(mu_);
+    std::lock_guard<PiMutex> lock(mu_);
     const size_t n = std::min(cap, historyCount_);
     const size_t first = (historyHead_ + kHistory - historyCount_) % kHistory;
     const size_t skip = historyCount_ - n;  // keep the newest n

@@ -48,11 +48,23 @@ void AppLink::handle(const uint8_t* buf, int len) {
         haveCommand_ = true;
         commandAtUs_ = clock_.nowUs();
         ++counters_.commands;
-        send(out, pgn::buildFromSteer(status_, out, sizeof out));
+        if (steer_) steer_->onSteerData(command_);
+        send(out, pgn::buildFromSteer(steer_ ? steer_->steerStatus() : status_, out, sizeof out));
+        break;
+    case pgn::SteerConfig:
+        if (steer_) steer_->onSteerConfig(f.data, f.len);
+        break;
+    case pgn::SteerSettings:
+        if (steer_) steer_->onSteerSettings(f.data, f.len);
         break;
     default:
-        break;  // 239, 251, 252 and the rest: handled as their phases land
+        break;  // 239 and the rest: machine PGNs, no outputs on the HAT
     }
+}
+
+void AppLink::sendTurnSensor(uint8_t value) {
+    uint8_t out[16];
+    send(out, pgn::buildTurnSensor(value, out, sizeof out));
 }
 
 void AppLink::send(const uint8_t* frame, size_t len) {

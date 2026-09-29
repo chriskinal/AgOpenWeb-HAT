@@ -46,7 +46,9 @@ def main():
     app.bind(("0.0.0.0", 9999))
     app.settimeout(0.5)
 
-    proc = subprocess.Popen([daemon, "--gnss", slave_name, "--gnss-baud", "460800"])
+    config = "/tmp/gnss_probe_settings.json"
+    proc = subprocess.Popen([daemon, "--gnss", slave_name, "--gnss-baud", "460800", "--web-port", "0",
+                             "--config", config])
     time.sleep(0.3)
     ok = True
 
@@ -62,7 +64,9 @@ def main():
             try:
                 while True:
                     app.settimeout(0.05)
-                    got.append(app.recv(512).decode())
+                    b = app.recv(512)
+                    if b.startswith(b"$"):  # NMEA only; PGN 250 etc. are binary
+                        got.append(b.decode())
             except socket.timeout:
                 pass
             time.sleep(max(0.0, 1 / rate - (time.time() - t)))

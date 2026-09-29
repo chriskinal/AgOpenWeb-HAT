@@ -40,6 +40,16 @@ static Bytes frame(uint8_t src, uint8_t pgnId, const Bytes& data) {
 
 static bool parsed(const Bytes& b, pgn::Frame& f) { return pgn::parse(b.data(), b.size(), f); }
 
+struct FakeSteer : SteerModule {
+    int data = 0, config = 0, settings = 0;
+    size_t lastLen = 0;
+    pgn::SteerStatus st;
+    void onSteerData(const pgn::SteerCommand&) override { ++data; }
+    void onSteerConfig(const uint8_t*, size_t n) override { ++config; lastLen = n; }
+    void onSteerSettings(const uint8_t*, size_t n) override { ++settings; lastLen = n; }
+    pgn::SteerStatus steerStatus() override { return st; }
+};
+
 int main() {
     const uint8_t ip[4] = {127, 0, 0, 1};
     FakeUdp udp;
@@ -115,6 +125,29 @@ int main() {
     CHECK(link.usSinceCommand() == 250'000);  // none of them counted as fresh steer data
     CHECK(link.counters().rejected == 3);
     CHECK(link.counters().commands == 2);
+
+    // With a steer module: 251/252/254 go to it, and PGN 253 reports its status.
+    {
+        FakeSteer steer;
+        steer.st.steerArmed = true;
+        steer.st.pwmDisplay = 77;
+        link.setSteerModule(&steer);
+        udp.out.clear();
+        udp.in.push_back(frame(pgn::kSrcHost, pgn::SteerConfig, {1, 2, 3, 4, 5, 6, 7, 8}));
+        udp.in.push_back(frame(pgn::kSrcHost, pgn::SteerSettings, {1, 2, 3, 4, 5, 6, 7, 8}));
+        udp.in.push_back(frame(pgn::kSrcHost, pgn::SteerData, d254));
+        link.poll();
+        CHECK(steer.config == 1 && steer.settings == 1 && steer.data == 1 && steer.lastLen == 8);
+        CHECK(udp.out.size() == 1 && parsed(udp.out[0], f) && f.pgn == pgn::FromSteer);
+        CHECK(f.data[6] == 0x01 && f.data[7] == 77);  // armed (bit 1 clear), work off (bit 0 set)
+        link.setSteerModule(nullptr);
+    }
+
+    // PGN 250.
+    udp.out.clear();
+    link.sendTurnSensor(123);
+    CHECK(udp.out.size() == 1 && parsed(udp.out[0], f) && f.src == pgn::SrcSteer && f.pgn == pgn::TurnSensor);
+    CHECK(f.len == 8 && f.data[0] == 123 && f.data[1] == 0);
 
     return finish("app_link");
 }

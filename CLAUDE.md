@@ -48,7 +48,8 @@ The Teensy firmware is not being rewritten and nothing is ported back to it.
   `gnss_link`): receiver sentences in, PANDA/PAOGI out, RTCM through; runs today with
   `--gnss /dev/ttyUSB0`. Event logger, JSON settings file and the firmware's web pages
   (Home, Device, Event logger, Logs, Network) on port 80 with WebSockets 8082/8083, served by a
-  normal-priority web thread. Nothing drives steering hardware yet.
+  normal-priority web thread. Steering logic in `core/steer` (arming, kickouts, timeouts, soft
+  start, P controller, PGN 250/251/252), closed-loop on `--board sim`; no HAT drivers yet.
 - **Scope:** port every v26 firmware function the HAT hardware supports, web UI included
   (docs/PLAN.md section 2).
 - **Dev CM4:** `chris@192.168.4.217`, passwordless sudo, Trixie Lite with the packaged
@@ -93,6 +94,7 @@ docker run --rm -v "$PWD":/src:ro debian:trixie bash -c 'apt-get update -qq && a
 scan, then PGN 254 at a set rate, checking every reply and timing the 253.
 `tests/gnss_probe.py build/aow-hatd` does the same for GNSS, with a pty as the receiver.
 `tests/web_probe.py --port 80` checks every page, API and WebSocket of a running daemon.
+`tests/steer_probe.py` closes the steering loop against `--board sim`.
 
 ## Hardware audit scripts
 
@@ -129,6 +131,10 @@ on D2/D5/D15-D17/TV1/TV2 `.A`/`.K` and "J8 not in schematic" are pin-naming only
 - **Web pages come from the firmware.** Copy from `web_pages/`, keep the firmware's API field names,
   and note HAT changes in the header comment of each page.
 - **The control thread never does I/O for logging**: `log()` queues, the web thread writes out.
+  Settings changed by the app are saved by the web thread too (`Shared::requestSave`).
+- **Locks shared with the control thread are `PiMutex`** (priority inheritance), never `std::mutex`.
+- **Every steering stop path has a test in `tests/test_steer.cpp`.** After changing `core/steer`,
+  break the path on purpose once and check a test fails.
 - **Core stays free of Linux and hardware headers.** Anything hardware-bound goes behind an
   interface in `hal/`, with the implementation in `boards/hat/`.
 - **`STEER_EN` low is the safe state.** Enable, not PWM, is the gate: hardware PWM keeps running if

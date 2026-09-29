@@ -157,6 +157,11 @@ void WebThread::run() {
     auto nextTelemetry = Clock::now();
     while (!shared_.stop.load()) {
         server.poll(5);
+        if (shared_.takeSaveRequest()) {
+            std::string err;
+            if (opt_.settingsFile.save(shared_.settings(), err)) LOG_INFO(Config, "Settings from the app saved");
+            else LOG_ERROR(Config, "Settings not saved: %s", err.c_str());
+        }
         log::global().drain(outputs);
         if (Clock::now() >= nextTelemetry) {
             nextTelemetry += kTelemetryPeriod;

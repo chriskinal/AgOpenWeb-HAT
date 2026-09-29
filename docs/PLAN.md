@@ -37,9 +37,9 @@ and rates. Line counts are the firmware's (.h + .cpp).
 | `ConfigManager`, `EEPROMLayout` | 1,040 | `core/settings`, `daemon/shared` (done) | `/etc/aow-hat/settings.json`, written atomically; same fields and defaults |
 | `SimpleHTTPServer`, `SimpleWebSocket`, `SimpleWebManager`, `LogWebSocket`, `TelemetryWebSocket` | 3,000 | `web/server`, `web/api` (done for Home, Device, Event logger, Logs, Network) | same routes; ports 80, 8082, 8083 so the pages work unchanged |
 | `web_pages/*` (the served set, ~168 KB) | | `web/pages/` (6 of 11 so far) | copied as-is; HAT changes marked in each file |
-| `AutosteerProcessor` | 1,650 | core | 100 Hz, P controller, min/high PWM, soft start, Ackermann, engage by switch or button, valve-ready gating |
-| `KickoutMonitor` | 700 | core | current-sense, CAN and Keya kickouts; PGN 250 from current |
-| `ADProcessor` | 840 | core (scaling) + HAT ADC | WAS and current as the firmware; work switch digital only; adds remote, supply and key sense |
+| `AutosteerProcessor` | 1,650 | `core/steer` (done, except CAN valve gating: phase 5) | 100 Hz, P controller, min/high PWM, soft start, Ackermann, engage by switch or button, valve-ready gating |
+| `KickoutMonitor` | 700 | `core/steer` (current done; CAN and Keya: phase 5) | current-sense, CAN and Keya kickouts; PGN 250 from current |
+| `ADProcessor` | 840 | `core/steer` (done) + HAT ADC driver | WAS and current as the firmware; work switch digital only; adds remote, supply and key sense |
 | `PWMMotorDriver` | 340 | HAT driver | rewritten for PWM + DIR + EN; brake mode only where the driver supports it |
 | `MotorDriverManager`, `KeyaSerialDriver` | 590 | core + RS-232 #2 | Keya over serial, `E2` probe |
 | `TractorCANDriver`, `CANProtocolEngine`, `CANConfigParser` | 2,460 | core + SocketCAN | all 9 brands, JSON brand files, Keya CAN, CAN wheel angle, CAN engage buttons, CAN kickout |
@@ -91,6 +91,14 @@ second GPS UART. Sections stay on an external machine module or go over CAN.
   a language click wipes the CAN config (settings are separate JSON keys here; the unused language
   setting is dropped); PGN 253 bit 2 (remote) is always 0 (wired to the remote input here); the
   steer hello carries a fixed crc (computed here).
+- Steering: guidance on/off edges are kept until the next control tick (the firmware kept one
+  flag per PGN 254, so at 100 Hz a second frame in the same tick erased a toggle); the soft-start
+  reversal check compares values before motor direction is applied (the firmware compared the
+  inverted output, which misfires with the motor reversed); `Kp x error` is clamped before its
+  int16 cast; the work switch honours Invert Work Switch (the firmware only did for the analog
+  switch); the Ethernet-link check drops (loopback). Kept as in the firmware: the 2 s steer
+  timeout, the 2 s kickout cooldown, the 300 ms guidance-off disarm, arming by guidance-on even in
+  switch mode, and a kickout that clears itself on the next cycle once the motor is stopped.
 - Firmware dead code not carried over: `CANFilterHelper` (SocketCAN filters instead, if needed),
   `KeyaCANDriver` (Keya runs through the tractor CAN driver, as in the firmware),
   `WheelAngleFusion` (can never initialise as shipped), the CAN `work[]` rules (never parsed).
@@ -144,7 +152,7 @@ Hardware-free work goes first, while the board is being made.
 | 1 | OS bring-up: RT kernel (done), overlays, `can0`-`can2`, UARTs, ADC, PWM, watchdog, key-off monitor | yes | each device answers from the shell |
 | 2 | GNSS: receiver in, PANDA/PAOGI out, RTCM through (done, except the HAT UART) | UART only | AgOpenWeb shows an RTK fix from the HAT |
 | 3 | Foundation: event logger, settings file, web server with Home, Device, Event logger and Logs pages, telemetry (done) | no | pages work on the dev CM4 |
-| 4 | Steering in core: PGN 251/252, controller, soft start, kickouts, timeouts, PGN 250/221, LED states; then the HAT drivers | drivers only | every stop path unit-tested; bench motor follows the app |
+| 4 | Steering in core: PGN 251/252, controller, soft start, kickouts, timeouts, PGN 250 (done; `--board sim` closes the loop on a bare CM4); then the HAT drivers | drivers only | every stop path unit-tested (done, mutation-checked); bench motor follows the app |
 | 5 | CAN: SocketCAN, JSON engine, the 9 brands, Keya CAN and serial, CAN page and upload, GVRET | bench tests only | one brand verified on a machine |
 | 6 | UM98x page, radio RTCM on RS-232 #1 | receiver | receiver config read and written from the page |
 | 7 | LEDs, piezo, `aow-hatctl`, update page, packaging, the AgOpenWeb changes | yes | clean install on a fresh image, both hardware choices |
@@ -158,13 +166,18 @@ Hardware-free work goes first, while the board is being made.
 | 2026-09-28 | `cyclictest -m -S -p90 -i1000 -D60`, idle | max 42 µs, avg 9-10 µs |
 | 2026-09-28 | `aow-hatd` at FIFO 80, `pgn_probe.py` 2000 x PGN 254 at 100 Hz | 2000/2000 answered, round trip median 0.18 ms, worst 0.35 ms |
 | 2026-09-28 | `gnss_probe.py` (pty as the receiver) | GGA -> PANDA 20/20, HPR -> PAOGI, RTCM 2233 -> serial byte-identical |
+| 2026-09-28 | `steer_probe.py`, service with `--board sim` | armed by guidance on, motor within 100 ms, wheel at 5 deg in 0.81 s and holding; 2 s timeout logged; PGN 252 gains saved |
 | 2026-09-28 | `install.sh --hat` on the dev CM4, `web_probe.py` on port 80 | control thread FIFO 80, web thread normal; all pages and APIs; telemetry 101 Hz; log WebSocket; settings saved atomically to `/etc/aow-hat/settings.json`; Restart button -> systemd restart; journal priorities work |
 
 ## 7. Open items
 
-- Priority inheritance on the mutexes the control thread shares with the web thread (`Shared`,
-  the logger). Both hold them only to copy, but a real-time thread should not wait on a normal
-  one. Switch to `PTHREAD_PRIO_INHERIT` before steering drives a motor.
+- Current sense scale. `kCurrentCountsPerVolt` in `core/steer.h` maps HAT volts to the
+  firmware's Teensy counts so the app's current threshold keeps its meaning; set it from the
+  motor driver's current output when one is on the bench.
+- The steer timeout stays at the firmware's 2 s. AgOpenWeb sends PGN 254 at 100 Hz, so a
+  shorter value is possible, but the app has known UI stalls of 1-3 s (its own comments); decide
+  with the bench motor, which would stop mid-turn on every stall.
+
 - The web thread's Home page links to CAN, GPS and System Update, which return 404 until
   phases 5-7 add them.
 

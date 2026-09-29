@@ -19,6 +19,8 @@
 #include "aow/app_link.h"
 #include "aow/gnss_link.h"
 #include "aow/log.h"
+#include "aow/steer.h"
+#include "board.h"
 #include "linux_io.h"
 #include "shared.h"
 #include "web_thread.h"
@@ -38,6 +40,7 @@ struct Options {
     uint16_t rtcmPort = 2233;
     const char* config = "/etc/aow-hat/settings.json";
     uint16_t webPort = 80;
+    const char* board = "sim";
     bool verbose = false;
 };
 
@@ -52,6 +55,8 @@ void usage() {
         "  --rtcm-port N     RTCM corrections from the app (default 2233)\n"
         "  --config FILE     settings (default /etc/aow-hat/settings.json)\n"
         "  --web-port N      web pages (default 80; 0 = none). WebSockets stay on 8082/8083\n"
+        "  --board NAME      sim (default until the HAT drivers exist): no hardware, the\n"
+        "                    wheel angle follows the motor command\n"
         "  -v, --verbose     status summary every 5 s instead of every 60 s\n"
         "  --version");
 }
@@ -68,6 +73,7 @@ bool parseArgs(int argc, char** argv, Options& o) {
         else if (!std::strcmp(a, "--rtcm-port") && hasValue) o.rtcmPort = static_cast<uint16_t>(std::atoi(argv[++i]));
         else if (!std::strcmp(a, "--config") && hasValue) o.config = argv[++i];
         else if (!std::strcmp(a, "--web-port") && hasValue) o.webPort = static_cast<uint16_t>(std::atoi(argv[++i]));
+        else if (!std::strcmp(a, "--board") && hasValue) o.board = argv[++i];
         else if (!std::strcmp(a, "-v") || !std::strcmp(a, "--verbose")) o.verbose = true;
         else if (!std::strcmp(a, "--version")) { std::printf("aow-hatd %s\n", kVersion); std::exit(0); }
         else { usage(); return false; }
@@ -99,7 +105,30 @@ int openTickTimer() {
     return fd;
 }
 
-void logSummary(const aow::AppLink& app, const aow::GnssLink* gnss) {
+// Hands the app's steering PGNs to the autosteer, and settings it changes to the web thread
+// to save: the control thread does no file I/O.
+class SteerAdapter : public aow::SteerModule {
+public:
+    SteerAdapter(aow::steer::Autosteer& a, aow::Shared& shared) : a_(a), shared_(shared) {}
+    void onSteerData(const aow::pgn::SteerCommand& c) override { a_.onSteerData(c); }
+    void onSteerConfig(const uint8_t* d, size_t n) override { if (a_.onSteerConfig(d, n)) publish(); }
+    void onSteerSettings(const uint8_t* d, size_t n) override { if (a_.onSteerSettings(d, n)) publish(); }
+    aow::pgn::SteerStatus steerStatus() override { return a_.status(); }
+
+private:
+    void publish() {
+        shared_.setSettings(a_.settings());
+        shared_.requestSave();
+    }
+    aow::steer::Autosteer& a_;
+    aow::Shared& shared_;
+};
+
+void logSummary(const aow::AppLink& app, const aow::GnssLink* gnss, const aow::steer::Autosteer& a) {
+    LOG_INFO(Autosteer, "Steer: %s, guidance %s, motor %s, WAS %.1f, target %.1f, speed %.1f", a.armed() ? "armed" : "disarmed",
+             a.guidanceActive() ? "on" : "off", a.motorState() == aow::steer::MotorState::Disabled ? "off" : "on",
+             static_cast<double>(a.actualAngleDeg()), static_cast<double>(a.targetAngleDeg()),
+             static_cast<double>(a.speedKmh()));
     const auto& c = app.counters();
     const uint64_t age = app.usSinceCommand();
     if (age == UINT64_MAX)
@@ -168,6 +197,19 @@ int main(int argc, char** argv) {
     aow::AppLink app(udp, clock, moduleIp);
     aow::GnssLink gnss(gnssPort, udp, clock);
 
+    if (std::strcmp(opt.board, "sim") != 0) {
+        LOG_ERROR(System, "Unknown board '%s' (only 'sim' exists until the HAT drivers are written)", opt.board);
+        return fail(2);
+    }
+    aow::SimBoard simBoard;
+    aow::Board& board = simBoard;
+    aow::steer::Autosteer autosteer(clock, shared.settings());
+    unsigned settingsSeen = shared.settingsVersion();
+    SteerAdapter steerAdapter(autosteer, shared);
+    app.setSteerModule(&steerAdapter);
+    board.drive({});  // motor off until the controller says otherwise
+    LOG_INFO(Autosteer, "Board: %s", board.name());
+
     LOG_INFO(Network, "Listening on :%u, replying to %s:%u", opt.listenPort, opt.appHost, opt.appPort);
     if (opt.gnssDevice) LOG_INFO(Gnss, "GNSS on %s at %u baud, RTCM on :%u", opt.gnssDevice, opt.gnssBaud, opt.rtcmPort);
     aow::log::global().setStartupDone();
@@ -178,7 +220,7 @@ int main(int argc, char** argv) {
                     {gnssPort.fd(), POLLIN, 0}, {rtcm.fd(), POLLIN, 0}};
     const uint64_t startUs = clock.nowUs();
     const uint64_t summaryTicks = opt.verbose ? 500 : 6000;
-    uint64_t ticks = 0, nextSummary = summaryTicks;
+    uint64_t ticks = 0, nextSummary = summaryTicks, nextTurnSensor = 0;
     int code = 0;
     for (;;) {
         if (poll(fds, 5, -1) < 0) {
@@ -208,30 +250,43 @@ int main(int argc, char** argv) {
         if (fds[kTick].revents) {
             uint64_t expirations = 0;
             if (read(tickFd, &expirations, sizeof expirations) == sizeof expirations) ticks += expirations;
-            // Control loop goes here (phase 4).
+            // Settings changed on the web page: the controller picks them up here.
+            if (shared.settingsVersion() != settingsSeen) {
+                settingsSeen = shared.settingsVersion();
+                autosteer.setSettings(shared.settings());
+            }
+            const aow::Settings& settings = autosteer.settings();
+            board.drive(autosteer.tick(board.read(settings)));
+            if (ticks >= nextTurnSensor) {  // PGN 250, 10 Hz
+                nextTurnSensor = ticks + 10;
+                app.sendTurnSensor(autosteer.turnSensorReading());
+            }
 
             aow::Status st;
             st.uptimeMs = (clock.nowUs() - startUs) / 1000;
             st.haveAppLink = app.usSinceCommand() < kAppLinkTimeoutUs;
-            if (app.haveCommand()) {
-                st.targetAngle = app.command().targetAngleDeg;
-                st.speedKph = app.command().speedKmh;
-            }
+            st.wasAngle = autosteer.wasAngleDeg();
+            st.targetAngle = autosteer.targetAngleDeg();
+            st.currentAmps = autosteer.currentCounts() / 1000.0f;  // as the firmware's telemetry
+            st.autosteerActive = autosteer.motorState() != aow::steer::MotorState::Disabled;
+            st.steerSwitch = autosteer.steerSwitch();
+            st.workSwitch = autosteer.workSwitch();
             const auto& g = gnss.state();
+            st.speedKph = g.speedKnots * 1.852f;  // telemetry speed and heading come from GNSS
+            st.heading = g.headingTrue;
             st.fixQuality = g.fixQuality;
             st.satellites = g.numSatellites;
-            st.heading = g.hasDualHeading ? g.dualHeading : g.headingTrue;
             st.navSent = gnss.counters().navSent;
             shared.setStatus(st);
 
             if (ticks >= nextSummary) {
                 nextSummary = ticks + summaryTicks;
-                logSummary(app, opt.gnssDevice ? &gnss : nullptr);
+                logSummary(app, opt.gnssDevice ? &gnss : nullptr, autosteer);
             }
         }
     }
 
-    // Steering off would go here; the service unit's ExecStopPost is the backstop.
+    board.drive({});  // motor off; the service unit's ExecStopPost is the backstop
     close(tickFd);
     close(sigFd);
     return fail(code);

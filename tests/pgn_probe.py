@@ -72,7 +72,7 @@ def main():
     ok = True
 
     s.sendto(HELLO, dest)
-    got = sorted((r[2], r[3]) for r in receive(s, 0.5) if check_frame(r))
+    got = sorted((r[2], r[3]) for r in receive(s, 0.5) if check_frame(r) and r[2] == r[3])  # hello replies only
     print("hello  ->", got)
     ok &= got == [(120, 120), (126, 126)]
 
