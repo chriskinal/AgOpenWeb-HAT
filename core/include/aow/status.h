@@ -24,6 +24,9 @@ struct Status {
     uint8_t fixQuality = 0;
     uint8_t satellites = 0;
     uint32_t navSent = 0;
+
+    // The four status LEDs (indicators::Color as numbers: 0 off, 1 red, 2 amber, 3 green, 4 blue).
+    uint8_t leds[4] = {};
 };
 
 }  // namespace aow

@@ -74,6 +74,9 @@ Response status(Backend& b, const char* version) {
     gnss["fixQuality"] = st.fixQuality;
     gnss["satellites"] = st.satellites;
     doc["appConnected"] = st.haveAppLink;
+    static const char* const kColors[] = {"off", "red", "amber", "green", "blue"};
+    JsonArray leds = doc["leds"].to<JsonArray>();
+    for (uint8_t c : st.leds) leds.add(kColors[c < 5 ? c : 0]);
     return Response::json(toString(doc));
 }
 

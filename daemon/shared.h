@@ -69,6 +69,9 @@ public:
     std::atomic<bool> gnssPauseRequested{false};
     std::atomic<bool> gnssPaused{false};
 
+    // A non-loopback interface is up (for the PWR LED); the web thread checks every second.
+    std::atomic<bool> networkUp{false};
+
     std::atomic<bool> stop{false};  // set by either thread to end the daemon
 
 private:

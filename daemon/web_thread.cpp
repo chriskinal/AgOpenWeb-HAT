@@ -281,9 +281,16 @@ void WebThread::run() {
 
     constexpr auto kTelemetryPeriod = std::chrono::milliseconds(10);  // 100 Hz, as the firmware
     auto nextTelemetry = Clock::now();
+    auto nextNetworkCheck = Clock::now();
     while (!shared_.stop.load()) {
         server.poll(5);
         gvretServer.poll();
+        if (Clock::now() >= nextNetworkCheck) {
+            nextNetworkCheck = Clock::now() + std::chrono::seconds(1);
+            bool up = false;
+            for (const auto& i : backend.interfaces()) up = up || (i.up && !i.ip.empty());
+            shared_.networkUp = up;
+        }
         if (shared_.takeSaveRequest()) {
             std::string err;
             if (opt_.settingsFile.save(shared_.settings(), err)) LOG_INFO(Config, "Settings from the app saved");

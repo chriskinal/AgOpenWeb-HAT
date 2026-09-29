@@ -132,6 +132,7 @@ void Autosteer::updateArming(uint64_t now) {
         std::string label = "button";
         const bool canPress = motor_ptr_ && motor_ptr_->takeEngageEvent(label);
         if ((pressed && !lastButtonPressed_) || canPress) {
+            ++buttonPresses_;
             if (canNotReady()) {
                 popup(motor_ptr_->notReadyMessage());
             } else {

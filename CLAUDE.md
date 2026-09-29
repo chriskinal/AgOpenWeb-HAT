@@ -52,7 +52,8 @@ The Teensy firmware is not being rewritten and nothing is ported back to it.
   start, P controller, PGN 250/251/252), closed-loop on `--board sim`; no HAT drivers yet.
   Tractor CAN (all 9 brands, JSON engine, Keya CAN), Keya serial, CAN page and upload, GVRET on
   TCP 23: done and tested on vcan. The firmware's CAN files live in `core/src/can` near-verbatim.
-  UM98x (GPS) page, radio RTCM (`--radio`) and GPS passthrough: done.
+  UM98x (GPS) page, radio RTCM (`--radio`) and GPS passthrough: done. LED and buzzer logic
+  (`core/indicators`; `/api/status` shows the LED colours), `aow-hatctl`: done.
 - **Scope:** port every v26 firmware function the HAT hardware supports, web UI included
   (docs/PLAN.md section 2).
 - **Dev CM4:** `chris@192.168.4.217`, passwordless sudo, Trixie Lite with the packaged

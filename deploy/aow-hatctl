@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+# aow-hatctl: the firmware's serial console (CommandHandler), as commands against the running
+# daemon's local API. Needs curl and python3.
+#
+#   aow-hatctl status              module, network, GNSS, LEDs
+#   aow-hatctl logs [N]            the last N log lines (default 30); live: journalctl -u aow-hatd -f
+#   aow-hatctl log-level [LEVEL]   show, or set the journal level (0 EMERG .. 6 INFO .. 7 DEBUG)
+#   aow-hatctl rate-limit on|off   the logger's per-level rate limit
+#   aow-hatctl buzzer quiet|loud|off
+#   aow-hatctl can                 CAN brand and bus setup
+#   aow-hatctl gps                 read the receiver's setup (pauses GNSS for a few seconds)
+#   aow-hatctl restart             restart the daemon
+set -euo pipefail
+
+HOST="${AOW_HAT_URL:-http://127.0.0.1}"
+
+get() { curl -sS --max-time 30 "$HOST$1"; }  # no -f: the API explains errors in its body
+post() { curl -sS --max-time 30 -X POST -H 'Content-Type: application/json' -d "$2" "$HOST$1"; }
+pretty() { python3 -m json.tool; }
+
+cmd="${1:-status}"
+shift || true
+case "$cmd" in
+  status)
+    get /api/status | python3 -c '
+import json, sys
+s = json.load(sys.stdin)
+print("aow-hatd %s, up %.0f s" % (s["version"], s["uptime"] / 1000))
+print("app connected: %s" % s.get("appConnected"))
+print("network: " + ", ".join("%s %s%s" % (i["name"], i["ip"], "" if i["up"] else " (down)") for i in s["network"]["interfaces"]))
+print("GNSS: fix %s, %s satellites" % (s["gnss"]["fixQuality"], s["gnss"]["satellites"]))
+print("LEDs: PWR %s, GPS %s, STEER %s, INS %s" % tuple(s.get("leds", ["?"] * 4)))'
+    ;;
+  logs)
+    get /api/logs/data | python3 -c '
+import json, sys
+n = int(sys.argv[1])
+for e in json.load(sys.stdin)["logs"][-n:]:
+    t = e["timestamp"]
+    print("[%02d:%02d:%02d.%03d] %s/%s: %s" % (t // 3600000 % 24, t // 60000 % 60, t // 1000 % 60, t % 1000,
+                                            e["severityName"], e["sourceName"], e["message"]))' "${1:-30}"
+    ;;
+  log-level)
+    if [ $# -eq 0 ]; then get /api/eventlogger/config | pretty
+    else post /api/eventlogger/config "{\"serialLevel\": $1}"; echo; fi
+    ;;
+  rate-limit)
+    case "${1:-}" in
+      on) post /api/eventlogger/config '{"rateLimitDisabled": false}' ;;
+      off) post /api/eventlogger/config '{"rateLimitDisabled": true}' ;;
+      *) echo "rate-limit on|off" >&2; exit 2 ;;
+    esac; echo
+    ;;
+  buzzer)
+    case "${1:-}" in
+      quiet) v=0 ;; loud) v=1 ;; off) v=2 ;;
+      *) echo "buzzer quiet|loud|off" >&2; exit 2 ;;
+    esac
+    post /api/device/settings "{\"buzzerVolume\": $v}"; echo
+    ;;
+  can) get /api/can/config | pretty ;;
+  gps) get /api/um98x/read | pretty ;;
+  restart) post /api/restart ''; echo ;;
+  -h|--help|help) sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//' ;;
+  *) echo "unknown command: $cmd (aow-hatctl help)" >&2; exit 2 ;;
+esac

@@ -39,6 +39,8 @@ public:
     const pgn::SteerCommand& command() const { return command_; }
     // Microseconds since the last valid PGN 254; UINT64_MAX if none has arrived.
     uint64_t usSinceCommand() const;
+    // Microseconds since any valid frame from the app; UINT64_MAX if none.
+    uint64_t usSinceAnyFrame() const { return anyFrame_ ? clock_.nowUs() - anyFrameAtUs_ : UINT64_MAX; }
 
     struct Counters {
         uint32_t received = 0;   // valid frames from the app
@@ -60,6 +62,8 @@ private:
     pgn::SteerCommand command_;
     bool haveCommand_ = false;
     uint64_t commandAtUs_ = 0;
+    bool anyFrame_ = false;
+    uint64_t anyFrameAtUs_ = 0;
     Counters counters_;
 };
 

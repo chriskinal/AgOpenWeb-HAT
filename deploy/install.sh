@@ -37,9 +37,15 @@ echo "HAT_FITTED=$choice" > "$CONF"
 if [ "$choice" = yes ]; then
   [ -x "$HERE/aow-hatd" ] || { echo "aow-hatd binary not found next to install.sh" >&2; exit 1; }
   install -m 0755 "$HERE/aow-hatd" /usr/local/bin/aow-hatd
+  install -m 0755 "$HERE/aow-hatctl" /usr/local/bin/aow-hatctl
   install -m 0644 "$HERE/aow-hatd.service" /etc/systemd/system/aow-hatd.service
+  # The firmware's CAN brand files, for the CAN upload page.
+  install -d /usr/share/aow-hat/can-config
+  install -m 0644 "$HERE"/can-config/*.json /usr/share/aow-hat/can-config/
+  install -d /etc/aow-hat
   systemctl daemon-reload
-  systemctl enable --now aow-hatd.service
+  systemctl enable aow-hatd.service
+  systemctl restart aow-hatd.service  # a reinstall must run the new binary
   echo "HAT daemon installed and started."
 else
   if systemctl list-unit-files aow-hatd.service >/dev/null 2>&1; then

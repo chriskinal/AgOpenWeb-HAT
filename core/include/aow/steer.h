@@ -106,6 +106,7 @@ public:
     uint16_t currentCounts() const { return currentCounts_; }
     bool workSwitch() const;
     bool steerSwitch() const { return steerSw_.state(); }
+    uint32_t buttonPresses() const { return buttonPresses_; }  // steer button, physical or CAN
 
 private:
     uint64_t nowMs() const { return clock_.nowUs() / 1000; }
@@ -138,6 +139,7 @@ private:
     // Switches.
     Debouncer steerSw_, workSw_, remoteSw_;
     bool lastButtonPressed_ = false;
+    uint32_t buttonPresses_ = 0;
     bool lastSwitchOn_ = false;
 
     // Arming (the firmware's steerState, inverted: armed_ == steerState 0).

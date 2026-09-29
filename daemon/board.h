@@ -2,6 +2,9 @@
 // (boards/hat, when it exists) and a simulator for a CM4 with no HAT.
 #pragma once
 
+#include <vector>
+
+#include "aow/indicators.h"
 #include "aow/motor.h"
 #include "aow/settings.h"
 #include "aow/steer.h"
@@ -14,6 +17,10 @@ struct Board {
     virtual steer::Inputs read(const Settings& s) = 0;
     // enable false must leave the motor unpowered, whatever pwm says.
     virtual void drive(const steer::Output& out) = 0;
+    // The four status LEDs, 10 times a second.
+    virtual void showLeds(const indicators::Rgb (&leds)[4]) { (void)leds; }
+    // The piezo. Must not block: the HAT driver plays them in the background.
+    virtual void playTones(const std::vector<indicators::Tone>& tones) { (void)tones; }
 };
 
 // No hardware. The wheel follows the motor: full PWM turns it 30 degrees a second, within

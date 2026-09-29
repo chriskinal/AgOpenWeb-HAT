@@ -29,6 +29,8 @@ void AppLink::handle(const uint8_t* buf, int len) {
         return;
     }
     ++counters_.received;
+    anyFrame_ = true;
+    anyFrameAtUs_ = clock_.nowUs();
 
     uint8_t out[32];
     switch (f.pgn) {

@@ -45,10 +45,10 @@ and rates. Line counts are the firmware's (.h + .cpp).
 | `TractorCANDriver`, `CANProtocolEngine`, `CANConfigParser` | 2,460 | `core/src/can` (done, near-verbatim via `teensy_compat.h`) + SocketCAN | all 9 brands, JSON brand files (`deploy/can-config`), Keya CAN, CAN wheel angle, CAN engage buttons, CAN kickout |
 | `GVRETServer` | 390 | `core/gvret` + web thread (done) | SavvyCAN on TCP 23 |
 | `MessageBuilder` | 140 | `core/steer_pgn`, `AppLink::sendPopup` (done) | PGN 221 popups |
-| `LEDManagerFSM` | 650 | core (states) + SK6812 driver | PWR, GPS, STEER, INS on the 4 LEDs |
-| `HardwareManager` buzzer | | piezo driver | same sounds and volume setting |
+| `LEDManagerFSM` | 650 | `core/indicators` (done) + SK6812 driver | PWR, GPS, STEER, INS on the 4 LEDs; RTCM and button pulses |
+| `HardwareManager` buzzer | | `core/indicators` (done) + piezo driver | the boot chime by volume setting |
 | `UM98xManager` | 645 | `core/um98x` + GPS page (done) | read/write receiver CONFIG, MODE, logs; the control thread lends the GNSS port |
-| `CommandHandler` | 300 | `aow-hatctl` (later) | the console keys as CLI commands over a local socket |
+| `CommandHandler` | 300 | `deploy/aow-hatctl` (done) | status, logs, log level, rate limit, buzzer, CAN, GPS, restart, over the local API |
 | `Version` | | `core` | |
 
 ### 2.2 Replaced by Linux
@@ -164,7 +164,7 @@ Hardware-free work goes first, while the board is being made.
 | 4 | Steering in core: PGN 251/252, controller, soft start, kickouts, timeouts, PGN 250 (done; `--board sim` closes the loop on a bare CM4); then the HAT drivers | drivers only | every stop path unit-tested (done, mutation-checked); bench motor follows the app |
 | 5 | CAN: SocketCAN, JSON engine, the 9 brands, Keya CAN and serial, CAN page and upload, GVRET (done on vcan) | bench tests only | one brand verified on a machine |
 | 6 | UM98x page, radio RTCM on RS-232 #1 (done, on ptys) | receiver | receiver config read and written from the page |
-| 7 | LEDs, piezo, `aow-hatctl`, update page, packaging, the AgOpenWeb changes | yes | clean install on a fresh image, both hardware choices |
+| 7 | LED and buzzer logic, `aow-hatctl`, installer (done); update page, LED and piezo drivers, the AgOpenWeb changes | yes | clean install on a fresh image, both hardware choices |
 | 8 | Latency measurement under load | yes | worst case recorded; decide if anything more is needed |
 
 ### Phase 1 record
@@ -194,8 +194,8 @@ Hardware-free work goes first, while the board is being made.
   shorter value is possible, but the app has known UI stalls of 1-3 s (its own comments); decide
   with the bench motor, which would stop mid-turn on every stall.
 
-- The web thread's Home page links to CAN, GPS and System Update, which return 404 until
-  phases 5-7 add them.
+- The Home page's System Update button returns 404: the update page is not built yet (see the
+  decision below).
 
 - PWM frequency for the motor driver. The firmware uses 75 Hz for the DRV8701; the HAT's external
   drivers (MD13S, IBT-2 class) usually want much higher. To decide in phase 3.

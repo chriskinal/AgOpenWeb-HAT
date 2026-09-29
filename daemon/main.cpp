@@ -10,7 +10,9 @@
 #include <sys/timerfd.h>
 #include <unistd.h>
 
+#include <algorithm>
 #include <cerrno>
+#include <iterator>
 #include <csignal>
 #include <cstdio>
 #include <cstdlib>
@@ -22,6 +24,7 @@
 
 #include "aow/app_link.h"
 #include "aow/gnss_link.h"
+#include "aow/indicators.h"
 #include "aow/log.h"
 #include "aow/motor.h"
 #include "aow/steer.h"
@@ -236,6 +239,7 @@ int main(int argc, char** argv) {
     aow::Board& board = simBoard;
     board.drive({});  // motor off until the controller says otherwise
     LOG_INFO(Autosteer, "Board: %s", board.name());
+    board.playTones(aow::indicators::bootChime(shared.settings().misc.buzzerVolume));
 
     // CAN buses. The bit rate comes from the settings, applied at startup (a change needs a
     // restart, as in the firmware).
@@ -305,6 +309,10 @@ int main(int argc, char** argv) {
     pollfd fds[] = {{udp.fd(), POLLIN, 0}, {tickFd, POLLIN, 0}, {sigFd, POLLIN, 0},
                     {gnssPort.fd(), POLLIN, 0}, {rtcm.fd(), POLLIN, 0}, {radioPort.fd(), POLLIN, 0}};
     const uint64_t startUs = clock.nowUs();
+    aow::indicators::Leds leds(startUs / 1000);
+    uint32_t lastRtcmPackets = 0, lastRadioBytes = 0, lastButtonPresses = 0;
+    uint64_t lastRadioPulseMs = 0, nextLeds = 0;
+    uint8_t ledColors[4] = {};
     const uint64_t summaryTicks = opt.verbose ? 500 : 6000;
     uint64_t ticks = 0, nextSummary = summaryTicks, nextTurnSensor = 0, nextMotorProcess = 0;
     int code = 0;
@@ -397,6 +405,39 @@ int main(int argc, char** argv) {
             st.fixQuality = g.fixQuality;
             st.satellites = g.numSatellites;
             st.navSent = gnss.counters().navSent;
+
+            if (ticks >= nextLeds) {  // 10 Hz, as the firmware's LED task
+                nextLeds = ticks + 10;
+                const uint64_t nowMs = clock.nowUs() / 1000;
+                const auto& gc = gnss.counters();
+                if (gc.rtcmPackets != lastRtcmPackets) leds.pulseRtcm(nowMs);
+                if (gc.radioBytes != lastRadioBytes && nowMs - lastRadioPulseMs >= 1000) {  // radio: once a second
+                    leds.pulseRtcm(nowMs);
+                    lastRadioPulseMs = nowMs;
+                }
+                if (autosteer.buttonPresses() != lastButtonPresses) leds.pulseButton(nowMs);
+                lastRtcmPackets = gc.rtcmPackets;
+                lastRadioBytes = gc.radioBytes;
+                lastButtonPresses = autosteer.buttonPresses();
+
+                aow::indicators::Inputs li;
+                li.nowMs = nowMs;
+                li.networkUp = shared.networkUp.load();
+                li.appConnected = app.usSinceAnyFrame() < 5'000'000;
+                li.gnssData = g.messageMask && clock.nowUs() - g.lastUpdateUs < 5'000'000;
+                li.fixQuality = g.fixQuality;
+                li.hasIns = g.hasIns;
+                li.insAlignment = g.insAlignment;
+                li.motorActive = autosteer.motorState() != aow::steer::MotorState::Disabled;
+                leds.update(li);
+                aow::indicators::Rgb rgb[4];
+                for (int i = 0; i < 4; ++i) {
+                    rgb[i] = leds.rgb(static_cast<aow::indicators::Led>(i), settings.misc.ledBrightness, nowMs);
+                    ledColors[i] = static_cast<uint8_t>(leds.color(static_cast<aow::indicators::Led>(i)));
+                }
+                board.showLeds(rgb);
+            }
+            std::copy(std::begin(ledColors), std::end(ledColors), std::begin(st.leds));
             shared.setStatus(st);
 
             if (ticks >= nextSummary) {
