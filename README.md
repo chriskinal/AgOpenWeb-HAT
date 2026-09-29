@@ -10,7 +10,9 @@ It talks to [AgOpenWeb](https://github.com/AgOpenGPS-Official/AgOpenWeb) in the 
 protocol over UDP on the loopback interface, so to the app it looks like an AiO board.
 
 **Status.** Board: schematic verified, PCB routing in progress (see `hardware/hat/`).
-Daemon: skeleton only; PGN framing and the hardware interfaces exist, nothing drives hardware yet.
+Daemon: answers the app as a steer and GPS module (hello, scan, PGN 253 for each 254); turns
+receiver NMEA into PANDA/PAOGI and forwards RTCM (`--gnss /dev/ttyUSB0` for a USB receiver).
+Serves the firmware's web pages on port 80. Nothing drives steering hardware yet.
 The software plan is in [docs/PLAN.md](docs/PLAN.md).
 
 ## Two ways to run AgOpenWeb on a Pi
@@ -29,7 +31,9 @@ The installer asks once which one applies. With no HAT the daemon stays disabled
 | `core/` | logic with no hardware or Linux dependency; builds and tests on any desktop |
 | `hal/` | the interfaces core uses to reach hardware |
 | `boards/hat/` | the HAT's pin map and (later) its Linux drivers |
+| `web/` | the firmware's web pages and API |
 | `daemon/` | the Linux executable |
+| `third_party/` | ArduinoJson (MIT) |
 | `tests/` | unit tests for core |
 | `deploy/` | installer and systemd unit |
 | `hardware/hat/` | the HAT board: design, netlist, BOM, open issues |
@@ -43,6 +47,17 @@ cmake -B build && cmake --build build && ctest --test-dir build
 ```
 
 The daemon itself builds only on Linux. Core and the tests build anywhere.
+
+On a CM4 with Raspberry Pi OS Lite (Trixie):
+
+```bash
+sudo apt install -y git cmake g++ python3
+git clone https://github.com/chriskinal/AgOpenWeb-HAT.git && cd AgOpenWeb-HAT
+cmake -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build -j && ctest --test-dir build
+./build/aow-hatd -v &                  # answers on UDP 8888, replies to 127.0.0.1:9999
+python3 tests/pgn_probe.py --rate 100 -n 500
+python3 tests/gnss_probe.py build/aow-hatd   # GNSS end to end, a pty playing the receiver
+```
 
 ## Licence
 

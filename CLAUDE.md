@@ -43,7 +43,17 @@ The Teensy firmware is not being rewritten and nothing is ported back to it.
   4 layers: Top, Inner1 GND plane, Inner2 signal with a GND pour, Bottom. Rules 0.2 mm track and
   clearance, 0.5 mm power. Routed with EasyEDA's JLCPCB router, GND skipped; GND vias placed by
   hand, including one at each J3 protection diode. J1.17 left unconnected (issues H10).
-- **Daemon:** skeleton. `core/pgn` works and is tested; nothing drives hardware yet.
+- **Daemon:** runs on Linux and answers the app as steer (126) and GPS (120): hello, scan, and a
+  PGN 253 for every PGN 254 (`core/app_link`). GNSS done in core (`nmea`, `gnss`, `nav`,
+  `gnss_link`): receiver sentences in, PANDA/PAOGI out, RTCM through; runs today with
+  `--gnss /dev/ttyUSB0`. Event logger, JSON settings file and the firmware's web pages
+  (Home, Device, Event logger, Logs, Network) on port 80 with WebSockets 8082/8083, served by a
+  normal-priority web thread. Nothing drives steering hardware yet.
+- **Scope:** port every v26 firmware function the HAT hardware supports, web UI included
+  (docs/PLAN.md section 2).
+- **Dev CM4:** `chris@192.168.4.217`, passwordless sudo, Trixie Lite with the packaged
+  PREEMPT_RT kernel. Sync with `rsync -a --exclude build --exclude hardware --exclude .git ./
+  chris@192.168.4.217:AgOpenWeb-HAT/`, build there with cmake.
 
 ## Layout
 
@@ -52,7 +62,9 @@ AgOpenWeb-HAT/
 ├── core/            # Logic with no hardware or Linux dependency; builds on any desktop
 ├── hal/             # Interfaces core uses to reach hardware (aow/hal.h)
 ├── boards/hat/      # HAT pin map (hat_pins.h) and, later, its Linux drivers
-├── daemon/          # The Linux executable
+├── web/             # The firmware's web pages (web/pages, copied) and API on POSIX sockets
+├── daemon/          # The Linux executable: control thread + web thread
+├── third_party/     # ArduinoJson 7.4.2 (the firmware's JSON library, MIT)
 ├── tests/           # Unit tests for core
 ├── deploy/          # install.sh, aow-hatd.service
 ├── docs/PLAN.md
@@ -69,8 +81,18 @@ AgOpenWeb-HAT/
 cmake -B build && cmake --build build && ctest --test-dir build
 
 # Without cmake (e.g. on the Mac): compile a test directly
-c++ -std=c++17 -Wall -Wextra -Icore/include -Ihal/include core/src/pgn.cpp tests/test_pgn.cpp -o /tmp/t && /tmp/t
+c++ -std=c++17 -Wall -Wextra -Icore/include -Ihal/include core/src/*.cpp tests/test_pgn.cpp -o /tmp/t && /tmp/t
+
+# The daemon on the Mac: build and probe it in a Trixie arm64 container (same OS/arch as the CM4)
+docker run --rm -v "$PWD":/src:ro debian:trixie bash -c 'apt-get update -qq && apt-get install -y -qq g++ cmake python3 >/dev/null &&
+  cmake -S /src -B /b && cmake --build /b -j && ctest --test-dir /b &&
+  { /b/aow-hatd & sleep 0.3; python3 /src/tests/pgn_probe.py --rate 100 -n 500; }'
 ```
+
+`tests/pgn_probe.py` stands in for the app (binds UDP 9999, so stop AgOpenWeb first): hello,
+scan, then PGN 254 at a set rate, checking every reply and timing the 253.
+`tests/gnss_probe.py build/aow-hatd` does the same for GNSS, with a pty as the receiver.
+`tests/web_probe.py --port 80` checks every page, API and WebSocket of a running daemon.
 
 ## Hardware audit scripts
 
@@ -104,6 +126,9 @@ on D2/D5/D15-D17/TV1/TV2 `.A`/`.K` and "J8 not in schematic" are pin-naming only
 ### Daemon
 - **Follow the Teensy firmware's code, not its docs.** Its `CLAUDE.md` and `docs/` have stale pin
   tables and rates. Real pins: `lib/aio_config/HardwareManager.h`.
+- **Web pages come from the firmware.** Copy from `web_pages/`, keep the firmware's API field names,
+  and note HAT changes in the header comment of each page.
+- **The control thread never does I/O for logging**: `log()` queues, the web thread writes out.
 - **Core stays free of Linux and hardware headers.** Anything hardware-bound goes behind an
   interface in `hal/`, with the implementation in `boards/hat/`.
 - **`STEER_EN` low is the safe state.** Enable, not PWM, is the gate: hardware PWM keeps running if

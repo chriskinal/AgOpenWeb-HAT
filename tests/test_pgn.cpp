@@ -1,12 +1,10 @@
 #include "aow/pgn.h"
 
-#include <cstdio>
 #include <cstring>
 
-using namespace aow;
+#include "check.h"
 
-static int failures = 0;
-#define CHECK(c) do { if (!(c)) { std::printf("FAIL %s:%d  %s\n", __FILE__, __LINE__, #c); ++failures; } } while (0)
+using namespace aow;
 
 int main() {
     // The host hello, byte for byte as AgOpenWeb and AgIO send it (fixed crc 0x47).
@@ -38,6 +36,5 @@ int main() {
     uint8_t bad[] = {0x80, 0x81, 0x7F, 0xFE, 0x01, 0x00, 0x47};
     CHECK(!pgn::parse(bad, sizeof bad, f));
 
-    std::printf(failures ? "%d failure(s)\n" : "all pgn tests passed\n", failures);
-    return failures ? 1 : 0;
+    return finish("pgn");
 }

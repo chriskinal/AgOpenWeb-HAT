@@ -1,0 +1,150 @@
+#include "aow/settings.h"
+
+#include <ArduinoJson.h>
+
+namespace aow {
+
+namespace {
+
+constexpr int kVersion = 1;
+
+// Reads obj[key] into v if present and of a compatible type.
+template <typename T>
+void get(JsonVariantConst obj, const char* key, T& v) {
+    JsonVariantConst x = obj[key];
+    if (x.is<T>()) v = x.as<T>();
+}
+
+void getSeverity(JsonVariantConst obj, const char* key, log::Severity& v) {
+    JsonVariantConst x = obj[key];
+    log::Severity s;
+    if (x.is<const char*>() && log::parseSeverity(x.as<const char*>(), s)) v = s;
+}
+
+}  // namespace
+
+std::string toJson(const Settings& s) {
+    JsonDocument doc;
+    doc["version"] = kVersion;
+
+    JsonObject st = doc["steer"].to<JsonObject>();
+    st["invertWas"] = s.steer.invertWas;
+    st["motorDriveDirection"] = s.steer.motorDriveDirection;
+    st["cytronDriver"] = s.steer.cytronDriver;
+    st["steerSwitch"] = s.steer.steerSwitch;
+    st["steerButton"] = s.steer.steerButton;
+    st["currentSensor"] = s.steer.currentSensor;
+    st["minSpeed"] = s.steer.minSpeed;
+    st["motorDriverConfig"] = s.steer.motorDriverConfig;
+    st["currentThreshold"] = s.steer.currentThreshold;
+    st["pwmBrakeMode"] = s.steer.pwmBrakeMode;
+    st["softStartDurationMs"] = s.steer.softStartDurationMs;
+
+    JsonObject g = doc["gains"].to<JsonObject>();
+    g["kp"] = s.gains.kp;
+    g["highPwm"] = s.gains.highPwm;
+    g["minPwm"] = s.gains.minPwm;
+    g["steerSensorCounts"] = s.gains.steerSensorCounts;
+    g["wasOffset"] = s.gains.wasOffset;
+    g["ackermanFix"] = s.gains.ackermanFix;
+
+    JsonObject gps = doc["gps"].to<JsonObject>();
+    gps["passThrough"] = s.gps.passThrough;
+    gps["radioBaud"] = s.gps.radioBaud;
+
+    JsonObject can = doc["can"].to<JsonObject>();
+    can["brand"] = s.can.brand;
+    can["moduleId"] = s.can.moduleId;
+    JsonArray buses = can["bus"].to<JsonArray>();
+    for (const auto& b : s.can.bus) {
+        JsonObject o = buses.add<JsonObject>();
+        o["speed"] = b.speed;
+        o["function"] = b.function;
+        o["name"] = b.name;
+    }
+
+    JsonObject m = doc["misc"].to<JsonObject>();
+    m["invertWorkSwitch"] = s.misc.invertWorkSwitch;
+    m["ledBrightness"] = s.misc.ledBrightness;
+    m["buzzerVolume"] = s.misc.buzzerVolume;
+
+    JsonObject l = doc["log"].to<JsonObject>();
+    l["consoleEnabled"] = s.log.consoleEnabled;
+    l["consoleLevel"] = log::levelName(s.log.consoleLevel);
+    l["udpEnabled"] = s.log.udpEnabled;
+    l["udpLevel"] = log::levelName(s.log.udpLevel);
+    l["syslogPort"] = s.log.syslogPort;
+    l["rateLimitDisabled"] = s.log.rateLimitDisabled;
+
+    std::string out;
+    serializeJsonPretty(doc, out);
+    out += '\n';
+    return out;
+}
+
+bool fromJson(const std::string& json, Settings& s, std::string* error) {
+    JsonDocument doc;
+    const DeserializationError err = deserializeJson(doc, json);
+    if (err || !doc.is<JsonObject>()) {
+        if (error) *error = err ? err.c_str() : "not a JSON object";
+        return false;
+    }
+    Settings n = s;
+
+    JsonVariantConst st = doc["steer"];
+    get(st, "invertWas", n.steer.invertWas);
+    get(st, "motorDriveDirection", n.steer.motorDriveDirection);
+    get(st, "cytronDriver", n.steer.cytronDriver);
+    get(st, "steerSwitch", n.steer.steerSwitch);
+    get(st, "steerButton", n.steer.steerButton);
+    get(st, "currentSensor", n.steer.currentSensor);
+    get(st, "minSpeed", n.steer.minSpeed);
+    get(st, "motorDriverConfig", n.steer.motorDriverConfig);
+    get(st, "currentThreshold", n.steer.currentThreshold);
+    get(st, "pwmBrakeMode", n.steer.pwmBrakeMode);
+    get(st, "softStartDurationMs", n.steer.softStartDurationMs);
+    if (n.steer.softStartDurationMs > 1000) n.steer.softStartDurationMs = 1000;
+
+    JsonVariantConst g = doc["gains"];
+    get(g, "kp", n.gains.kp);
+    get(g, "highPwm", n.gains.highPwm);
+    get(g, "minPwm", n.gains.minPwm);
+    get(g, "steerSensorCounts", n.gains.steerSensorCounts);
+    get(g, "wasOffset", n.gains.wasOffset);
+    get(g, "ackermanFix", n.gains.ackermanFix);
+
+    JsonVariantConst gps = doc["gps"];
+    get(gps, "passThrough", n.gps.passThrough);
+    get(gps, "radioBaud", n.gps.radioBaud);
+
+    JsonVariantConst can = doc["can"];
+    get(can, "brand", n.can.brand);
+    get(can, "moduleId", n.can.moduleId);
+    JsonArrayConst buses = can["bus"];
+    for (size_t i = 0; i < 3 && i < buses.size(); ++i) {
+        get(buses[i], "speed", n.can.bus[i].speed);
+        get(buses[i], "function", n.can.bus[i].function);
+        get(buses[i], "name", n.can.bus[i].name);
+    }
+
+    JsonVariantConst m = doc["misc"];
+    get(m, "invertWorkSwitch", n.misc.invertWorkSwitch);
+    get(m, "ledBrightness", n.misc.ledBrightness);
+    get(m, "buzzerVolume", n.misc.buzzerVolume);
+    if (n.misc.ledBrightness < 5) n.misc.ledBrightness = 5;
+    if (n.misc.ledBrightness > 100) n.misc.ledBrightness = 100;
+    if (n.misc.buzzerVolume > 2) n.misc.buzzerVolume = 1;
+
+    JsonVariantConst l = doc["log"];
+    get(l, "consoleEnabled", n.log.consoleEnabled);
+    getSeverity(l, "consoleLevel", n.log.consoleLevel);
+    get(l, "udpEnabled", n.log.udpEnabled);
+    getSeverity(l, "udpLevel", n.log.udpLevel);
+    get(l, "syslogPort", n.log.syslogPort);
+    get(l, "rateLimitDisabled", n.log.rateLimitDisabled);
+
+    s = n;
+    return true;
+}
+
+}  // namespace aow
