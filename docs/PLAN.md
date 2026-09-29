@@ -182,6 +182,24 @@ Hardware-free work goes first, while the board is being made.
 
 ## 7. Open items
 
+**Paused 2026-09-29, waiting for the HAT.** Everything that needs no hardware is done and on
+`main`. Resume with, in order:
+
+1. Phase 1 bring-up on the board: `config.txt` overlays for UART2/3/5, SPI0 with the three
+   MCP251863s (`mcp251xfd`) and the ADC, the PWM pin, the watchdog. Note the device names.
+2. The HAT board in `boards/hat` (implementing `daemon/board.h`): ADC128S102 (WAS, current,
+   supply, key), switches, PWM + DIR + EN, SK6812 LEDs, piezo, watchdog kick. Then
+   `--board hat`, and the `--gnss`, `--radio`, `--keya-serial`, `--can` lines in the service unit.
+3. Bench: motor follows the app (`steer_probe.py` against real hardware), every stop path, the
+   PWM frequency, `kCurrentCountsPerVolt`, the steer timeout, CAN bit rate and bus-off recovery,
+   one INSPVAXA capture from a UM981.
+4. Decide the System Update page: the firmware's is unauthenticated; recommended is signed
+   packages only (or none: update by `install.sh` over SSH).
+5. The AgOpenWeb changes (section 5), in that repo.
+
+The dev CM4 (`chris@192.168.4.217`) runs `aow-hatd` as a service with `--board sim` and default
+settings. Its `~/AgOpenWeb-HAT` is an rsync copy, not a git checkout.
+
 - CAN bit rate is set with `ip link` at startup, as root. Check on the HAT's MCP251863s
   (`mcp251xfd`) that `restart-ms 100` brings a bus back after bus-off.
 - The brand JSON files are in `deploy/can-config/`; the upload page takes a file from the
