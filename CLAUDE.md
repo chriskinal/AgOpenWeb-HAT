@@ -7,6 +7,7 @@ This file provides guidance to Claude Code when working with this repository.
 - **[hardware/hat/HARDWARE_HAT_DESIGN.md](hardware/hat/HARDWARE_HAT_DESIGN.md)** - What the board does and why: mechanical, power, circuits, pinouts
 - **[hardware/hat/HARDWARE_HAT_NETLIST.md](hardware/hat/HARDWARE_HAT_NETLIST.md)** - Every part and net
 - **[hardware/hat/HARDWARE_HAT_ISSUES.md](hardware/hat/HARDWARE_HAT_ISSUES.md)** - Open decisions (H#) and bench checks (B#)
+- **[hardware/imu-breakout/HARDWARE_IMU_BREAKOUT.md](hardware/imu-breakout/HARDWARE_IMU_BREAKOUT.md)** - LSM6DSK320X IMU breakout for the vibration evaluation: design, netlist, BOM, open items (K#)
 
 ## Project Overview
 
@@ -76,6 +77,7 @@ AgOpenWeb-HAT/
 └── hardware/
     ├── hat/         # HAT design, netlist, BOM, issues
     ├── aio/         # Earlier AiO board design (parked) + EasyEDA parts and exports
+    ├── imu-breakout/ # LSM6DSK320X evaluation breakout (one doc: design, netlist, BOM, K# items)
     └── tools/       # hat-audit scripts, EasyEDA net-colouring extension
 ```
 
