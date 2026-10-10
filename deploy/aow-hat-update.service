@@ -1,0 +1,9 @@
+[Unit]
+Description=AOW HAT software update (verifies and installs an uploaded package)
+# Started by aow-hatd when a package arrives on the System Update page. A separate unit because
+# the daemon is restarted by the update, and its hardware watchdog would reset the CM4 if the
+# daemon did the installing itself.
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/lib/aow-hat/aow-hat-update

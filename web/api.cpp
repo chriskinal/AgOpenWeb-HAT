@@ -15,6 +15,7 @@
 #include "pages/TouchFriendlyHomePage.h"
 #include "pages/TouchFriendlyLogViewerPage.h"
 #include "pages/TouchFriendlyNetworkPage.h"
+#include "pages/TouchFriendlyOTAPage.h"
 #include "pages/TouchFriendlyStyles.h"
 
 namespace aow::web {
@@ -243,6 +244,30 @@ Response canUpload(Backend& b, const Request& r) {
     return Response::text("Upload successful");
 }
 
+// System update. The daemon only takes delivery: steering must be off, and the file must look
+// like a package. Verifying the signature and installing is the updater service's job.
+Response otaUpload(Backend& b, const Request& r) {
+    if (r.method != "POST") return methodNotAllowed();
+    if (b.status().autosteerActive) return Response::text("Steering is engaged. Disengage it, then update.", 409);
+    if (!looksLikeUpdatePackage(r.body)) return Response::text("This is not an AgOpenWeb HAT update file (.aowpkg).", 400);
+    std::string err;
+    if (!b.startUpdate(r.body, err)) return Response::text(err, 500);
+    LOG_NOTICE(System, "Update package received (%zu bytes); handed to the updater", r.body.size());
+    return Response::text("Package received");
+}
+
+Response otaStatus(Backend& b) {
+    const std::string s = b.updateStatus();
+    return Response::json(s.empty() ? R"({"state":"idle","message":""})" : s);
+}
+
+Response otaReboot(Backend& b, const Request& r) {
+    if (r.method != "POST") return methodNotAllowed();
+    if (b.status().autosteerActive) return Response::text("Steering is engaged. Disengage it first.", 409);
+    b.reboot();
+    return Response::json(R"({"status":"rebooting"})");
+}
+
 Response canRestore(Backend& b, const Request& r) {
     if (r.method != "POST") return methodNotAllowed();
     std::string err;
@@ -303,6 +328,14 @@ void put(std::string& out, size_t at, const void* v, size_t n) { std::memcpy(&ou
 
 }  // namespace
 
+bool looksLikeUpdatePackage(const std::string& bytes) {
+    static const char kTrailer[] = "AOWHAT1\n";
+    const size_t trailer = sizeof kTrailer - 1, signature = 64;
+    if (bytes.size() < 2 + signature + trailer + 64 || bytes.size() > kMaxUpdatePackage) return false;
+    if (static_cast<uint8_t>(bytes[0]) != 0x1f || static_cast<uint8_t>(bytes[1]) != 0x8b) return false;  // gzip
+    return bytes.compare(bytes.size() - trailer, trailer, kTrailer) == 0;
+}
+
 void addRoutes(Server& server, Backend& b, const char* version) {
     page(server, "/", TOUCH_FRIENDLY_HOME_PAGE);
     server.route("/touch.css", [](const Request&) {
@@ -333,6 +366,10 @@ void addRoutes(Server& server, Backend& b, const char* version) {
         b.restart();
         return Response::json(R"({"status":"restarting"})");
     });
+    page(server, "/ota", TOUCH_FRIENDLY_OTA_PAGE);
+    server.route("/api/ota/upload", [&b](const Request& r) { return otaUpload(b, r); });
+    server.route("/api/ota/status", [&b](const Request&) { return otaStatus(b); });
+    server.route("/api/ota/reboot", [&b](const Request& r) { return otaReboot(b, r); });
     server.route("/api/eventlogger/config", [&b](const Request& r) { return eventLogger(b, r); });
     server.route("/api/logs/data", [](const Request&) { return logData(); });
     server.route("/api/device/settings", [&b](const Request& r) { return deviceSettings(b, r); });

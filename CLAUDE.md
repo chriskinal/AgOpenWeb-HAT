@@ -62,6 +62,10 @@ The Teensy firmware is not being rewritten and nothing is ported back to it.
   (`core/indicators`; `/api/status` shows the LED colours), `aow-hatctl`: done.
   PGNs are accepted only from the `--app` host (loopback); `--any-app` lifts that.
 - **Key monitor:** `deploy/aow-keymon.py`, its own service: key off for 3 s runs `poweroff`.
+- **Updates:** `deploy/package.sh` (on Linux arm64) builds a bundle and a signed `.aowpkg`; the
+  System Update page (`/ota`) takes the `.aowpkg`, and `deploy/aow-hat-update`, a separate root
+  service, verifies, installs and rolls back. `deploy/update-key.pem` is a development key.
+  Per-unit daemon options live in `/etc/aow-hat/daemon.env`, not in the service unit.
 - **Scope:** port every v26 firmware function the HAT hardware supports, web UI included
   (docs/PLAN.md section 2).
 - **Dev CM4:** `chris@192.168.4.217`, passwordless sudo, Trixie Lite with the packaged

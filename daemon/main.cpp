@@ -36,7 +36,10 @@
 
 namespace {
 
-constexpr const char* kVersion = "0.1.0";
+#ifndef AOW_VERSION
+#define AOW_VERSION "0.1.0"  // set by CMake (project version, or -DAOW_VERSION=...)
+#endif
+constexpr const char* kVersion = AOW_VERSION;
 constexpr long kTickNs = 10'000'000;           // 100 Hz, the rate the app sends PGN 254
 constexpr uint64_t kAppLinkTimeoutUs = 2'000'000;  // the firmware's steer watchdog
 

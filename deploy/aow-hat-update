@@ -1,0 +1,84 @@
+#!/usr/bin/env bash
+# AOW HAT updater: verifies a signed package, installs it, and puts the previous version back if
+# the new daemon does not stay up. Run as root by aow-hat-update.service (started by the daemon
+# when a package is uploaded on the System Update page), or by hand:
+#
+#   sudo /usr/local/lib/aow-hat/aow-hat-update aow-hat-<version>-linux-arm64.aowpkg
+#
+# Progress goes to /var/lib/aow-hat/update/status.json, which the page polls, and to the journal.
+# Package format: see deploy/package.sh.
+main() {
+  set -u
+  local LIB=/usr/local/lib/aow-hat DIR=/var/lib/aow-hat/update
+  local PKG="${1:-$DIR/incoming.aowpkg}" KEY="$LIB/update-key.pem"
+  local new="" old="" work="" stage="$LIB/staging" reboot=false
+  mkdir -p "$DIR"
+  [ -f "$LIB/current/VERSION" ] && old="$(sed -n 's/^version=//p' "$LIB/current/VERSION")"
+  [ -n "$old" ] || old="$(/usr/local/bin/aow-hatd --version 2>/dev/null | awk '{print $2}')"
+
+  status() {  # state message
+    printf '{"state":"%s","message":"%s","version":"%s","previous":"%s","rebootNeeded":%s,"time":%s}\n' \
+      "$1" "$2" "$new" "$old" "$reboot" "$(date +%s)" > "$DIR/status.json.tmp" && mv "$DIR/status.json.tmp" "$DIR/status.json"
+    echo "aow-hat-update: $1: $2"
+  }
+  cleanup() { rm -rf "$stage" ${work:+"$work"}; [ "$PKG" = "$DIR/incoming.aowpkg" ] && rm -f "$PKG"; }
+  fail() { status failed "$1"; cleanup; exit 1; }
+  # Reinstalls the version stored in $1 and makes it "current" again.
+  rollback() {
+    local from="$1" why="$2"
+    if [ -x "$from/install.sh" ]; then
+      echo "aow-hat-update: $why; restoring version $old from $from"
+      "$from/install.sh" --hat --no-record || true
+      if [ "$from" = "$LIB/previous" ]; then rm -rf "$LIB/current"; mv "$LIB/previous" "$LIB/current"; fi
+      status rolled_back "$why. Version $old was put back."
+    else
+      status failed "$why, and no earlier version is stored on this unit."
+    fi
+    cleanup
+    exit 1
+  }
+
+  [ "$(id -u)" -eq 0 ] || { echo "run as root" >&2; exit 1; }
+  [ -f "$PKG" ] || fail "No package to install."
+  status verifying "Checking the package signature."
+  local size; size="$(stat -c %s "$PKG")"
+  [ "$size" -gt 1024 ] || fail "The file is too small to be an update package."
+  [ "$(tail -c 8 "$PKG" | od -An -tx1 | tr -d ' \n')" = "414f57484154310a" ] || fail "This is not an AOW HAT update package."
+  [ -f "$KEY" ] || fail "The update key is missing from this unit."
+  work="$(mktemp -d "$DIR/work.XXXXXX")"
+  head -c "$((size - 72))" "$PKG" > "$work/bundle.tar.gz"
+  tail -c 72 "$PKG" | head -c 64 > "$work/sig"
+  openssl pkeyutl -verify -pubin -inkey "$KEY" -rawin -in "$work/bundle.tar.gz" -sigfile "$work/sig" >/dev/null 2>&1 \
+    || fail "The signature does not match. The package was not installed."
+
+  rm -rf "$stage"; mkdir -p "$stage"
+  tar --no-same-owner -xzf "$work/bundle.tar.gz" -C "$stage" || fail "The package could not be unpacked."
+  [ -x "$stage/install.sh" ] && [ -x "$stage/aow-hatd" ] && [ -f "$stage/VERSION" ] || fail "The package is incomplete."
+  grep -qx "arch=$(uname -m)" "$stage/VERSION" || fail "The package is for a different kind of computer."
+  new="$(sed -n 's/^version=//p' "$stage/VERSION")"
+
+  status installing "Installing version $new (was ${old:-unknown})."
+  rm -f /run/aow-hat-reboot-needed
+  "$stage/install.sh" --hat || rollback "$LIB/current" "Version $new could not be installed"
+  [ -e /run/aow-hat-reboot-needed ] && reboot=true
+
+  # The new daemon must stay up, be the new version, and answer its status page.
+  status checking "Checking that version $new runs."
+  local restarts ok=yes i
+  restarts="$(systemctl show -p NRestarts --value aow-hatd.service)"
+  for i in $(seq 1 12); do
+    sleep 1
+    systemctl is-active --quiet aow-hatd.service || { ok=no; break; }
+  done
+  [ "$(systemctl show -p NRestarts --value aow-hatd.service)" = "$restarts" ] || ok=no
+  [ "$(/usr/local/bin/aow-hatd --version 2>/dev/null | awk '{print $2}')" = "$new" ] || ok=no
+  if [ "$ok" = yes ] && command -v curl >/dev/null && ! grep -qs -- '--web-port' /etc/systemd/system/aow-hatd.service /etc/aow-hat/daemon.env; then
+    curl -fs -m 4 http://127.0.0.1/api/status | grep -q "\"version\":\"$new\"" || ok=no
+  fi
+  [ "$ok" = yes ] || rollback "$LIB/previous" "Version $new did not start properly"
+
+  if [ "$reboot" = true ]; then status done "Version $new is installed. Restart the unit to finish: the boot files changed."
+  else status done "Version $new is installed and running."; fi
+  cleanup
+}
+main "$@"; exit

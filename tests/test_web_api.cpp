@@ -24,6 +24,11 @@ struct FakeBackend : Backend {
     }
     Status status() override { return st; }
     void restart() override { ++restarts; }
+    std::string updatePackage, updateJson;
+    int reboots = 0;
+    bool startUpdate(const std::string& p, std::string&) override { updatePackage = p; return true; }
+    std::string updateStatus() override { return updateJson; }
+    void reboot() override { ++reboots; }
     std::string canJson;
     std::string customCanConfig() override { return canJson; }
     bool writeCustomCanConfig(const std::string& j, std::string&) override { canJson = j; return true; }
@@ -184,6 +189,22 @@ int main() {
     CHECK(!deserializeJson(le, logEntryJson(e)));
     CHECK(le["timestamp"] == 42 && le["severity"] == 4 && le["source"] == 6);
     CHECK(le["severityName"] == "WARN" && le["sourceName"] == "CAN" && le["message"] == "valve \"not\" ready");
+
+    // System update: only a package-shaped file, only with steering off; status passes through.
+    std::string pkg = std::string("\x1f\x8b", 2) + std::string(200, 'x') + std::string(64, 's') + "AOWHAT1\n";
+    CHECK(looksLikeUpdatePackage(pkg) && !looksLikeUpdatePackage(pkg.substr(1)) && !looksLikeUpdatePackage(":10000000"));
+    CHECK(request(s, port, "GET /ota HTTP/1.1\r\n\r\n").find(".aowpkg") != std::string::npos);
+    CHECK(request(s, port, "GET /api/ota/upload HTTP/1.1\r\n\r\n").rfind("HTTP/1.1 405", 0) == 0);
+    CHECK(post(s, port, "/api/ota/upload", "not a package").rfind("HTTP/1.1 400", 0) == 0 && b.updatePackage.empty());
+    b.st.autosteerActive = true;
+    CHECK(post(s, port, "/api/ota/upload", pkg).rfind("HTTP/1.1 409", 0) == 0 && b.updatePackage.empty());
+    CHECK(post(s, port, "/api/ota/reboot", "").rfind("HTTP/1.1 409", 0) == 0 && b.reboots == 0);
+    b.st.autosteerActive = false;
+    CHECK(post(s, port, "/api/ota/upload", pkg).rfind("HTTP/1.1 200", 0) == 0 && b.updatePackage == pkg);
+    CHECK(parse(request(s, port, "GET /api/ota/status HTTP/1.1\r\n\r\n"))["state"] == "idle");
+    b.updateJson = R"({"state":"done","version":"9.9.9"})";
+    CHECK(parse(request(s, port, "GET /api/ota/status HTTP/1.1\r\n\r\n"))["version"] == "9.9.9");
+    CHECK(parse(post(s, port, "/api/ota/reboot", ""))["status"] == "rebooting" && b.reboots == 1);
 
     return finish("web_api");
 }

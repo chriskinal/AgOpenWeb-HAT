@@ -4,16 +4,24 @@
 #   sudo ./install.sh            ask
 #   sudo ./install.sh --hat      HAT fitted: install and enable the daemon
 #   sudo ./install.sh --no-hat   no HAT (existing AiO board over Ethernet): leave it disabled
+#
+# Run from a bundle (deploy/package.sh) or from the repo's deploy/ with a built aow-hatd beside
+# it. From a bundle, the bundle is kept in /usr/local/lib/aow-hat/current and the one before it
+# in .../previous, which is what the updater rolls back to. --no-record skips that (the
+# updater's own rollback uses it).
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONF=/etc/aow-hat.conf
+LIB=/usr/local/lib/aow-hat
 choice=""
+record=yes
 
 for a in "$@"; do
   case "$a" in
     --hat) choice=yes ;;
     --no-hat) choice=no ;;
+    --no-record) record=no ;;
     *) echo "unknown option: $a" >&2; exit 2 ;;
   esac
 done
@@ -41,27 +49,51 @@ if [ "$choice" = yes ]; then
   install -m 0644 "$HERE/aow-hatd.service" /etc/systemd/system/aow-hatd.service
   install -m 0755 "$HERE/aow-keymon.py" /usr/local/bin/aow-keymon.py
   install -m 0644 "$HERE/aow-keymon.service" /etc/systemd/system/aow-keymon.service
+  # The updater behind the System Update page, and the key update packages must be signed with.
+  install -d "$LIB" /var/lib/aow-hat/update
+  install -m 0755 "$HERE/aow-hat-update" "$LIB/aow-hat-update"
+  install -m 0644 "$HERE/update-key.pem" "$LIB/update-key.pem"
+  install -m 0644 "$HERE/aow-hat-update.service" /etc/systemd/system/aow-hat-update.service
   # The firmware's CAN brand files, for the CAN upload page.
   install -d /usr/share/aow-hat/can-config
   install -m 0644 "$HERE"/can-config/*.json /usr/share/aow-hat/can-config/
   install -d /etc/aow-hat
+  # Options that belong to this unit, not to the software: never overwritten by an update.
+  if [ ! -f /etc/aow-hat/daemon.env ]; then
+    cat > /etc/aow-hat/daemon.env <<'ENV'
+# Extra aow-hatd options for this unit. Kept across updates.
+# --adc-ref: the measured 5 V on J3 pin 3 (5V_MAIN), the ADC reference.
+AOW_HATD_OPTS=--adc-ref 5.0
+ENV
+  fi
 
   # Boot configuration for the HAT: overlay, config.txt block, CAN interface names.
   # The overlay is compiled here when dtc is present, else aow-hat.dtbo next to this script.
-  dts="$HERE/../boards/hat/aow-hat-overlay.dts"
-  if command -v dtc >/dev/null && [ -f "$dts" ]; then
-    dtc -@ -q -I dts -O dtb -o /boot/firmware/overlays/aow-hat.dtbo "$dts"
-  elif [ -f "$HERE/aow-hat.dtbo" ]; then
-    install -m 0644 "$HERE/aow-hat.dtbo" /boot/firmware/overlays/aow-hat.dtbo
-  else
-    echo "no dtc and no aow-hat.dtbo next to install.sh (apt install device-tree-compiler)" >&2; exit 1
-  fi
-  install -m 0644 "$HERE/80-aow-hat-can.rules" /etc/udev/rules.d/80-aow-hat-can.rules
   reboot_needed=no
+  dts="$HERE/../boards/hat/aow-hat-overlay.dts"
+  dtbo="$(mktemp)"
+  if [ -f "$HERE/aow-hat.dtbo" ]; then
+    cp "$HERE/aow-hat.dtbo" "$dtbo"
+  elif command -v dtc >/dev/null && [ -f "$dts" ]; then
+    dtc -@ -q -I dts -O dtb -o "$dtbo" "$dts"
+  else
+    echo "no aow-hat.dtbo next to install.sh and no dtc to build it (apt install device-tree-compiler)" >&2; exit 1
+  fi
+  if ! cmp -s "$dtbo" /boot/firmware/overlays/aow-hat.dtbo; then
+    install -m 0644 "$dtbo" /boot/firmware/overlays/aow-hat.dtbo
+    reboot_needed=yes
+  fi
+  rm -f "$dtbo"
+  install -m 0644 "$HERE/80-aow-hat-can.rules" /etc/udev/rules.d/80-aow-hat-can.rules
+  # The HAT's block in config.txt: added the first time, replaced when a new version changes it.
   cfg=/boot/firmware/config.txt
-  if ! grep -q '^# --- AOW HAT' "$cfg"; then
-    cp "$cfg" "$cfg.pre-hat"
-    cat "$HERE/config.txt.hat" >> "$cfg"
+  if [ "$(sed -n '/^# --- AOW HAT/,/^# --- end AOW HAT/p' "$cfg")" != "$(cat "$HERE/config.txt.hat")" ]; then
+    [ -f "$cfg.pre-hat" ] || cp "$cfg" "$cfg.pre-hat"
+    tmp="$(mktemp)"
+    sed '/^# --- AOW HAT/,/^# --- end AOW HAT/d' "$cfg" > "$tmp"
+    cat "$HERE/config.txt.hat" >> "$tmp"
+    cat "$tmp" > "$cfg"
+    rm -f "$tmp"
     reboot_needed=yes
   fi
   # The PREEMPT_RT kernel (apt install linux-image-rpi-v8-rt), if it is there and not selected.
@@ -75,7 +107,16 @@ if [ "$choice" = yes ]; then
   systemctl restart aow-keymon.service
   systemctl restart aow-hatd.service  # a reinstall must run the new binary
   echo "HAT daemon installed and started."
-  [ "$reboot_needed" = yes ] && echo "config.txt changed: reboot to load the HAT overlays and the RT kernel."
+  if [ "$reboot_needed" = yes ]; then
+    touch /run/aow-hat-reboot-needed
+    echo "Boot files changed: reboot to load the HAT overlays and the RT kernel."
+  fi
+  # Keep this bundle as "current" and the one before as "previous" (the updater's rollback).
+  if [ "$record" = yes ] && [ -f "$HERE/VERSION" ] && [ "$HERE" != "$LIB/current" ]; then
+    rm -rf "$LIB/previous"
+    [ -d "$LIB/current" ] && mv "$LIB/current" "$LIB/previous"
+    cp -a "$HERE" "$LIB/current"
+  fi
 else
   if systemctl list-unit-files aow-hatd.service >/dev/null 2>&1; then
     systemctl disable --now aow-hatd.service 2>/dev/null || true

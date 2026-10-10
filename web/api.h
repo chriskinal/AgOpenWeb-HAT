@@ -32,6 +32,12 @@ struct Backend {
     virtual bool um98xRead(Um98x::Config& c, std::string& error) = 0;
     virtual bool um98xWrite(const Um98x::Config& c, std::string& error) = 0;
 
+    // System update (the firmware's OTA page). The package is a signed bundle from
+    // deploy/package.sh; a separate root service verifies and installs it.
+    virtual bool startUpdate(const std::string& package, std::string& error) = 0;
+    virtual std::string updateStatus() = 0;  // the updater's status JSON; "" if it never ran
+    virtual void reboot() = 0;               // restart the whole unit
+
     struct Interface { std::string name, ip; bool up; int speedMbps; };
     virtual std::vector<Interface> interfaces() = 0;
 };
@@ -42,6 +48,11 @@ constexpr uint16_t kTelemetryPort = 8082;
 constexpr uint16_t kLogPort = 8083;
 
 void addRoutes(Server& server, Backend& backend, const char* version);
+
+// True if the bytes have the shape of an update package: a gzip stream, a 64-byte signature and
+// the trailer "AOWHAT1\n". The signature itself is checked by the updater, not here.
+bool looksLikeUpdatePackage(const std::string& bytes);
+constexpr size_t kMaxUpdatePackage = 16 * 1024 * 1024;
 
 // The firmware's 32-byte little-endian TelemetryPacket, sent on 8082.
 std::string telemetryPacket(const Status& s);

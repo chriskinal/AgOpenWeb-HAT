@@ -75,7 +75,7 @@ def main():
         ok &= bool(cond)
 
     for path, marker in [("/", "AgOpenWeb HAT"), ("/device", "invertWorkSwitch"), ("/eventlogger", "serialLevel"),
-                         ("/logs", ":8083"), ("/network", "/api/network/config"), ("/touch.css", "{")]:
+                         ("/logs", ":8083"), ("/network", "/api/network/config"), ("/ota", ".aowpkg"), ("/touch.css", "{")]:
         code, ctype, body = http(base, path)
         check(code == 200 and marker in body, "GET %-14s %d %s, %d bytes" % (path, code, ctype.split(";")[0], len(body)))
 

@@ -7,6 +7,7 @@
 #include <pthread.h>
 #include <sched.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 #include <chrono>
@@ -30,6 +31,8 @@ namespace aow {
 namespace {
 
 using Clock = std::chrono::steady_clock;
+
+constexpr const char* kUpdateDir = "/var/lib/aow-hat/update";  // shared with deploy/aow-hat-update
 
 // Console: stderr, which systemd puts in the journal. Under systemd (JOURNAL_STREAM set) each
 // line starts with <N> so the journal records its priority; in a terminal, the firmware's format.
@@ -200,6 +203,34 @@ public:
         return withReceiver(error, [&](Um98x& um) { return um.writeConfiguration(c); });
     }
 
+    bool startUpdate(const std::string& package, std::string& error) override {
+        if (mkdir(kUpdateDir, 0700) != 0 && errno != EEXIST) {
+            error = std::string(kUpdateDir) + ": " + std::strerror(errno);
+            return false;
+        }
+        const std::string dir = kUpdateDir;
+        if (!writeFileAtomically(dir + "/incoming.aowpkg", package, error)) return false;
+        std::string ignored;
+        writeFileAtomically(dir + "/status.json", R"({"state":"received","message":"Package received."})", ignored);
+        // The updater is its own unit: it restarts this daemon, so it cannot be this daemon.
+        if (std::system("systemctl start --no-block aow-hat-update.service") != 0) {
+            error = "The updater service could not be started (is this unit installed with install.sh?)";
+            writeFileAtomically(dir + "/status.json", R"({"state":"failed","message":"The updater service could not be started."})", ignored);
+            return false;
+        }
+        return true;
+    }
+    std::string updateStatus() override {
+        std::ifstream in(std::string(kUpdateDir) + "/status.json");
+        std::stringstream s;
+        s << in.rdbuf();
+        return s.str();
+    }
+    void reboot() override {
+        LOG_WARNING(System, "Unit restart requested from the System Update page");
+        if (std::system("systemctl reboot") != 0) LOG_ERROR(System, "systemctl reboot failed");
+    }
+
     std::vector<Interface> interfaces() override {
         std::vector<Interface> out;
         ifaddrs* list = nullptr;
@@ -259,6 +290,7 @@ void WebThread::run() {
 
     DaemonBackend backend(shared_, opt_.settingsFile);
     web::Server server;
+    server.maxBody = web::kMaxUpdatePackage;  // an update package is the largest upload
     bool pages = false;
     if (opt_.httpPort) {
         pages = server.listenHttp(opt_.httpPort) != 0;

@@ -171,7 +171,7 @@ Hardware-free work went first, while the board was being made. The HAT arrived 2
 | 4 | Steering in core: PGN 251/252, controller, soft start, kickouts, timeouts, PGN 250 (done; `--board sim` closes the loop on a bare CM4); the HAT drivers (done 2026-10-10, loop closed with a pot as the WAS) | drivers only | every stop path unit-tested (done, mutation-checked); bench motor follows the app (open: needs a motor driver) |
 | 5 | CAN: SocketCAN, JSON engine, the 9 brands, Keya CAN and serial, CAN page and upload, GVRET (done on vcan) | bench tests only | one brand verified on a machine |
 | 6 | UM98x page, radio RTCM on RS-232 #1 (done, on ptys) | receiver | receiver config read and written from the page (**done 2026-10-10** on a UM982; radio RTCM not yet tried with a radio) |
-| 7 | LED and buzzer logic, `aow-hatctl`, installer, LED and piezo drivers (done); update page, the AgOpenWeb changes | yes | clean install on a fresh image, both hardware choices |
+| 7 | LED and buzzer logic, `aow-hatctl`, installer, LED and piezo drivers, update page (done); the AgOpenWeb changes | yes | clean install on a fresh image, both hardware choices |
 | 8 | Latency measurement under load | yes | worst case recorded; decide if anything more is needed |
 
 ### Phase 1 record
@@ -196,6 +196,7 @@ Hardware-free work went first, while the board was being made. The HAT arrived 2
 | 2026-10-10 | **GNSS board fitted: UM982** (firmware R4.10Build13495), on UART5 `/dev/ttyAMA5` at 460800 | receiver sends GGA, VTG and HPR at 10 Hz; the daemon counted 3596 sentences, 0 bad checksums, 1198 nav sentences sent, 27 satellites, dual-antenna heading valid (HPR quality 4). Commands go the other way too: `VERSIONA` and `CONFIG` answered. No corrections fed, so fix quality 1 |
 | 2026-10-10 | **AgOpenWeb on the same CM4**: nightly f7ab69da, headless bundle `agopenweb-linux-arm64.tar.gz`, `install.sh --from app`; UI on :5174, app on UDP 9999, daemon on 8888 and 2233 | the app sends each frame on loopback and as a broadcast on wlan0; the daemon hears the loopback copy (3202 PGN 254 in the first minute, 0 rejected, answers on loopback) and drops the broadcast copy with its sender filter; PWR LED green. **In the app's UI:** the HAT shows as the GPS and autosteer modules, position and dual-antenna heading from the UM982 are live, and the wheel sprite follows the pot on the WAS input |
 | 2026-10-10 | **RTCM end to end**: NTRIP configured in AgOpenWeb (nightly f7ab69da) on the same CM4 | the app sends RTCM to `127.0.0.1:2233`; the daemon counted 1284 packets, 0 bytes dropped, and pulses the GPS LED blue; the UM982 went from fix quality 1 to **5 (RTK float)** with a correction age of 0.2 s, and then to **4 (RTK fixed)**: the GPS LED went green. This is phase 2's "done when" |
+| 2026-10-10 | **System update**, through `/api/ota/upload` on the dev CM4, packages from `deploy/package.sh` | 0.1.0 to 0.1.1: verified, installed, checked, done in about 20 s, `daemon.env` kept. One byte flipped: refused, "signature does not match". Signed with another key: refused. Random bytes: 400 at the daemon. A correctly signed 0.1.2 whose daemon exits at once: detected, 0.1.1 put back, no watchdog reset, `STEER_EN` low throughout. Back to 0.1.0 through the same path. Unit test covers the 409 while steering is engaged. **From a browser** on the `/ota` page: 0.1.1 chosen and installed, every step shown, ending in "Update complete" |
 | 2026-10-10 | PWM0 at 100 Hz, 50 %, metered at J3.10 | 1.647 V on the Fluke (3.3 V x 0.5); J3.11 DIR and J3.12 EN at 0 V from boot |
 | 2026-09-28 | `install.sh --hat` on the dev CM4, `web_probe.py` on port 80 | control thread FIFO 80, web thread normal; all pages and APIs; telemetry 101 Hz; log WebSocket; settings saved atomically to `/etc/aow-hat/settings.json`; Restart button -> systemd restart; journal priorities work |
 
@@ -225,21 +226,28 @@ In order:
 3. **CAN on a real bus.** Loopback passed. Still to check on the MCP251863s: that
    `restart-ms 100` brings a bus back after bus-off (two ports wired together, SJ1-SJ3 closed),
    then one brand on a machine.
-4. **The System Update page. Decided 2026-10-10: a signed upload page**, because users, not
-   only the developer, will update units, often with no internet at the tractor.
-   - CI builds one arm64 bundle (binary, overlay, units, `install.sh`) and signs it; the public
-     key is built into the daemon. An unsigned or altered file is rejected before unpacking.
-     The firmware's unauthenticated page is not copied: this daemon runs as root and steers.
-   - The daemon only receives the file. A separate root service verifies and installs it (the
-     daemon cannot replace itself, and the hardware watchdog would reset the CM4).
-   - Refused while steering is armed. The previous version is kept and put back if the new
-     daemon does not stay up.
-   - The same bundle installs over SSH with `install.sh`.
-   - Releases will be public: the repo is to move to the AgOpenGPS official organisation. Until
-     then there is nowhere for users to download from.
-   - **The HAT page updates the HAT software only.** AgOpenWeb's own updates are AgOpenWeb's to
-     handle, so there is one procedure per product, not two places doing the same job.
-   Not built yet; until it is, the Home page's System Update button returns 404.
+4. **The System Update page: built 2026-10-10**, a signed upload page, because users, not only
+   the developer, will update units, often with no internet at the tractor.
+   - `deploy/package.sh` (Linux arm64) builds the bundle and signs it: `.tar.gz` for a first
+     install, `.aowpkg` (the tar.gz, a 64-byte Ed25519 signature, `AOWHAT1\n`) for the page.
+   - The page (`/ota`, the firmware's, adapted) posts the file to `/api/ota/upload`. The daemon
+     only takes delivery: it refuses while steering is engaged and refuses a file that is not
+     package-shaped, then starts `aow-hat-update.service`.
+   - `deploy/aow-hat-update` (root, its own unit) checks the signature against
+     `/usr/local/lib/aow-hat/update-key.pem`, runs the bundle's `install.sh`, then requires the
+     new daemon to stay up for 12 s, report the new version and answer `/api/status`. If not,
+     it reinstalls the stored previous bundle. Progress is in `/api/ota/status`.
+   - Per-unit options (`--adc-ref`) moved to `/etc/aow-hat/daemon.env`, which updates never
+     touch. `install.sh` replaces the config.txt block and the overlay only when they changed,
+     and the page then offers a unit restart.
+   - **The HAT page updates the HAT software only.** AgOpenWeb's updates are AgOpenWeb's.
+   Still to do:
+   - **The release key.** `deploy/update-key.pem` is a development key whose private half is on
+     the developer's machines (`~/.config/aow-hat/`). Replace it when releases move to the
+     AgOpenGPS official organisation; units carrying the development key need one last
+     install by hand to switch.
+   - A CI workflow that runs `package.sh` and publishes the two files (waits for the public repo).
+   - Old signed packages install too: there is no downgrade protection. Decide if it matters.
 5. **The AgOpenWeb changes** (section 5), in that repo.
 6. **Latency under load** (phase 8), with GNSS, CAN and the web pages all busy.
 

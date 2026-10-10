@@ -6,8 +6,10 @@ Before=agopenweb.service
 Type=simple
 # Devices on the HAT (phase 1 record in docs/PLAN.md): GNSS on UART5, RTK radio on RS-232 #1
 # (UART2), Keya serial on RS-232 #2 (UART3), CAN1-3 named by chip select by the udev rule.
-# --adc-ref is the measured 5V_MAIN of this unit (the ADC reference); set it after metering J3.3.
-ExecStart=/usr/local/bin/aow-hatd --board hat --gnss /dev/ttyAMA5 --radio /dev/ttyAMA2 --keya-serial /dev/ttyAMA3 --can hatcan1,hatcan2,hatcan3 --adc-ref 5.12
+# Options that belong to one unit (--adc-ref, the measured 5V_MAIN) are in /etc/aow-hat/daemon.env,
+# which updates never overwrite. This file is replaced by every update: do not edit it.
+EnvironmentFile=-/etc/aow-hat/daemon.env
+ExecStart=/usr/local/bin/aow-hatd --board hat --gnss /dev/ttyAMA5 --radio /dev/ttyAMA2 --keya-serial /dev/ttyAMA3 --can hatcan1,hatcan2,hatcan3 $AOW_HATD_OPTS
 Restart=always
 RestartSec=1
 
