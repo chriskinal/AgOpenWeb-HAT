@@ -1,0 +1,99 @@
+// AOW HAT device tree overlay: SPI0 with four chip selects (three MCP251863 CAN FD controllers
+// and the ADC128S102 as spidev), and the fixed 40 MHz CAN clock. Pin numbers follow
+// hardware/hat/HARDWARE_HAT_DESIGN.md section 7 and boards/hat/hat_pins.h.
+//
+// Build:   dtc -@ -I dts -O dtb -o aow-hat.dtbo aow-hat-overlay.dts
+// Install: /boot/firmware/overlays/aow-hat.dtbo, then "dtoverlay=aow-hat" in config.txt.
+// The UARTs and the PWM pin use the stock overlays (uart2, uart3, uart5, pwm); see deploy/.
+/dts-v1/;
+/plugin/;
+
+/ {
+	compatible = "brcm,bcm2711";
+
+	// The base tree's spidev@0 and spidev@1 would claim CE0 and CE1.
+	fragment@0 {
+		target = <&spidev0>;
+		__overlay__ { status = "disabled"; };
+	};
+	fragment@1 {
+		target = <&spidev1>;
+		__overlay__ { status = "disabled"; };
+	};
+
+	// Chip selects: GPIO8 CAN1 (CE0), GPIO7 CAN2 (CE1), GPIO25 CAN3, GPIO26 ADC. All outputs.
+	fragment@2 {
+		target = <&spi0_cs_pins>;
+		__overlay__ {
+			brcm,pins = <8 7 25 26>;
+			brcm,function = <1>;
+		};
+	};
+
+	// Interrupt inputs: GPIO16 CAN1, GPIO19 CAN2, GPIO20 CAN3.
+	fragment@3 {
+		target = <&gpio>;
+		__overlay__ {
+			aow_can_int_pins: aow_can_int_pins {
+				brcm,pins = <16 19 20>;
+				brcm,function = <0>;
+			};
+		};
+	};
+
+	// One 40 MHz oscillator (X1) feeds all three controllers.
+	fragment@4 {
+		target-path = "/clocks";
+		__overlay__ {
+			aow_can_osc: aow-can-osc {
+				#clock-cells = <0>;
+				compatible = "fixed-clock";
+				clock-frequency = <40000000>;
+			};
+		};
+	};
+
+	fragment@5 {
+		target = <&spi0>;
+		__overlay__ {
+			status = "okay";
+			#address-cells = <1>;
+			#size-cells = <0>;
+			cs-gpios = <&gpio 8 1>, <&gpio 7 1>, <&gpio 25 1>, <&gpio 26 1>;
+
+			can1: mcp251xfd@0 {
+				compatible = "microchip,mcp251xfd";
+				reg = <0>;
+				pinctrl-names = "default";
+				pinctrl-0 = <&aow_can_int_pins>;
+				spi-max-frequency = <20000000>;
+				interrupt-parent = <&gpio>;
+				interrupts = <16 8>;   // IRQ_TYPE_LEVEL_LOW
+				clocks = <&aow_can_osc>;
+			};
+			can2: mcp251xfd@1 {
+				compatible = "microchip,mcp251xfd";
+				reg = <1>;
+				spi-max-frequency = <20000000>;
+				interrupt-parent = <&gpio>;
+				interrupts = <19 8>;
+				clocks = <&aow_can_osc>;
+			};
+			can3: mcp251xfd@2 {
+				compatible = "microchip,mcp251xfd";
+				reg = <2>;
+				spi-max-frequency = <20000000>;
+				interrupt-parent = <&gpio>;
+				interrupts = <20 8>;
+				clocks = <&aow_can_osc>;
+			};
+			// ADC128S102: read from the daemon through /dev/spidev0.3 (no IIO driver in
+			// the Pi kernel). 16-bit frames, mode 3 or 0, up to 16 MHz.
+			adc: spidev@3 {
+				compatible = "spidev";
+				reg = <3>;
+				spi-max-frequency = <8000000>;
+			};
+		};
+	};
+};

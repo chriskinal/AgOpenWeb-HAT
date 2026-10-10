@@ -144,6 +144,13 @@ second GPS UART. Sections stay on an external machine module or go over CAN.
   100 Hz stream that can be far shorter; pick the value during phase 3 and test it.
 - Every kickout and timeout path gets a unit test before it drives a motor.
 
+**Only the paired app is heard (2026-10-10).** On the bench a second AgOpenWeb on the LAN
+(192.168.4.127) was broadcasting PGN 254 with guidance off to the subnet, and the daemon took it
+as its own app: a 10 ms disarm and re-arm every 17 s. Two tractors on one Wi-Fi would do the
+same to each other. The daemon now drops datagrams from any host but `--app` (loopback by
+default), counts them, and logs a warning naming the sender. `--any-app` turns the filter off
+for bench use.
+
 ## 5. Changes needed in AgOpenWeb
 
 | Change | Where | Must not break |
@@ -178,6 +185,15 @@ Hardware-free work goes first, while the board is being made.
 | 2026-09-28 | `steer_probe.py`, service with `--board sim` | armed by guidance on, motor within 100 ms, wheel at 5 deg in 0.81 s and holding; 2 s timeout logged; PGN 252 gains saved |
 | 2026-09-29 | `um98x_probe.py` (ptys as receiver and radio) | page read in 0.3 s and write ending in SAVECONFIG, PANDA resumes after each; radio RTCM reaches the receiver byte for byte |
 | 2026-09-29 | `can_probe.py` on vcan0-2, Valtra/MF legacy code | valve commands 50 Hz with intent 252; PGN 253 angle from the CAN curve; engaged: intent 253 and PWM x 128; valve not ready: popup and back to 252; GVRET streams every frame once, 20 ms apart |
+| 2026-10-10 | **First boot on the HAT** (fresh Trixie Lite, `linux-image-rpi-v8-rt` 6.18.50, `boards/hat/aow-hat-overlay.dts` + `deploy/config.txt.hat`) | all three MCP251863s probe over SPI0 (`MCP2518FD rev0.0`, 40 MHz, 20 MHz SPI); UARTs `/dev/ttyAMA2` (RS-232 #1), `/dev/ttyAMA3` (RS-232 #2), `/dev/ttyAMA5` (GNSS), console on `/dev/ttyAMA0`; PWM0 on `/sys/class/pwm/pwmchip0/pwm0`; ADC on `/dev/spidev0.3` |
+| 2026-10-10 | `tests/adc_read.py` (spidev, mode 3, 1 MHz) | IN2 `VIN_SENSE` 727 counts, IN4 `KEY_SENSE` 721, grounded inputs 0; WAS and current inputs float. With the reference taken as 5.00 V that is 11.7 V; the Fluke read the supply at 11.98 V and `5V_MAIN` at **5.12 V**, which makes the ADC exact (727 x 5.12 / 4096 / 0.0758 = 11.99 V). The daemon must use the real rail voltage for VIN and key, not 5.00 V; WAS and current are ratiometric and unaffected |
+| 2026-10-10 | CAN internal loopback, 250 kbit/s, `cansend`/`candump` on each interface | all three send and receive, 0 errors. The kernel names them in probe order (spi0.2 came up first), and renaming to `can0..2` fails because those names are already taken by the kernel's own choice; `deploy/80-aow-hat-can.rules` names them **`hatcan1`, `hatcan2`, `hatcan3`** by chip select (CAN1-3 on J3), and the service unit passes `--can hatcan1,hatcan2,hatcan3` |
+| 2026-10-10 | `cyclictest -m -S -p90 -i1000 -D20` on the HAT, idle | max 31 µs, avg 8 µs |
+| 2026-10-10 | **Watchdog U10**: GPIO3 low (enable), GPIO6 kicked at 2 Hz for 5 s, then left | CM4 reset within seconds of the last kick and rebooted on its own (the key was on, so the latch held); back on the network with uptime 17 s when checked. GPIO3 is back to input/pull-up after the reset, so the watchdog is off until the daemon enables it |
+| 2026-10-10 | **`aow-hatd --board hat`** (`boards/hat/hat_board.cpp`: ADC over spidev, switches and DIR/EN/WDT through the GPIO character device, PWM0 through sysfs at 20 kHz), watchdog on, `pgn_probe.py` 300 x PGN 254 at 100 Hz | 300/300 answered, round trip median 0.08 ms, worst 0.48 ms; WAS reads the floating input (-4.6 deg); EN low from start to stop; the watchdog is enabled at the first tick, kicked at 10 Hz, and set off (GPIO3 high) at exit |
+| 2026-10-10 | **Steering bench**, `tests/hat_bench.py` (the app at 100 Hz, Kp 40, target +20 deg) with a 10 k pot on J3.3/J3.4/J3.5 as the WAS and the Fluke on J3.10/11/12 | pot reads -68 to +68 deg lock to lock (30 counts/deg); PWM 255 away from the target, 28 at 0.5 deg; J3.12 EN 3.3 V while armed, J3.10 3.3 V at full PWM, J3.11 DIR 0 V below the target and 3.3 V past it; no disarm or kickout over several sweeps. Killing the script mid-run (the app goes silent): the 2 s communication timeout logged, J3.12 EN low and PWM duty 0 on the hardware. (First runs showed a 10 ms disarm every 17 s: a tablet on the LAN broadcasting PGN 254 with guidance off; the daemon now ignores hosts other than `--app`, section 4) |
+| 2026-10-10 | RS-232 #1 loopback through U9 (J3.23 to J3.24), 1024 bytes each way on `/dev/ttyAMA2` | identical at 9600, 115200 and 460800 baud. RS-232 #2 (`/dev/ttyAMA3`, J3.25 to J3.26) the same |
+| 2026-10-10 | PWM0 at 100 Hz, 50 %, metered at J3.10 | 1.647 V on the Fluke (3.3 V x 0.5); J3.11 DIR and J3.12 EN at 0 V from boot |
 | 2026-09-28 | `install.sh --hat` on the dev CM4, `web_probe.py` on port 80 | control thread FIFO 80, web thread normal; all pages and APIs; telemetry 101 Hz; log WebSocket; settings saved atomically to `/etc/aow-hat/settings.json`; Restart button -> systemd restart; journal priorities work |
 
 ## 7. Open items
@@ -185,11 +201,14 @@ Hardware-free work goes first, while the board is being made.
 **Paused 2026-09-29, waiting for the HAT.** Everything that needs no hardware is done and on
 `main`. Resume with, in order:
 
-1. Phase 1 bring-up on the board: `config.txt` overlays for UART2/3/5, SPI0 with the three
-   MCP251863s (`mcp251xfd`) and the ADC, the PWM pin, the watchdog. Note the device names.
-2. The HAT board in `boards/hat` (implementing `daemon/board.h`): ADC128S102 (WAS, current,
-   supply, key), switches, PWM + DIR + EN, SK6812 LEDs, piezo, watchdog kick. Then
-   `--board hat`, and the `--gnss`, `--radio`, `--keya-serial`, `--can` lines in the service unit.
+1. ~~Phase 1 bring-up on the board~~ **done 2026-10-10** (phase 1 record above). Still to
+   done from the shell as well: the watchdog, RS-232 #1 loopback, the key monitor as a
+   service, both RS-232 ports looped (record above).
+2. ~~The HAT board in `boards/hat`~~ **done 2026-10-10** for ADC, switches, PWM + DIR + EN and
+   the watchdog; `--board hat` and the service unit's `--gnss`, `--radio`, `--keya-serial`,
+   `--can`, `--adc-ref` lines are in. Still to write: SK6812 LEDs (GPIO21, PCM) and the piezo
+   (GPIO23, software PWM), both stubs in `HatBoard`. Not yet bench-tested with a WAS pot and
+   a meter on the motor outputs.
 3. Bench: motor follows the app (`steer_probe.py` against real hardware), every stop path, the
    PWM frequency, `kCurrentCountsPerVolt`, the steer timeout, CAN bit rate and bus-off recovery,
    one INSPVAXA capture from a UM981.
@@ -217,11 +236,12 @@ settings. Its `~/AgOpenWeb-HAT` is an rsync copy, not a git checkout.
 
 - PWM frequency for the motor driver. The firmware uses 75 Hz for the DRV8701; the HAT's external
   drivers (MD13S, IBT-2 class) usually want much higher. To decide in phase 3.
-- Which ADC path: the kernel IIO driver or direct `spidev`. To decide in phase 1.
+- ~~Which ADC path: the kernel IIO driver or direct `spidev`.~~ **`spidev`** (decided 2026-10-10):
+  the Pi kernel has no `ti-adc128s052` module, and one 18-byte transfer reads all channels.
 - LED timing from the PCM pin under an RT kernel. To test in phase 5.
 - Whether `pinctrl` is the right tool for the service unit's stop action. To verify in phase 1.
 - INSPVAXA field numbers. The port keeps the firmware's (velocities at 15-17), but Unicore's
   layout has undulation after height, which would put them at 16-18 and make the firmware's speed
   wrong. Settle with a real UM981 capture.
-- GNSS serial device on the HAT (UART5's `/dev/ttyAMA*` name) and the `--gnss` line in the
-  service unit. Until then, `aow-hatd --gnss /dev/ttyUSB0` runs a USB receiver.
+- ~~GNSS serial device on the HAT~~ `/dev/ttyAMA5` (2026-10-10); RS-232 #1 is `/dev/ttyAMA2`,
+  RS-232 #2 `/dev/ttyAMA3`. The service unit still needs the `--gnss` line.

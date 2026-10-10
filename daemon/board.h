@@ -21,6 +21,10 @@ struct Board {
     virtual void showLeds(const indicators::Rgb (&leds)[4]) { (void)leds; }
     // The piezo. Must not block: the HAT driver plays them in the background.
     virtual void playTones(const std::vector<indicators::Tone>& tones) { (void)tones; }
+    // The hardware watchdog (the HAT's STWD100, 1.6 s). Enabled once the control loop runs,
+    // kicked from it; a stalled daemon or kernel then resets the CM4, as the Teensy's did.
+    virtual void watchdog(bool enable) { (void)enable; }
+    virtual void kickWatchdog() {}
 };
 
 // No hardware. The wheel follows the motor: full PWM turns it 30 degrees a second, within

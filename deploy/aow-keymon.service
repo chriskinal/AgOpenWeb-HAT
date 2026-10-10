@@ -1,0 +1,14 @@
+[Unit]
+Description=AOW HAT key monitor (key off for 3 s -> poweroff)
+# Independent of aow-hatd on purpose: a daemon crash must not stop a shutdown.
+
+[Service]
+Type=simple
+# AOW_ADC_REF: the measured 5V_MAIN of this unit (only affects the logged volts, not the decision)
+Environment=AOW_ADC_REF=5.0
+ExecStart=/usr/bin/python3 -I /usr/local/bin/aow-keymon.py
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

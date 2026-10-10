@@ -1,0 +1,28 @@
+# --- AOW HAT (added by deploy/install.sh --hat) ---
+# GPIO0/1 are RS-232 #1, not the HAT ID EEPROM.
+force_eeprom_read=0
+# Analogue audio would claim the PWM block that drives the steering PWM on GPIO18.
+dtparam=audio=off
+# Nothing on the camera/display I2C; keep it quiet.
+camera_auto_detect=0
+display_auto_detect=0
+# Safe states before Linux starts: STEER_EN low, DIR low, piezo off, watchdog disabled, WDI low.
+gpio=24=op,dl
+gpio=2=op,dl
+gpio=23=op,dl
+gpio=3=ip,pu
+gpio=6=op,dl
+# Switch inputs, contact to ground: pulled up.
+gpio=17,27,22=ip,pu
+# Console on the PL011 at GPIO14/15 (J8), Bluetooth off.
+dtoverlay=disable-bt
+enable_uart=1
+# RS-232 #1 (GPIO0/1), RS-232 #2 (GPIO4/5), GNSS (GPIO12/13).
+dtoverlay=uart2
+dtoverlay=uart3
+dtoverlay=uart5
+# Steering PWM: hardware PWM0 on GPIO18 (Alt5).
+dtoverlay=pwm,pin=18,func=2
+# SPI0: CAN1-3 (mcp251xfd) and the ADC (spidev0.3).
+dtoverlay=aow-hat
+# --- end AOW HAT ---

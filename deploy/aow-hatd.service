@@ -4,15 +4,22 @@ Before=agopenweb.service
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/aow-hatd
+# Devices on the HAT (phase 1 record in docs/PLAN.md): GNSS on UART5, RTK radio on RS-232 #1
+# (UART2), Keya serial on RS-232 #2 (UART3), CAN1-3 named by chip select by the udev rule.
+# --adc-ref is the measured 5V_MAIN of this unit (the ADC reference); set it after metering J3.3.
+ExecStart=/usr/local/bin/aow-hatd --board hat --gnss /dev/ttyAMA5 --radio /dev/ttyAMA2 --keya-serial /dev/ttyAMA3 --can hatcan1,hatcan2,hatcan3 --adc-ref 5.12
 Restart=always
 RestartSec=1
 
-# Steering must be off whenever the daemon is not running, however it stopped.
-# GPIO24 = STEER_EN, GPIO18 = STEER_PWM. TO VERIFY on the board: that `pinctrl`
-# is present on the chosen Raspberry Pi OS release and releases cleanly on restart.
+# Steering must be off whenever the daemon is not running, however it stopped, and the
+# hardware watchdog must not reset the CM4 while the daemon restarts.
+# GPIO24 = STEER_EN, GPIO18 = STEER_PWM, GPIO3 = WDT_EN (high = watchdog off). pinctrl is
+# /usr/bin/pinctrl on Trixie (verified 2026-10-10). The stop action leaves GPIO18 as a plain
+# output, so the start action hands it back to PWM0 (Alt5) before the daemon opens it.
+ExecStartPre=/usr/bin/pinctrl set 18 a5
 ExecStopPost=/usr/bin/pinctrl set 24 op dl
 ExecStopPost=/usr/bin/pinctrl set 18 op dl
+ExecStopPost=/usr/bin/pinctrl set 3 ip pu
 
 # Real-time scheduling for the control loop (needs the PREEMPT_RT kernel to mean much).
 CPUSchedulingPolicy=fifo

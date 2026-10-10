@@ -40,8 +40,9 @@ find_package(Threads REQUIRED)
 
 # daemon: Linux only (the HAT drivers need spidev, SocketCAN, termios).
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
-  add_executable(aow-hatd daemon/main.cpp daemon/linux_io.cpp daemon/shared.cpp daemon/web_thread.cpp)
-  target_include_directories(aow-hatd PRIVATE boards/hat)
+  add_executable(aow-hatd daemon/main.cpp daemon/linux_io.cpp daemon/shared.cpp daemon/web_thread.cpp
+    boards/hat/hat_board.cpp)
+  target_include_directories(aow-hatd PRIVATE boards/hat daemon)
   target_link_libraries(aow-hatd PRIVATE aow_core aow_web Threads::Threads)
   install(TARGETS aow-hatd RUNTIME DESTINATION bin)
 endif()
@@ -50,5 +51,6 @@ enable_testing()
 foreach(t pgn app_link gnss gnss_link log settings steer steer_motor can gvret um98x indicators web_server web_api)
   add_executable(test_${t} tests/test_${t}.cpp)
   target_link_libraries(test_${t} PRIVATE aow_web)
+  target_compile_definitions(test_${t} PRIVATE AOW_SOURCE_DIR="${CMAKE_SOURCE_DIR}")  # test data files
   add_test(NAME ${t} COMMAND test_${t})
 endforeach()

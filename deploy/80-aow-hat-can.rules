@@ -1,0 +1,8 @@
+# AOW HAT: name the three MCP251863 CAN interfaces by chip select, not probe order.
+# The names must not be ones the kernel hands out itself (can0, can1, ...): renaming to a
+# name another chip holds at that moment fails with "File exists".
+# spi0.0 = CAN1 (GPIO8, J3 pins 14/15), spi0.1 = CAN2 (GPIO7, J3 pins 16/17),
+# spi0.2 = CAN3 (GPIO25, J3 pins 18/19).
+SUBSYSTEM=="net", ACTION=="add", KERNELS=="spi0.0", NAME="hatcan1"
+SUBSYSTEM=="net", ACTION=="add", KERNELS=="spi0.1", NAME="hatcan2"
+SUBSYSTEM=="net", ACTION=="add", KERNELS=="spi0.2", NAME="hatcan3"
