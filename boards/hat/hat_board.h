@@ -1,11 +1,13 @@
 // The AOW HAT as the daemon's Board: ADC128S102 over spidev, switches and the motor's DIR/EN
 // through the GPIO character device, PWM0 through sysfs, the STWD100 watchdog lines.
-// Pins: hat_pins.h. LEDs and the piezo are not driven yet (phase 7).
+// The four SK6812 LEDs are in hat_leds, the piezo in hat_piezo. Pins: hat_pins.h.
 #pragma once
 
 #include <cstdint>
 
 #include "board.h"
+#include "hat_leds.h"
+#include "hat_piezo.h"
 
 namespace aow::hat {
 
@@ -34,6 +36,8 @@ public:
     void drive(const steer::Output& out) override;
     void watchdog(bool enable) override;
     void kickWatchdog() override;
+    void showLeds(const indicators::Rgb (&leds)[4]) override { leds_.show(leds); }
+    void playTones(const std::vector<indicators::Tone>& tones) override { piezo_.play(tones); }
 
     // Telemetry: the last ADC conversion of each channel, 12-bit, and the derived volts.
     uint16_t adcCounts(int channel) const { return channel >= 0 && channel < 8 ? adc_[channel] : 0; }
@@ -61,6 +65,9 @@ private:
     bool dirHigh_ = false;
     bool wdiHigh_ = false;
     uint64_t outBits_ = 0;
+    // Declared last: destroyed first, while the GPIO chip is still open.
+    HatLeds leds_;
+    HatPiezo piezo_;
 };
 
 }  // namespace aow::hat

@@ -58,6 +58,7 @@ struct Options {
     float adcRef = 5.0f;                       // --board hat: the measured 5V_MAIN
     bool noWatchdog = false;                   // --board hat: leave the STWD100 off (debugging)
     bool anyApp = false;                       // accept PGNs from any host, not only --app
+    bool indicatorTest = false;                // light each LED in turn, play the chime, exit
     bool verbose = false;
 };
 
@@ -78,6 +79,7 @@ void usage() {
         "  --pwm-hz N        hat: motor PWM frequency (default 20000)\n"
         "  --adc-ref V       hat: the measured 5V_MAIN, the ADC reference (default 5.0)\n"
         "  --no-watchdog     hat: leave the hardware watchdog off (for debugging)\n"
+        "  --indicator-test  each LED red, green, blue in turn, then the chime; then exit\n"
         "  --can A,B,C       SocketCAN interfaces for CAN1-3 (default can0,can1,can2)\n"
         "  --gvret-port N    SavvyCAN (GVRET) over TCP (default 23; 0 = off)\n"
         "  --keya-serial DEV probe for a Keya motor on this serial port at startup\n"
@@ -107,6 +109,7 @@ bool parseArgs(int argc, char** argv, Options& o) {
         else if (!std::strcmp(a, "--adc-ref") && hasValue) o.adcRef = static_cast<float>(std::atof(argv[++i]));
         else if (!std::strcmp(a, "--no-watchdog")) o.noWatchdog = true;
         else if (!std::strcmp(a, "--any-app")) o.anyApp = true;
+        else if (!std::strcmp(a, "--indicator-test")) o.indicatorTest = true;
         else if (!std::strcmp(a, "-v") || !std::strcmp(a, "--verbose")) o.verbose = true;
         else if (!std::strcmp(a, "--version")) { std::printf("aow-hatd %s\n", kVersion); std::exit(0); }
         else { usage(); return false; }
@@ -270,6 +273,23 @@ int main(int argc, char** argv) {
     aow::Board& board = *boardPtr;
     board.drive({});  // motor off until the controller says otherwise
     LOG_INFO(Autosteer, "Board: %s", board.name());
+    if (opt.indicatorTest) {
+        // For the bench: confirms the chain order (LED 0 PWR first) and the colour order.
+        const aow::indicators::Rgb colours[3] = {{60, 0, 0}, {0, 60, 0}, {0, 0, 60}};
+        for (int led = 0; led < 4; ++led) {
+            for (const auto& c : colours) {
+                aow::indicators::Rgb rgb[4] = {};
+                rgb[led] = c;
+                board.showLeds(rgb);
+                usleep(500'000);
+            }
+        }
+        const aow::indicators::Rgb off[4] = {};
+        board.showLeds(off);
+        board.playTones(aow::indicators::bootChime(1));
+        usleep(1'800'000);
+        return fail(0);
+    }
     board.playTones(aow::indicators::bootChime(shared.settings().misc.buzzerVolume));
 
     // CAN buses. The bit rate comes from the settings, applied at startup (a change needs a

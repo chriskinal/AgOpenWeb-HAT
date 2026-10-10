@@ -206,9 +206,11 @@ Hardware-free work goes first, while the board is being made.
    service, both RS-232 ports looped (record above).
 2. ~~The HAT board in `boards/hat`~~ **done 2026-10-10** for ADC, switches, PWM + DIR + EN and
    the watchdog; `--board hat` and the service unit's `--gnss`, `--radio`, `--keya-serial`,
-   `--can`, `--adc-ref` lines are in. Still to write: SK6812 LEDs (GPIO21, PCM) and the piezo
-   (GPIO23, software PWM), both stubs in `HatBoard`. Not yet bench-tested with a WAS pot and
-   a meter on the motor outputs.
+   `--can`, `--adc-ref` lines are in. The SK6812 LEDs (`hat_leds`, PCM on GPIO21) and the piezo
+   (`hat_piezo`, a thread toggling GPIO23) were added the same day: the PCM clock starts, a
+   frame drains from the FIFO and GPIO23 toggles during the chime, all read back on the board.
+   Confirmed by eye and ear with `aow-hatd --board hat --indicator-test` (service stopped):
+   LED order PWR, GPS, STEER, INS on D19-D22; each red, green, blue; then the five-tone chime.
 3. Bench: motor follows the app (`steer_probe.py` against real hardware), every stop path, the
    PWM frequency, `kCurrentCountsPerVolt`, the steer timeout, CAN bit rate and bus-off recovery,
    one INSPVAXA capture from a UM981.
@@ -238,7 +240,9 @@ settings. Its `~/AgOpenWeb-HAT` is an rsync copy, not a git checkout.
   drivers (MD13S, IBT-2 class) usually want much higher. To decide in phase 3.
 - ~~Which ADC path: the kernel IIO driver or direct `spidev`.~~ **`spidev`** (decided 2026-10-10):
   the Pi kernel has no `ti-adc128s052` module, and one 18-byte transfer reads all channels.
-- LED timing from the PCM pin under an RT kernel. To test in phase 5.
+- ~~LED timing from the PCM pin under an RT kernel.~~ Not a scheduling question as built
+  (2026-10-10): four LEDs are 13 words, loaded whole into the PCM's 64-word FIFO and shifted
+  out by the hardware at 3 MHz (four PCM bits per LED bit). Needs `/dev/mem`, so root.
 - Whether `pinctrl` is the right tool for the service unit's stop action. To verify in phase 1.
 - INSPVAXA field numbers. The port keeps the firmware's (velocities at 15-17), but Unicore's
   layout has undulation after height, which would put them at 16-18 and make the firmware's speed

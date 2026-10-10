@@ -149,6 +149,9 @@ bool HatBoard::open(const HatOptions& opt) {
     LOG_INFO(System, "HAT: ADC %s, GPIO %s, PWM %s/pwm%u at %u Hz, reference %.2f V", opt.spidev, opt.gpiochip,
              opt.pwmchip, opt.pwmChannel, opt.pwmHz, static_cast<double>(opt.adcReferenceVolts));
     readAdc();
+    // Indicators: the daemon runs without them if they fail (each logs why).
+    leds_.open();
+    piezo_.open(chipFd_, static_cast<unsigned>(kPiezo));
     return true;
 }
 
