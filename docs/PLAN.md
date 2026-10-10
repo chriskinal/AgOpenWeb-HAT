@@ -225,9 +225,21 @@ In order:
 3. **CAN on a real bus.** Loopback passed. Still to check on the MCP251863s: that
    `restart-ms 100` brings a bus back after bus-off (two ports wired together, SJ1-SJ3 closed),
    then one brand on a machine.
-4. **The System Update page.** The firmware's is unauthenticated; recommended is signed packages
-   only, or none (update by `install.sh` over SSH). Until decided, the Home page's System Update
-   button returns 404.
+4. **The System Update page. Decided 2026-10-10: a signed upload page**, because users, not
+   only the developer, will update units, often with no internet at the tractor.
+   - CI builds one arm64 bundle (binary, overlay, units, `install.sh`) and signs it; the public
+     key is built into the daemon. An unsigned or altered file is rejected before unpacking.
+     The firmware's unauthenticated page is not copied: this daemon runs as root and steers.
+   - The daemon only receives the file. A separate root service verifies and installs it (the
+     daemon cannot replace itself, and the hardware watchdog would reset the CM4).
+   - Refused while steering is armed. The previous version is kept and put back if the new
+     daemon does not stay up.
+   - The same bundle installs over SSH with `install.sh`.
+   - Releases will be public: the repo is to move to the AgOpenGPS official organisation. Until
+     then there is nowhere for users to download from.
+   - **The HAT page updates the HAT software only.** AgOpenWeb's own updates are AgOpenWeb's to
+     handle, so there is one procedure per product, not two places doing the same job.
+   Not built yet; until it is, the Home page's System Update button returns 404.
 5. **The AgOpenWeb changes** (section 5), in that repo.
 6. **Latency under load** (phase 8), with GNSS, CAN and the web pages all busy.
 
