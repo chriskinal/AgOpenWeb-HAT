@@ -62,9 +62,29 @@ bool UdpLink::open(uint16_t listenPort) {
     return true;
 }
 
+bool UdpLink::setAcceptFrom(const char* host) {
+    if (!host) {
+        filter_ = false;
+        return true;
+    }
+    if (inet_pton(AF_INET, host, &accept_) != 1) {
+        std::fprintf(stderr, "bad app host %s\n", host);
+        return false;
+    }
+    filter_ = true;
+    return true;
+}
+
 int UdpLink::receive(uint8_t* buf, size_t cap) {
-    const ssize_t n = recv(fd_, buf, cap, 0);
-    return n > 0 ? static_cast<int>(n) : 0;
+    for (;;) {
+        sockaddr_in from{};
+        socklen_t fromLen = sizeof from;
+        const ssize_t n = recvfrom(fd_, buf, cap, 0, reinterpret_cast<sockaddr*>(&from), &fromLen);
+        if (n <= 0) return 0;
+        if (!filter_ || from.sin_addr.s_addr == accept_.s_addr) return static_cast<int>(n);
+        ++ignored_;
+        inet_ntop(AF_INET, &from.sin_addr, lastIgnored_, sizeof lastIgnored_);
+    }
 }
 
 bool UdpLink::send(const uint8_t* buf, size_t len) {

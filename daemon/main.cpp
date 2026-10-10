@@ -29,6 +29,7 @@
 #include "aow/motor.h"
 #include "aow/steer.h"
 #include "board.h"
+#include "hat_board.h"
 #include "linux_io.h"
 #include "shared.h"
 #include "web_thread.h"
@@ -53,6 +54,10 @@ struct Options {
     const char* canIfaces = "can0,can1,can2";  // CAN1 (K_Bus), CAN2 (ISO_Bus), CAN3 (V_Bus)
     const char* keyaSerial = nullptr;          // RS-232 #2 on the HAT
     const char* radio = nullptr;               // RS-232 #1 on the HAT: RTK radio
+    unsigned pwmHz = 20000;                    // --board hat: motor PWM frequency
+    float adcRef = 5.0f;                       // --board hat: the measured 5V_MAIN
+    bool noWatchdog = false;                   // --board hat: leave the STWD100 off (debugging)
+    bool anyApp = false;                       // accept PGNs from any host, not only --app
     bool verbose = false;
 };
 
@@ -61,14 +66,18 @@ void usage() {
         "usage: aow-hatd [options]\n"
         "  --app HOST        where replies go (default 127.0.0.1)\n"
         "  --app-port N      app's port (default 9999)\n"
+        "  --any-app         accept PGNs from any host, not only the --app one (bench use)\n"
         "  --listen-port N   port the app sends to (default 8888)\n"
         "  --gnss DEVICE     GNSS receiver serial port, e.g. /dev/ttyUSB0 (default: none)\n"
         "  --gnss-baud N     (default 460800)\n"
         "  --rtcm-port N     RTCM corrections from the app (default 2233)\n"
         "  --config FILE     settings (default /etc/aow-hat/settings.json)\n"
         "  --web-port N      web pages (default 80; 0 = none). WebSockets stay on 8082/8083\n"
-        "  --board NAME      sim (default until the HAT drivers exist): no hardware, the\n"
-        "                    wheel angle follows the motor command\n"
+        "  --board NAME      hat: the AOW HAT; sim (default): no hardware, the wheel angle\n"
+        "                    follows the motor command\n"
+        "  --pwm-hz N        hat: motor PWM frequency (default 20000)\n"
+        "  --adc-ref V       hat: the measured 5V_MAIN, the ADC reference (default 5.0)\n"
+        "  --no-watchdog     hat: leave the hardware watchdog off (for debugging)\n"
         "  --can A,B,C       SocketCAN interfaces for CAN1-3 (default can0,can1,can2)\n"
         "  --gvret-port N    SavvyCAN (GVRET) over TCP (default 23; 0 = off)\n"
         "  --keya-serial DEV probe for a Keya motor on this serial port at startup\n"
@@ -94,6 +103,10 @@ bool parseArgs(int argc, char** argv, Options& o) {
         else if (!std::strcmp(a, "--gvret-port") && hasValue) o.gvretPort = static_cast<uint16_t>(std::atoi(argv[++i]));
         else if (!std::strcmp(a, "--keya-serial") && hasValue) o.keyaSerial = argv[++i];
         else if (!std::strcmp(a, "--radio") && hasValue) o.radio = argv[++i];
+        else if (!std::strcmp(a, "--pwm-hz") && hasValue) o.pwmHz = static_cast<unsigned>(std::atoi(argv[++i]));
+        else if (!std::strcmp(a, "--adc-ref") && hasValue) o.adcRef = static_cast<float>(std::atof(argv[++i]));
+        else if (!std::strcmp(a, "--no-watchdog")) o.noWatchdog = true;
+        else if (!std::strcmp(a, "--any-app")) o.anyApp = true;
         else if (!std::strcmp(a, "-v") || !std::strcmp(a, "--verbose")) o.verbose = true;
         else if (!std::strcmp(a, "--version")) { std::printf("aow-hatd %s\n", kVersion); std::exit(0); }
         else { usage(); return false; }
@@ -151,7 +164,9 @@ std::string readFile(const std::string& path) {
     return s.str();
 }
 
-void logSummary(const aow::AppLink& app, const aow::GnssLink* gnss, const aow::steer::Autosteer& a) {
+void logSummary(const aow::AppLink& app, const aow::GnssLink* gnss, const aow::steer::Autosteer& a,
+                const aow::linux_io::UdpLink* udp = nullptr) {
+    static uint32_t ignoredSeen = 0;
     LOG_INFO(Autosteer, "Steer: %s, guidance %s, motor %s, WAS %.1f, target %.1f, speed %.1f", a.armed() ? "armed" : "disarmed",
              a.guidanceActive() ? "on" : "off", a.motorState() == aow::steer::MotorState::Disabled ? "off" : "on",
              static_cast<double>(a.actualAngleDeg()), static_cast<double>(a.targetAngleDeg()),
@@ -163,6 +178,11 @@ void logSummary(const aow::AppLink& app, const aow::GnssLink* gnss, const aow::s
     else
         LOG_INFO(System, "App: rx %u, rejected %u, PGN 254 %u, last %llu ms ago, send errors %u", c.received,
                  c.rejected, c.commands, static_cast<unsigned long long>(age / 1000), c.sendErrors);
+    if (udp && udp->ignored() != ignoredSeen) {
+        ignoredSeen = udp->ignored();
+        LOG_WARNING(System, "Ignored %u datagrams from other hosts (last %s): another AgOpenGPS app on the network?",
+                    ignoredSeen, udp->lastIgnoredHost());
+    }
     if (gnss) {
         const auto& g = gnss->counters();
         const auto& s = gnss->state();
@@ -211,6 +231,7 @@ int main(int argc, char** argv) {
     aow::linux_io::MonotonicClock clock;
     aow::linux_io::UdpLink udp;
     if (!udp.open(opt.listenPort) || !udp.setDestination(opt.appHost, opt.appPort)) return fail(1);
+    if (!opt.anyApp && !udp.setAcceptFrom(opt.appHost)) return fail(1);
 
     aow::linux_io::SerialPort gnssPort;
     aow::linux_io::UdpLink rtcm;
@@ -231,12 +252,22 @@ int main(int argc, char** argv) {
     aow::AppLink app(udp, clock, moduleIp);
     aow::GnssLink gnss(gnssPort, udp, clock);
 
-    if (std::strcmp(opt.board, "sim") != 0) {
-        LOG_ERROR(System, "Unknown board '%s' (only 'sim' exists until the HAT drivers are written)", opt.board);
+    aow::SimBoard simBoard;
+    aow::hat::HatBoard hatBoard;
+    aow::Board* boardPtr = nullptr;
+    if (!std::strcmp(opt.board, "sim")) {
+        boardPtr = &simBoard;
+    } else if (!std::strcmp(opt.board, "hat")) {
+        aow::hat::HatOptions ho;
+        ho.pwmHz = opt.pwmHz;
+        ho.adcReferenceVolts = opt.adcRef;
+        if (!hatBoard.open(ho)) return fail(2);
+        boardPtr = &hatBoard;
+    } else {
+        LOG_ERROR(System, "Unknown board '%s' (sim or hat)", opt.board);
         return fail(2);
     }
-    aow::SimBoard simBoard;
-    aow::Board& board = simBoard;
+    aow::Board& board = *boardPtr;
     board.drive({});  // motor off until the controller says otherwise
     LOG_INFO(Autosteer, "Board: %s", board.name());
     board.playTones(aow::indicators::bootChime(shared.settings().misc.buzzerVolume));
@@ -314,7 +345,8 @@ int main(int argc, char** argv) {
     uint64_t lastRadioPulseMs = 0, nextLeds = 0;
     uint8_t ledColors[4] = {};
     const uint64_t summaryTicks = opt.verbose ? 500 : 6000;
-    uint64_t ticks = 0, nextSummary = summaryTicks, nextTurnSensor = 0, nextMotorProcess = 0;
+    uint64_t ticks = 0, nextSummary = summaryTicks, nextTurnSensor = 0, nextMotorProcess = 0, nextKick = 0;
+    bool watchdogOn = false;
     int code = 0;
     for (;;) {
         if (poll(fds, 6, -1) < 0) {
@@ -357,6 +389,16 @@ int main(int argc, char** argv) {
         if (fds[kTick].revents) {
             uint64_t expirations = 0;
             if (read(tickFd, &expirations, sizeof expirations) == sizeof expirations) ticks += expirations;
+            if (!opt.noWatchdog) {
+                if (!watchdogOn) {  // from the first tick: the loop is running
+                    watchdogOn = true;
+                    board.watchdog(true);
+                }
+                if (ticks >= nextKick) {  // 10 Hz against the 1.6 s timeout
+                    nextKick = ticks + 10;
+                    board.kickWatchdog();
+                }
+            }
             // The UM98x page borrowing the GNSS port, or giving it back.
             if (shared.gnssPauseRequested.load() && !shared.gnssPaused.load()) {
                 fds[kGnss].fd = -1;  // not polled, so its bytes cannot spin the loop
@@ -442,7 +484,7 @@ int main(int argc, char** argv) {
 
             if (ticks >= nextSummary) {
                 nextSummary = ticks + summaryTicks;
-                logSummary(app, opt.gnssDevice ? &gnss : nullptr, autosteer);
+                logSummary(app, opt.gnssDevice ? &gnss : nullptr, autosteer, &udp);
             }
         }
     }
@@ -452,6 +494,7 @@ int main(int argc, char** argv) {
     motor->process();
     motor->process();
     board.drive({});  // the service unit's ExecStopPost is the backstop
+    if (watchdogOn) board.watchdog(false);
     close(tickFd);
     close(sigFd);
     return fail(code);

@@ -26,15 +26,26 @@ public:
     // Each returns false and prints the reason on failure.
     bool open(uint16_t listenPort);
     bool setDestination(const char* host, uint16_t port);
+    // Only datagrams from this host are delivered; the rest are counted and dropped. Another
+    // AgOpenGPS app on the same network (a second tractor, a laptop) must not be able to arm
+    // or disarm this unit's steering. nullptr accepts everyone.
+    bool setAcceptFrom(const char* host);
     int fd() const { return fd_; }
 
     int receive(uint8_t* buf, size_t cap) override;
     bool send(const uint8_t* buf, size_t len) override;
 
+    uint32_t ignored() const { return ignored_; }   // datagrams from other hosts
+    const char* lastIgnoredHost() const { return lastIgnored_; }
+
 private:
     int fd_ = -1;
     sockaddr_in dest_{};
     bool haveDest_ = false;
+    bool filter_ = false;
+    in_addr accept_{};
+    uint32_t ignored_ = 0;
+    char lastIgnored_[16] = {};
 };
 
 // A SocketCAN interface (can0..2 on the HAT's MCP251863s; vcan for tests). Classic CAN only,
