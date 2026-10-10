@@ -1,5 +1,5 @@
 // The hardware the control loop reads and drives. One implementation per board: the HAT
-// (boards/hat, when it exists) and a simulator for a CM4 with no HAT.
+// (boards/hat/hat_board.h) and a simulator for a CM4 with no HAT.
 #pragma once
 
 #include <vector>

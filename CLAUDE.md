@@ -40,25 +40,36 @@ The Teensy firmware is not being rewritten and nothing is ported back to it.
 
 ## Status
 
-- **Board:** routed, audit clean (2026-09-28 export); DRC and Gerber check before ordering.
+- **Board:** built. Assembled boards arrived 2026-10-09 and one is fitted to the dev CM4's IO
+  board with a UM982EB on J7. The power latch and every peripheral passed on the bench
+  (issues doc section 2; docs/PLAN.md phase 1 record). What is left needs a vehicle or a load.
   4 layers: Top, Inner1 GND plane, Inner2 signal with a GND pour, Bottom. Rules 0.2 mm track and
   clearance, 0.5 mm power. Routed with EasyEDA's JLCPCB router, GND skipped; GND vias placed by
   hand, including one at each J3 protection diode. J1.17 left unconnected (issues H10).
 - **Daemon:** runs on Linux and answers the app as steer (126) and GPS (120): hello, scan, and a
   PGN 253 for every PGN 254 (`core/app_link`). GNSS done in core (`nmea`, `gnss`, `nav`,
-  `gnss_link`): receiver sentences in, PANDA/PAOGI out, RTCM through; runs today with
-  `--gnss /dev/ttyUSB0`. Event logger, JSON settings file and the firmware's web pages
+  `gnss_link`): receiver sentences in, PANDA/PAOGI out, RTCM through; on the HAT the receiver
+  is `/dev/ttyAMA5`. Event logger, JSON settings file and the firmware's web pages
   (Home, Device, Event logger, Logs, Network) on port 80 with WebSockets 8082/8083, served by a
   normal-priority web thread. Steering logic in `core/steer` (arming, kickouts, timeouts, soft
-  start, P controller, PGN 250/251/252), closed-loop on `--board sim`; no HAT drivers yet.
+  start, P controller, PGN 250/251/252), closed-loop on `--board sim` and, with a pot as the
+  WAS, on `--board hat`. HAT drivers in `boards/hat`: ADC over spidev, switches and DIR/EN
+  through the GPIO character device, PWM0 through sysfs, the STWD100 watchdog (kicked from
+  the control loop), SK6812 LEDs from the PCM block, the piezo. Not yet run with a motor driver.
   Tractor CAN (all 9 brands, JSON engine, Keya CAN), Keya serial, CAN page and upload, GVRET on
   TCP 23: done and tested on vcan. The firmware's CAN files live in `core/src/can` near-verbatim.
   UM98x (GPS) page, radio RTCM (`--radio`) and GPS passthrough: done. LED and buzzer logic
   (`core/indicators`; `/api/status` shows the LED colours), `aow-hatctl`: done.
+  PGNs are accepted only from the `--app` host (loopback); `--any-app` lifts that.
+- **Key monitor:** `deploy/aow-keymon.py`, its own service: key off for 3 s runs `poweroff`.
 - **Scope:** port every v26 firmware function the HAT hardware supports, web UI included
   (docs/PLAN.md section 2).
 - **Dev CM4:** `chris@192.168.4.217`, passwordless sudo, Trixie Lite with the packaged
-  PREEMPT_RT kernel. Sync with `rsync -a --exclude build --exclude hardware --exclude .git ./
+  PREEMPT_RT kernel, HAT fitted. Runs `aow-hatd --board hat`, `aow-keymon` and AgOpenWeb
+  (headless, UI on port 5174) as services. The hardware watchdog is live while the daemon
+  runs: stop the service, do not kill the process. Device names: CAN `hatcan1`-`hatcan3`,
+  GNSS `/dev/ttyAMA5`, RS-232 `/dev/ttyAMA2` and `/dev/ttyAMA3`, ADC `/dev/spidev0.3`.
+  Sync with `rsync -a --exclude build --exclude hardware --exclude .git ./
   chris@192.168.4.217:AgOpenWeb-HAT/`, build there with cmake.
 
 ## Layout
@@ -67,12 +78,12 @@ The Teensy firmware is not being rewritten and nothing is ported back to it.
 AgOpenWeb-HAT/
 ├── core/            # Logic with no hardware or Linux dependency; builds on any desktop
 ├── hal/             # Interfaces core uses to reach hardware (aow/hal.h)
-├── boards/hat/      # HAT pin map (hat_pins.h) and, later, its Linux drivers
+├── boards/hat/      # HAT pin map (hat_pins.h), device tree overlay and Linux drivers
 ├── web/             # The firmware's web pages (web/pages, copied) and API on POSIX sockets
 ├── daemon/          # The Linux executable: control thread + web thread
 ├── third_party/     # ArduinoJson 7.4.2 (the firmware's JSON library, MIT)
 ├── tests/           # Unit tests for core
-├── deploy/          # install.sh, aow-hatd.service
+├── deploy/          # install.sh, service units, config.txt block, udev rule, key monitor
 ├── docs/PLAN.md
 └── hardware/
     ├── hat/         # HAT design, netlist, BOM, issues
@@ -103,6 +114,9 @@ scan, then PGN 254 at a set rate, checking every reply and timing the 253.
 `tests/steer_probe.py` closes the steering loop against `--board sim`.
 `tests/can_probe.py build/aow-hatd` runs Valtra/MF CAN steering and GVRET on vcan0-2.
 `tests/um98x_probe.py build/aow-hatd` runs the GPS page and radio with ptys as the devices.
+On the HAT: `tests/adc_read.py` reads all eight ADC channels, `tests/hat_bench.py` plays the app
+with a fixed target angle for a pot-and-meter bench, and `aow-hatd --board hat --indicator-test`
+cycles the LEDs and plays the chime (stop the service first for both daemon tests).
 
 ## Hardware audit scripts
 
