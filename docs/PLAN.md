@@ -166,11 +166,11 @@ Hardware-free work went first, while the board was being made. The HAT arrived 2
 | Phase | Work | Needs the HAT | Done when |
 |---|---|---|---|
 | 1 | OS bring-up: RT kernel, overlays, `hatcan1`-`hatcan3`, UARTs, ADC, PWM, watchdog, key-off monitor (**done 2026-10-10**, record below) | yes | each device answers from the shell |
-| 2 | GNSS: receiver in, PANDA/PAOGI out, RTCM through (done; UM982 on the HAT's UART5, position and heading shown in AgOpenWeb 2026-10-10) | UART only | AgOpenWeb shows an RTK fix from the HAT (open: no corrections fed yet) |
+| 2 | GNSS: receiver in, PANDA/PAOGI out, RTCM through (done; UM982 on the HAT's UART5, position and heading shown in AgOpenWeb 2026-10-10) | UART only | AgOpenWeb shows an RTK fix from the HAT (**done 2026-10-10**) |
 | 3 | Foundation: event logger, settings file, web server with Home, Device, Event logger and Logs pages, telemetry (done) | no | pages work on the dev CM4 |
 | 4 | Steering in core: PGN 251/252, controller, soft start, kickouts, timeouts, PGN 250 (done; `--board sim` closes the loop on a bare CM4); the HAT drivers (done 2026-10-10, loop closed with a pot as the WAS) | drivers only | every stop path unit-tested (done, mutation-checked); bench motor follows the app (open: needs a motor driver) |
 | 5 | CAN: SocketCAN, JSON engine, the 9 brands, Keya CAN and serial, CAN page and upload, GVRET (done on vcan) | bench tests only | one brand verified on a machine |
-| 6 | UM98x page, radio RTCM on RS-232 #1 (done, on ptys) | receiver | receiver config read and written from the page |
+| 6 | UM98x page, radio RTCM on RS-232 #1 (done, on ptys) | receiver | receiver config read and written from the page (**done 2026-10-10** on a UM982; radio RTCM not yet tried with a radio) |
 | 7 | LED and buzzer logic, `aow-hatctl`, installer, LED and piezo drivers (done); update page, the AgOpenWeb changes | yes | clean install on a fresh image, both hardware choices |
 | 8 | Latency measurement under load | yes | worst case recorded; decide if anything more is needed |
 
@@ -195,7 +195,7 @@ Hardware-free work went first, while the board was being made. The HAT arrived 2
 | 2026-10-10 | RS-232 #1 loopback through U9 (J3.23 to J3.24), 1024 bytes each way on `/dev/ttyAMA2` | identical at 9600, 115200 and 460800 baud. RS-232 #2 (`/dev/ttyAMA3`, J3.25 to J3.26) the same |
 | 2026-10-10 | **GNSS board fitted: UM982** (firmware R4.10Build13495), on UART5 `/dev/ttyAMA5` at 460800 | receiver sends GGA, VTG and HPR at 10 Hz; the daemon counted 3596 sentences, 0 bad checksums, 1198 nav sentences sent, 27 satellites, dual-antenna heading valid (HPR quality 4). Commands go the other way too: `VERSIONA` and `CONFIG` answered. No corrections fed, so fix quality 1 |
 | 2026-10-10 | **AgOpenWeb on the same CM4**: nightly f7ab69da, headless bundle `agopenweb-linux-arm64.tar.gz`, `install.sh --from app`; UI on :5174, app on UDP 9999, daemon on 8888 and 2233 | the app sends each frame on loopback and as a broadcast on wlan0; the daemon hears the loopback copy (3202 PGN 254 in the first minute, 0 rejected, answers on loopback) and drops the broadcast copy with its sender filter; PWR LED green. **In the app's UI:** the HAT shows as the GPS and autosteer modules, position and dual-antenna heading from the UM982 are live, and the wheel sprite follows the pot on the WAS input |
-| 2026-10-10 | **RTCM end to end**: NTRIP configured in AgOpenWeb (nightly f7ab69da) on the same CM4 | the app sends RTCM to `127.0.0.1:2233`; the daemon counted 1284 packets, 0 bytes dropped, and pulses the GPS LED blue; the UM982 went from fix quality 1 to **5 (RTK float)** with a correction age of 0.2 s. Fixed (4) not yet seen on the bench antenna position |
+| 2026-10-10 | **RTCM end to end**: NTRIP configured in AgOpenWeb (nightly f7ab69da) on the same CM4 | the app sends RTCM to `127.0.0.1:2233`; the daemon counted 1284 packets, 0 bytes dropped, and pulses the GPS LED blue; the UM982 went from fix quality 1 to **5 (RTK float)** with a correction age of 0.2 s, and then to **4 (RTK fixed)**: the GPS LED went green. This is phase 2's "done when" |
 | 2026-10-10 | PWM0 at 100 Hz, 50 %, metered at J3.10 | 1.647 V on the Fluke (3.3 V x 0.5); J3.11 DIR and J3.12 EN at 0 V from boot |
 | 2026-09-28 | `install.sh --hat` on the dev CM4, `web_probe.py` on port 80 | control thread FIFO 80, web thread normal; all pages and APIs; telemetry 101 Hz; log WebSocket; settings saved atomically to `/etc/aow-hat/settings.json`; Restart button -> systemd restart; journal priorities work |
 
@@ -216,12 +216,12 @@ In order:
      shorter value is possible, but the app has known UI stalls of 1-3 s (its own comments), and
      the motor would stop mid-turn on every stall.
 2. **GNSS.** The UART5 path is proven both ways with a UM982, and RTCM from the app reaches
-   it: RTK float on the bench (record above). Still open: an RTK fixed solution with the
-   antennas in the clear, a write from the UM98x page (its read works on the real
-   receiver), and one
-   INSPVAXA capture from a **UM981** to settle the field numbers: the port keeps the firmware's
-   (velocities at 15-17), but Unicore's layout has undulation after height, which would put
-   them at 16-18 and make the speed wrong. The UM982 has no INS, so it cannot answer that.
+   it: RTK fixed on the bench (record above). The UM98x page reads the real receiver's
+   configuration and writes it back; the receiver restarts on the save and comes straight back
+   (2026-10-10). Still open: one INSPVAXA capture from a **UM981** to settle the field numbers.
+   The port keeps the firmware's (velocities at 15-17), but Unicore's layout has undulation
+   after height, which would put them at 16-18 and make the speed wrong. The UM982 has no INS,
+   so it cannot answer that.
 3. **CAN on a real bus.** Loopback passed. Still to check on the MCP251863s: that
    `restart-ms 100` brings a bus back after bus-off (two ports wired together, SJ1-SJ3 closed),
    then one brand on a machine.
