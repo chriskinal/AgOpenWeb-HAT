@@ -46,18 +46,32 @@
 Setup note: writing the EEPROM from Linux on a CM4 needs a `[cm4]` block in `config.txt`, and on
 this bench that lost the saved Wi-Fi profile. Use `rpiboot` instead (design §7).
 
+### 2.1a Done: assembled HAT alone on the bench, 2026-10-10
+
+Boards from JLCPCB, assembled, J1/J2 sockets fitted. Bench supplies only: 5 V on J1.2 (`5V_IO`),
+12 V on J3.21 (key) and J3.1 (sense), a 100 kΩ from J2.1 to `3V3_AON` standing in for the CM4's
+`GLOBAL_EN` pull-up, a jumper from `3V3_AON` to J1.1 standing in for a running CM4.
+
+| ID | Check | Result |
+|---|---|---|
+| **B16** | No shorts on `5V_IO`, `5V_MAIN`, `+3V3`, `3V3_AON`; D6–D8 alike in diode test; CAN pairs open; R9/D4 path intact | **pass.** Video-microscope inspection clean. (A lead slipped near J3.21/J2 during setup, no damage found.) |
+| **B17** | Latch off with the key off: `5V_MAIN` 0 V, Q1 holds J2.1 low | **pass.** |
+| **B18** | Key on: `5V_MAIN` and `+3V3` up, J2.1 released; key off: `5V_MAIN` drops at once | **pass.** |
+| **B19** | Hold path: `CM4_3V3` jumpered → latch on; hold of 1.2–2.6 s after it is removed | **pass.** |
+| **B20** | Low-voltage comparator: U3.1 low at 12 V on J3.1, high about 1 s after dropping to 11.0 V | **pass.** |
+
 ### 2.2 To do before trusting it in a tractor
 
 | ID | Check | Why | Status |
 |---|---|---|---|
 | **B4** | **Crank dip on the IO board:** run the IO board + HAT from a bench supply stepped down to 8, 7, 6 V for 1–5 s | the IO board is **rated down to 7.5 V**; a hard crank may reset it | open |
 | **B5** | **Meter the IO board's J20** before building the J5 lead: pin 1 should read +12 V (barrel jack powered) | J20's pin order is the reverse of floppy-cable colours | open |
-| **B6** | **Latch off-state:** key off, CM4 halted → `5V_MAIN` at 0 V and `GLOBAL_EN` held low (the CM4 stays off) | | open, needs the built HAT |
+| **B6** | **Latch off-state:** key off, CM4 halted → `5V_MAIN` at 0 V and `GLOBAL_EN` held low (the CM4 stays off) | | **pass (2026-10-10):** on the IO board with the CM4 running Trixie and `aow-keymon`, taking 12 V off J3.21 gave an orderly shutdown and the unit went off. (With J3.1 unconnected the low-voltage cut-off had cut it hard ~10 s after key-off: the sense wire must be connected.) `5V_MAIN` 0.1 V and `CM4_3V3` 0.001 V after the halt (B15) |
 | **B7** | **Standby draw** of the whole system with the key off, compared with the ≈ 0.31 mA estimate (design §4.5) | | open, needs the built HAT |
-| **B14** | **Battery connect with the key off:** the CM4 must not boot (Q1 holds `GLOBAL_EN` low from power-up). If it does start briefly, it should shut itself down | power-up race between the IO board's 5 V and Q1 | open, needs the built HAT |
+| **B14** | **Battery connect with the key off:** the CM4 must not boot (Q1 holds `GLOBAL_EN` low from power-up). If it does start briefly, it should shut itself down | power-up race between the IO board's 5 V and Q1 | **pass (2026-10-10):** 12 V reconnected at J20 with the key off: the CM4 stays off. Key on (12 V on J3.21) boots it, from the held-off state and after a key-off shutdown. The watchdog reset (RUN_PG) reboots it with the key on |
 | **B8** | **Low-voltage cut-off:** trips at 11.5 V ± 0.2 V, only 6–13 s after key-off | | open, needs the built HAT |
-| **B9** | **Restart:** key off → on during shutdown, and a UI shutdown with the key on, both restart the CM4 | block E | open, needs the built HAT |
+| **B9** | **Restart:** key off → on during shutdown, and a UI shutdown with the key on, both restart the CM4 | block E | **pass (2026-10-10)** for the UI-shutdown case: `systemctl poweroff` with the key on, the CM4 halted and restarted by itself, back on SSH 48 s after the command with 19 s of uptime. Key off → on during shutdown not yet tried (same block E path) |
 | **B10** | **Crank test on a machine** with the keyed feed on IGN/RUN: no dropouts, no false trips | | open |
 | **B11** | **Shutdown time** on the production image (key-off → halt) | the key monitor and the UI should know it | open |
 | **B12** | **5 V current** on the built system (the CM4 busy, CAN traffic, GNSS running) against the ≈ 1.6 A typical / 2.77 A worst estimate | | open |
-| **B15** | **Back-powering at halt:** with the HAT fitted and the key off, `CM4_3V3` falls to 0 V after halt and the latch releases | U9 and the CAN chips still drive high into the unpowered CM4 pins, which may hold `CM4_3V3` and `HOLD_G` up | open, needs the built HAT |
+| **B15** | **Back-powering at halt:** with the HAT fitted and the key off, `CM4_3V3` falls to 0 V after halt and the latch releases | U9 and the CAN chips still drive high into the unpowered CM4 pins, which may hold `CM4_3V3` and `HOLD_G` up | **pass (2026-10-10):** after a key-off shutdown, J1.1 `CM4_3V3` = 0.001 V, J3.3 `5V_MAIN` = 0.1 V. No back-powering; the latch releases |
