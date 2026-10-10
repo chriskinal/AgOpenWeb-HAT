@@ -161,17 +161,17 @@ for bench use.
 
 ## 6. Build order
 
-Hardware-free work goes first, while the board is being made.
+Hardware-free work went first, while the board was being made. The HAT arrived 2026-10-09.
 
 | Phase | Work | Needs the HAT | Done when |
 |---|---|---|---|
-| 1 | OS bring-up: RT kernel (done), overlays, `can0`-`can2`, UARTs, ADC, PWM, watchdog, key-off monitor | yes | each device answers from the shell |
-| 2 | GNSS: receiver in, PANDA/PAOGI out, RTCM through (done, except the HAT UART) | UART only | AgOpenWeb shows an RTK fix from the HAT |
+| 1 | OS bring-up: RT kernel, overlays, `hatcan1`-`hatcan3`, UARTs, ADC, PWM, watchdog, key-off monitor (**done 2026-10-10**, record below) | yes | each device answers from the shell |
+| 2 | GNSS: receiver in, PANDA/PAOGI out, RTCM through (done; the HAT's UART5 is `/dev/ttyAMA5` and in the service unit, no receiver fitted yet) | UART only | AgOpenWeb shows an RTK fix from the HAT |
 | 3 | Foundation: event logger, settings file, web server with Home, Device, Event logger and Logs pages, telemetry (done) | no | pages work on the dev CM4 |
-| 4 | Steering in core: PGN 251/252, controller, soft start, kickouts, timeouts, PGN 250 (done; `--board sim` closes the loop on a bare CM4); then the HAT drivers | drivers only | every stop path unit-tested (done, mutation-checked); bench motor follows the app |
+| 4 | Steering in core: PGN 251/252, controller, soft start, kickouts, timeouts, PGN 250 (done; `--board sim` closes the loop on a bare CM4); the HAT drivers (done 2026-10-10, loop closed with a pot as the WAS) | drivers only | every stop path unit-tested (done, mutation-checked); bench motor follows the app (open: needs a motor driver) |
 | 5 | CAN: SocketCAN, JSON engine, the 9 brands, Keya CAN and serial, CAN page and upload, GVRET (done on vcan) | bench tests only | one brand verified on a machine |
 | 6 | UM98x page, radio RTCM on RS-232 #1 (done, on ptys) | receiver | receiver config read and written from the page |
-| 7 | LED and buzzer logic, `aow-hatctl`, installer (done); update page, LED and piezo drivers, the AgOpenWeb changes | yes | clean install on a fresh image, both hardware choices |
+| 7 | LED and buzzer logic, `aow-hatctl`, installer, LED and piezo drivers (done); update page, the AgOpenWeb changes | yes | clean install on a fresh image, both hardware choices |
 | 8 | Latency measurement under load | yes | worst case recorded; decide if anything more is needed |
 
 ### Phase 1 record
@@ -193,59 +193,60 @@ Hardware-free work goes first, while the board is being made.
 | 2026-10-10 | **`aow-hatd --board hat`** (`boards/hat/hat_board.cpp`: ADC over spidev, switches and DIR/EN/WDT through the GPIO character device, PWM0 through sysfs at 20 kHz), watchdog on, `pgn_probe.py` 300 x PGN 254 at 100 Hz | 300/300 answered, round trip median 0.08 ms, worst 0.48 ms; WAS reads the floating input (-4.6 deg); EN low from start to stop; the watchdog is enabled at the first tick, kicked at 10 Hz, and set off (GPIO3 high) at exit |
 | 2026-10-10 | **Steering bench**, `tests/hat_bench.py` (the app at 100 Hz, Kp 40, target +20 deg) with a 10 k pot on J3.3/J3.4/J3.5 as the WAS and the Fluke on J3.10/11/12 | pot reads -68 to +68 deg lock to lock (30 counts/deg); PWM 255 away from the target, 28 at 0.5 deg; J3.12 EN 3.3 V while armed, J3.10 3.3 V at full PWM, J3.11 DIR 0 V below the target and 3.3 V past it; no disarm or kickout over several sweeps. Killing the script mid-run (the app goes silent): the 2 s communication timeout logged, J3.12 EN low and PWM duty 0 on the hardware. (First runs showed a 10 ms disarm every 17 s: a tablet on the LAN broadcasting PGN 254 with guidance off; the daemon now ignores hosts other than `--app`, section 4) |
 | 2026-10-10 | RS-232 #1 loopback through U9 (J3.23 to J3.24), 1024 bytes each way on `/dev/ttyAMA2` | identical at 9600, 115200 and 460800 baud. RS-232 #2 (`/dev/ttyAMA3`, J3.25 to J3.26) the same |
+| 2026-10-10 | **GNSS board fitted: UM982** (firmware R4.10Build13495), on UART5 `/dev/ttyAMA5` at 460800 | receiver sends GGA, VTG and HPR at 10 Hz; the daemon counted 3596 sentences, 0 bad checksums, 1198 nav sentences sent, 27 satellites, dual-antenna heading valid (HPR quality 4). Commands go the other way too: `VERSIONA` and `CONFIG` answered. No corrections fed, so fix quality 1 |
+| 2026-10-10 | **AgOpenWeb on the same CM4**: nightly f7ab69da, headless bundle `agopenweb-linux-arm64.tar.gz`, `install.sh --from app`; UI on :5174, app on UDP 9999, daemon on 8888 and 2233 | the app sends each frame on loopback and as a broadcast on wlan0; the daemon hears the loopback copy (3202 PGN 254 in the first minute, 0 rejected, answers on loopback) and drops the broadcast copy with its sender filter; PWR LED green |
 | 2026-10-10 | PWM0 at 100 Hz, 50 %, metered at J3.10 | 1.647 V on the Fluke (3.3 V x 0.5); J3.11 DIR and J3.12 EN at 0 V from boot |
 | 2026-09-28 | `install.sh --hat` on the dev CM4, `web_probe.py` on port 80 | control thread FIFO 80, web thread normal; all pages and APIs; telemetry 101 Hz; log WebSocket; settings saved atomically to `/etc/aow-hat/settings.json`; Restart button -> systemd restart; journal priorities work |
 
 ## 7. Open items
 
-**Paused 2026-09-29, waiting for the HAT.** Everything that needs no hardware is done and on
-`main`. Resume with, in order:
+**Status 2026-10-10.** The HAT is fitted to the dev CM4 and every function on it has working
+code: phases 1 to 7 are done except the items below. Each needs a part on the bench, a machine,
+or a decision.
 
-1. ~~Phase 1 bring-up on the board~~ **done 2026-10-10** (phase 1 record above). Still to
-   done from the shell as well: the watchdog, RS-232 #1 loopback, the key monitor as a
-   service, both RS-232 ports looped (record above).
-2. ~~The HAT board in `boards/hat`~~ **done 2026-10-10** for ADC, switches, PWM + DIR + EN and
-   the watchdog; `--board hat` and the service unit's `--gnss`, `--radio`, `--keya-serial`,
-   `--can`, `--adc-ref` lines are in. The SK6812 LEDs (`hat_leds`, PCM on GPIO21) and the piezo
-   (`hat_piezo`, a thread toggling GPIO23) were added the same day: the PCM clock starts, a
-   frame drains from the FIFO and GPIO23 toggles during the chime, all read back on the board.
-   Confirmed by eye and ear with `aow-hatd --board hat --indicator-test` (service stopped):
-   LED order PWR, GPS, STEER, INS on D19-D22; each red, green, blue; then the five-tone chime.
-3. Bench: motor follows the app (`steer_probe.py` against real hardware), every stop path, the
-   PWM frequency, `kCurrentCountsPerVolt`, the steer timeout, CAN bit rate and bus-off recovery,
-   one INSPVAXA capture from a UM981.
-4. Decide the System Update page: the firmware's is unauthenticated; recommended is signed
-   packages only (or none: update by `install.sh` over SSH).
-5. The AgOpenWeb changes (section 5), in that repo.
+In order:
 
-The dev CM4 (`chris@192.168.4.217`) runs `aow-hatd` as a service with `--board sim` and default
-settings. Its `~/AgOpenWeb-HAT` is an rsync copy, not a git checkout.
+1. **A motor driver on the bench** (MD13S / IBT-2 class). Settles three things:
+   - PWM frequency. The default is 20 kHz (`--pwm-hz`); the firmware used 75 Hz for the DRV8701.
+   - Current sense scale. `kCurrentCountsPerVolt` in `core/steer.h` maps HAT volts to the
+     firmware's Teensy counts so the app's current threshold keeps its meaning; set it from the
+     driver's current output.
+   - The steer timeout. It stays at the firmware's 2 s. AgOpenWeb sends PGN 254 at 100 Hz, so a
+     shorter value is possible, but the app has known UI stalls of 1-3 s (its own comments), and
+     the motor would stop mid-turn on every stall.
+2. **GNSS.** The UART5 path is proven both ways with a UM982 (record above). Still open: RTCM
+   from the app through to an RTK fix, a write from the UM98x page (its read works on the real
+   receiver), and one
+   INSPVAXA capture from a **UM981** to settle the field numbers: the port keeps the firmware's
+   (velocities at 15-17), but Unicore's layout has undulation after height, which would put
+   them at 16-18 and make the speed wrong. The UM982 has no INS, so it cannot answer that.
+3. **CAN on a real bus.** Loopback passed. Still to check on the MCP251863s: that
+   `restart-ms 100` brings a bus back after bus-off (two ports wired together, SJ1-SJ3 closed),
+   then one brand on a machine.
+4. **The System Update page.** The firmware's is unauthenticated; recommended is signed packages
+   only, or none (update by `install.sh` over SSH). Until decided, the Home page's System Update
+   button returns 404.
+5. **The AgOpenWeb changes** (section 5), in that repo.
+6. **Latency under load** (phase 8), with GNSS, CAN and the web pages all busy.
 
-- CAN bit rate is set with `ip link` at startup, as root. Check on the HAT's MCP251863s
-  (`mcp251xfd`) that `restart-ms 100` brings a bus back after bus-off.
+Smaller:
+
 - The brand JSON files are in `deploy/can-config/`; the upload page takes a file from the
   user's device. Decide whether the installer puts them somewhere the page can offer directly.
+- `--adc-ref` in the service unit is this unit's measured `5V_MAIN` (5.12 V). It only scales the
+  VIN and key telemetry; decide whether it becomes a setting on the Device page.
+- Single-feed detection (sense wire and key on the same switched 12 V) is logged by the key
+  monitor at key-off; the warning at the next boot is not written.
 
-- Current sense scale. `kCurrentCountsPerVolt` in `core/steer.h` maps HAT volts to the
-  firmware's Teensy counts so the app's current threshold keeps its meaning; set it from the
-  motor driver's current output when one is on the bench.
-- The steer timeout stays at the firmware's 2 s. AgOpenWeb sends PGN 254 at 100 Hz, so a
-  shorter value is possible, but the app has known UI stalls of 1-3 s (its own comments); decide
-  with the bench motor, which would stop mid-turn on every stall.
+Settled on the board, 2026-10-10 (details in the phase 1 record):
 
-- The Home page's System Update button returns 404: the update page is not built yet (see the
-  decision below).
+- ADC path: `spidev` (`/dev/spidev0.3`). The Pi kernel has no `ti-adc128s052` module.
+- LED timing under the RT kernel: not a scheduling question. The frame is loaded whole into the
+  PCM FIFO and shifted out by hardware. Needs `/dev/mem`, so root.
+- `pinctrl` for the service unit's stop action: present as `/usr/bin/pinctrl` on Trixie and used.
+- Device names: GNSS `/dev/ttyAMA5`, RS-232 #1 `/dev/ttyAMA2`, RS-232 #2 `/dev/ttyAMA3`, CAN
+  `hatcan1`-`hatcan3`.
 
-- PWM frequency for the motor driver. The firmware uses 75 Hz for the DRV8701; the HAT's external
-  drivers (MD13S, IBT-2 class) usually want much higher. To decide in phase 3.
-- ~~Which ADC path: the kernel IIO driver or direct `spidev`.~~ **`spidev`** (decided 2026-10-10):
-  the Pi kernel has no `ti-adc128s052` module, and one 18-byte transfer reads all channels.
-- ~~LED timing from the PCM pin under an RT kernel.~~ Not a scheduling question as built
-  (2026-10-10): four LEDs are 13 words, loaded whole into the PCM's 64-word FIFO and shifted
-  out by the hardware at 3 MHz (four PCM bits per LED bit). Needs `/dev/mem`, so root.
-- Whether `pinctrl` is the right tool for the service unit's stop action. To verify in phase 1.
-- INSPVAXA field numbers. The port keeps the firmware's (velocities at 15-17), but Unicore's
-  layout has undulation after height, which would put them at 16-18 and make the firmware's speed
-  wrong. Settle with a real UM981 capture.
-- ~~GNSS serial device on the HAT~~ `/dev/ttyAMA5` (2026-10-10); RS-232 #1 is `/dev/ttyAMA2`,
-  RS-232 #2 `/dev/ttyAMA3`. The service unit still needs the `--gnss` line.
+The dev CM4 (`chris@192.168.4.217`) runs `aow-hatd --board hat` and `aow-keymon` as services,
+installed by `deploy/install.sh --hat`. Its `~/AgOpenWeb-HAT` is an rsync copy, not a git
+checkout.
