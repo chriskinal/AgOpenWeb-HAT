@@ -2,6 +2,7 @@
 // UDP link to the app.
 #pragma once
 
+#include <atomic>
 #include <netinet/in.h>
 
 #include <cstdint>
@@ -30,12 +31,17 @@ public:
     // AgOpenGPS app on the same network (a second tractor, a laptop) must not be able to arm
     // or disarm this unit's steering. nullptr accepts everyone.
     bool setAcceptFrom(const char* host);
+    // This unit's own addresses (network byte order, 0 = unused slot), kept current by someone
+    // else. A datagram from one of them is the app's broadcast copy of what it also sent on
+    // loopback: still dropped, but not counted as another host's.
+    void setOwnAddresses(const std::atomic<uint32_t>* addresses, size_t count) { own_ = addresses; ownCount_ = count; }
     int fd() const { return fd_; }
 
     int receive(uint8_t* buf, size_t cap) override;
     bool send(const uint8_t* buf, size_t len) override;
 
     uint32_t ignored() const { return ignored_; }   // datagrams from other hosts
+    uint32_t ownCopies() const { return ownCopies_; }  // dropped copies from our own addresses
     const char* lastIgnoredHost() const { return lastIgnored_; }
 
 private:
@@ -45,6 +51,9 @@ private:
     bool filter_ = false;
     in_addr accept_{};
     uint32_t ignored_ = 0;
+    uint32_t ownCopies_ = 0;
+    const std::atomic<uint32_t>* own_ = nullptr;
+    size_t ownCount_ = 0;
     char lastIgnored_[16] = {};
 };
 

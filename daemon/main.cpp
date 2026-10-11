@@ -240,6 +240,7 @@ int main(int argc, char** argv) {
     aow::linux_io::UdpLink udp;
     if (!udp.open(opt.listenPort) || !udp.setDestination(opt.appHost, opt.appPort)) return fail(1);
     if (!opt.anyApp && !udp.setAcceptFrom(opt.appHost)) return fail(1);
+    udp.setOwnAddresses(shared.ownAddresses, aow::Shared::kOwnAddresses);
 
     aow::linux_io::SerialPort gnssPort;
     aow::linux_io::UdpLink rtcm;

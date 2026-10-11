@@ -321,7 +321,14 @@ void WebThread::run() {
         if (Clock::now() >= nextNetworkCheck) {
             nextNetworkCheck = Clock::now() + std::chrono::seconds(1);
             bool up = false;
-            for (const auto& i : backend.interfaces()) up = up || (i.up && !i.ip.empty());
+            size_t n = 0;
+            for (const auto& i : backend.interfaces()) {
+                up = up || (i.up && !i.ip.empty());
+                in_addr a{};
+                if (n < Shared::kOwnAddresses && inet_pton(AF_INET, i.ip.c_str(), &a) == 1)
+                    shared_.ownAddresses[n++].store(a.s_addr, std::memory_order_relaxed);
+            }
+            while (n < Shared::kOwnAddresses) shared_.ownAddresses[n++].store(0, std::memory_order_relaxed);
             shared_.networkUp = up;
         }
         if (shared_.takeSaveRequest()) {

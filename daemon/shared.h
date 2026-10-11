@@ -81,6 +81,11 @@ public:
     // Times the CAN watch has restarted each channel's interface (can_watch.h).
     std::atomic<uint32_t> canRestarts[3] = {};
 
+    // This unit's IPv4 addresses, network byte order, 0 = none; the web thread refreshes them
+    // every second (for UdpLink::setOwnAddresses).
+    static constexpr size_t kOwnAddresses = 8;
+    std::atomic<uint32_t> ownAddresses[kOwnAddresses] = {};
+
     // A non-loopback interface is up (for the PWR LED); the web thread checks every second.
     std::atomic<bool> networkUp{false};
 

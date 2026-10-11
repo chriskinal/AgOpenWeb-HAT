@@ -82,6 +82,13 @@ int UdpLink::receive(uint8_t* buf, size_t cap) {
         const ssize_t n = recvfrom(fd_, buf, cap, 0, reinterpret_cast<sockaddr*>(&from), &fromLen);
         if (n <= 0) return 0;
         if (!filter_ || from.sin_addr.s_addr == accept_.s_addr) return static_cast<int>(n);
+        bool own = false;
+        for (size_t i = 0; i < ownCount_ && !own; ++i)
+            own = own_[i].load(std::memory_order_relaxed) == from.sin_addr.s_addr && from.sin_addr.s_addr != 0;
+        if (own) {
+            ++ownCopies_;
+            continue;
+        }
         ++ignored_;
         inet_ntop(AF_INET, &from.sin_addr, lastIgnored_, sizeof lastIgnored_);
     }

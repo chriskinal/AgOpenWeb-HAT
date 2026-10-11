@@ -442,10 +442,10 @@ daemon's task controller on `hatcan2`, the simulated implement on `hatcan3`.
   CAN3, and again both channels came back by themselves once the link was right; the
   implement reconnected. So bus-off recovery by `restart-ms` works on this hardware in every
   case tried, the one stuck channel is unexplained, and the watch stays as insurance.
-- Noticed in the log: the daemon warns every minute about ignored datagrams from the unit's
-  own LAN address. They are AgOpenWeb's broadcast copies of what it also sends on loopback
-  (section 5, the loopback lock). Harmless, but the warning should not fire for our own
-  addresses.
+- The daemon was warning every minute about ignored datagrams from the unit's own LAN
+  address: AgOpenWeb's broadcast copies of what it also sends on loopback (section 5, the
+  loopback lock). They are still dropped, but no longer counted as another host's or warned
+  about; only a genuinely foreign sender is.
 
 Not done yet: PGN 240 back to the app, upstream's status screen for a tractor's terminal
 (decide with AgIsoVT on the bench), a real implement, and two real CAN nodes (two HAT channels
