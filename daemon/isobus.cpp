@@ -264,6 +264,7 @@ void Isobus::run() {
     // controller's periodic work and passes section states each way.
     const auto started = Clock::now();
     auto claimedAt = started, lastStatusMessage = started, lastSnapshot = started;
+    auto lastReopen = started;
     bool claimed = false, reportedFailure = false, busActive = false, reportedAlone = false;
     bool sectionControl = false;
     uint8_t implementSections = 0;
@@ -309,6 +310,15 @@ void Isobus::run() {
             LOG_WARNING(Can, "ISOBUS: nothing on %s acknowledged the address claim: no other device on the bus",
                         interface_.c_str());
             reportedAlone = true;
+        }
+
+        // --- The stack's SocketCAN driver closes its socket when the interface goes down (the CAN
+        // watch restarting a stuck channel, or someone using "ip link"), and never opens it
+        // again. Its receive thread keeps looking, so opening it here is all it takes.
+        if (!driver->get_is_valid() && elapsed(lastReopen, 1000)) {
+            lastReopen = Clock::now();
+            driver->open();
+            if (driver->get_is_valid()) LOG_NOTICE(Can, "ISOBUS: %s is back: reopened", interface_.c_str());
         }
 
         // --- The task controller, once we have had an address for 250 ms (J1939-81: nothing

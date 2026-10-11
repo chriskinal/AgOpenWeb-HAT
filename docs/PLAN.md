@@ -420,6 +420,33 @@ daemon's task controller on `hatcan2`, the simulated implement on `hatcan3`.
   whose sends keep failing and cycle the interface. This is the bus-off check in section 7
   item 3, and it applies to the brand CAN channels as much as to ISOBUS.
 
+**Stalled-channel recovery (2026-10-10, version 0.2.1 on the dev CM4).**
+
+- `daemon/can_watch.cpp`, its own normal-priority thread, looks at each real CAN channel once
+  a second. The rule (`core/include/aow/can_stall.h`, unit-tested): frames queued, none sent
+  since the last look, controller error-active with a transmit error count of 0, three looks
+  running. Then the interface goes down and up, a warning is logged and `/api/status`
+  `canRestarts` counts it; ten seconds' grace follows. A channel alone on its bus (queued,
+  none sent, but error-passive at 128) is left alone: CAN1 on the dev unit sits in that state
+  and is not touched. `tc` and `ip` are only run for a channel that has sent nothing since the
+  last look.
+- AgIsoStack++'s SocketCAN driver closes its socket for good when its interface goes down.
+  `daemon/isobus.cpp` reopens it. Checked by cycling `hatcan2` by hand with the implement
+  connected: reopened within a second, the implement stayed connected.
+- **The stuck state itself has not been reproduced**, so the watch has not been seen to catch
+  the real thing. CAN2 high shorted to CAN2 low for 14 s gave 90 bus-off restarts, and the
+  channel came back by itself as soon as the short was removed; the implement reconnected
+  3 s later and the watch rightly did nothing. Two channels at different bit rates under load
+  gave errors but no bus-off. The link wired crossed again (high of one bus to low of the
+  other, as when it first happened) for 48 s gave 324 bus-off restarts on CAN2 and one on
+  CAN3, and again both channels came back by themselves once the link was right; the
+  implement reconnected. So bus-off recovery by `restart-ms` works on this hardware in every
+  case tried, the one stuck channel is unexplained, and the watch stays as insurance.
+- Noticed in the log: the daemon warns every minute about ignored datagrams from the unit's
+  own LAN address. They are AgOpenWeb's broadcast copies of what it also sends on loopback
+  (section 5, the loopback lock). Harmless, but the warning should not fire for our own
+  addresses.
+
 Not done yet: PGN 240 back to the app, upstream's status screen for a tractor's terminal
 (decide with AgIsoVT on the bench), a real implement, and two real CAN nodes (two HAT channels
 wired together would do).

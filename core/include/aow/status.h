@@ -25,6 +25,9 @@ struct Status {
     uint8_t satellites = 0;
     uint32_t navSent = 0;
 
+    // Times each CAN channel's interface was restarted after it stopped sending (can_watch.h).
+    uint32_t canRestarts[3] = {};
+
     // The four status LEDs (indicators::Color as numbers: 0 off, 1 red, 2 amber, 3 green, 4 blue).
     uint8_t leds[4] = {};
 };

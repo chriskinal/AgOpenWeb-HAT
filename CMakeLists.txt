@@ -62,7 +62,7 @@ find_package(Threads REQUIRED)
 # daemon: Linux only (the HAT drivers need spidev, SocketCAN, termios).
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
   add_executable(aow-hatd daemon/main.cpp daemon/linux_io.cpp daemon/shared.cpp daemon/web_thread.cpp
-    daemon/isobus.cpp
+    daemon/isobus.cpp daemon/can_watch.cpp
     boards/hat/hat_board.cpp boards/hat/hat_leds.cpp boards/hat/hat_piezo.cpp)
   target_include_directories(aow-hatd PRIVATE boards/hat daemon)
   set(AOW_VERSION "${PROJECT_VERSION}" CACHE STRING "Version reported by aow-hatd and stamped on update packages")
@@ -94,7 +94,7 @@ if(AOW_ISOBUS)
 endif()
 
 enable_testing()
-foreach(t pgn app_link gnss gnss_link log settings steer steer_motor can gvret um98x indicators web_server web_api hat_leds)
+foreach(t pgn app_link gnss gnss_link log settings steer steer_motor can can_stall gvret um98x indicators web_server web_api hat_leds)
   add_executable(test_${t} tests/test_${t}.cpp)
   target_link_libraries(test_${t} PRIVATE aow_web)
   target_include_directories(test_${t} PRIVATE boards/hat)

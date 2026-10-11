@@ -78,6 +78,9 @@ public:
     std::atomic<bool> gnssPauseRequested{false};
     std::atomic<bool> gnssPaused{false};
 
+    // Times the CAN watch has restarted each channel's interface (can_watch.h).
+    std::atomic<uint32_t> canRestarts[3] = {};
+
     // A non-loopback interface is up (for the PWR LED); the web thread checks every second.
     std::atomic<bool> networkUp{false};
 

@@ -29,6 +29,7 @@
 #include "aow/motor.h"
 #include "aow/steer.h"
 #include "board.h"
+#include "can_watch.h"
 #include "hat_board.h"
 #include "isobus.h"
 #include "linux_io.h"
@@ -300,6 +301,7 @@ int main(int argc, char** argv) {
     // restart, as in the firmware).
     const aow::Settings startSettings = shared.settings();
     aow::linux_io::SocketCan can[3];
+    aow::CanWatch canWatch(shared);
     CanCompatHooks hooks;
     hooks.clock = &clock;
     hooks.popup = [&app](const char* msg, uint8_t seconds, uint8_t color) { app.sendPopup(msg, seconds, color); };
@@ -328,10 +330,12 @@ int main(int argc, char** argv) {
             if (!name.empty() && can[i].open(name.c_str(), bitrate)) {
                 hooks.bus[i] = &can[i];
                 LOG_INFO(Can, "CAN%d on %s, %u bit/s", i + 1, name.c_str(), bitrate);
+                canWatch.add(i, name, bitrate);
             }
         }
     }
     canCompatSetup(hooks);
+    canWatch.start();
 
     // ISOBUS shares its channel with the brand engine above: two sockets on one interface.
     aow::Isobus isobus(shared);
@@ -535,6 +539,7 @@ int main(int argc, char** argv) {
                 board.showLeds(rgb);
             }
             std::copy(std::begin(ledColors), std::end(ledColors), std::begin(st.leds));
+            for (int i = 0; i < 3; ++i) st.canRestarts[i] = shared.canRestarts[i].load(std::memory_order_relaxed);
             shared.setStatus(st);
 
             if (ticks >= nextSummary) {
@@ -550,6 +555,7 @@ int main(int argc, char** argv) {
     motor->process();
     board.drive({});  // the service unit's ExecStopPost is the backstop
     isobus.stop();
+    canWatch.stop();
     if (watchdogOn) board.watchdog(false);
     close(tickFd);
     close(sigFd);

@@ -105,6 +105,8 @@ Response status(Backend& b, const char* version) {
     gnss["fixQuality"] = st.fixQuality;
     gnss["satellites"] = st.satellites;
     doc["appConnected"] = st.haveAppLink;
+    JsonArray canRestarts = doc["canRestarts"].to<JsonArray>();  // AOW HAT: see daemon/can_watch.h
+    for (uint32_t n : st.canRestarts) canRestarts.add(n);
     isobusStatusJson(b.isobusStatus(), doc["isobus"].to<JsonObject>());  // AOW HAT: not in the firmware's status
     static const char* const kColors[] = {"off", "red", "amber", "green", "blue"};
     JsonArray leds = doc["leds"].to<JsonArray>();

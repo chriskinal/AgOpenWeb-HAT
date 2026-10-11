@@ -70,6 +70,8 @@ The Teensy firmware is not being rewritten and nothing is ported back to it.
   `third_party/aog-taskcontroller/` is upstream's file **unmodified**: change the stand-in
   headers in `daemon/isobus_compat/` or `daemon/isobus.cpp` instead. Include the stack's
   headers before any `aow/` header and `#undef` its `LOG_*` macros, as `daemon/isobus.cpp` does.
+- **CAN watch:** `daemon/can_watch.cpp` restarts a CAN interface that has frames queued and sends
+  none with no bus error (seen once after a bus-off storm; `/api/status` `canRestarts`).
 - **Key monitor:** `deploy/aow-keymon.py`, its own service: key off for 3 s runs `poweroff`.
 - **Updates:** `deploy/package.sh` (on Linux arm64) builds a bundle and a signed `.aowpkg`; the
   System Update page (`/ota`) takes the `.aowpkg`, and `deploy/aow-hat-update`, a separate root
