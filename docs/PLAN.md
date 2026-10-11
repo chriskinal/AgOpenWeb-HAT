@@ -225,7 +225,9 @@ In order:
    The port keeps the firmware's (velocities at 15-17), but Unicore's layout has undulation
    after height, which would put them at 16-18 and make the speed wrong. The UM982 has no INS,
    so it cannot answer that.
-3. **CAN on a real bus.** Loopback passed. Still to check on the MCP251863s: that
+3. **CAN on a real bus.** Two channels linked carry traffic cleanly (section 8, real CAN
+   record), but a channel stayed dead after repeated bus-off until the interface was cycled:
+   fix that first. Loopback passed. Still to check on the MCP251863s: that
    `restart-ms 100` brings a bus back after bus-off (two ports wired together, SJ1-SJ3 closed),
    then one brand on a machine.
 4. **The System Update page: built 2026-10-10**, a signed upload page, because users, not only
@@ -400,6 +402,23 @@ That is accepted: if the implement side has failed there is no reason to keep st
   count and width, and a box per section coloured by asked-for against reported. Settings are
   read at startup, so a save offers to restart the daemon. `/api/isobus` serves it.
 - Checked in a browser against the simulated implement.
+
+**Real CAN record (2026-10-10).** Version 0.2.0 installed on the dev CM4 through the update
+page's path. CAN2 and CAN3 linked at J3 (pin 17 to 19, pin 16 to 18), SJ2 and SJ3 closed; the
+daemon's task controller on `hatcan2`, the simulated implement on `hatcan3`.
+
+- The implement connects, and section patterns from PGN 254 reach it in 42 to 63 ms. Its
+  reported states come back, speed from the tractor ECU role is on the bus (8.0 km/h), and all
+  sections go off 2.0 s after the app stops. No bus errors on either channel in about 2,000
+  frames each way. This is also the first traffic between two of the HAT's CAN transceivers.
+- **A channel did not come back by itself after bus-off.** While the link was first wired
+  crossed, `hatcan2` went bus-off about 20 times (`restart-ms 100` restarting it each time).
+  Once the wiring was right it sat error-active with a full transmit queue: every send failed
+  with "No buffer space available" and nothing went out, until the daemon was restarted, which
+  takes the interface down and up. Seen once. Until it is understood, a bus fault on a real
+  machine could leave a channel dead until a restart: the daemon should notice a channel
+  whose sends keep failing and cycle the interface. This is the bus-off check in section 7
+  item 3, and it applies to the brand CAN channels as much as to ISOBUS.
 
 Not done yet: PGN 240 back to the app, upstream's status screen for a tractor's terminal
 (decide with AgIsoVT on the bench), a real implement, and two real CAN nodes (two HAT channels
