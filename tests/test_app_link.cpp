@@ -158,5 +158,29 @@ int main() {
     link.sendPopup(std::string(200, 'x').c_str(), 3, 2);
     CHECK(parsed(udp.out[1], f) && f.len == 112);
 
+    // Sections: the 16 in PGN 254 until PGN 229 brings all 64; back to 254 a second after the
+    // last 229. PGN 241 is the app's ISOBUS section control switch, on until an app says off.
+    {
+        AppLink l(udp, clock, ip);
+        CHECK(l.sections() == 0 && l.sectionControl());
+        udp.in.push_back(frame(pgn::kSrcHost, pgn::SteerData, {50, 0, 1, 0, 0, 0, 0x05, 0x80}));
+        l.poll();
+        CHECK(l.sections() == 0x8005);
+        udp.in.push_back(frame(pgn::kSrcHost, pgn::Sections64, {0x01, 0, 0, 0, 0, 0, 0, 0x80, 50, 50}));
+        l.poll();
+        CHECK(l.sections() == 0x8000000000000001ull);
+        clock.us += 999'000;
+        CHECK(l.sections() == 0x8000000000000001ull);
+        clock.us += 2'000;
+        CHECK(l.sections() == 0x8005);
+        udp.in.push_back(frame(pgn::kSrcHost, pgn::Sections64, {1, 2, 3}));  // short: ignored
+        udp.in.push_back(frame(pgn::kSrcHost, pgn::SectionControl, {0}));
+        l.poll();
+        CHECK(l.sections() == 0x8005 && !l.sectionControl());
+        udp.in.push_back(frame(pgn::kSrcHost, pgn::SectionControl, {1}));
+        l.poll();
+        CHECK(l.sectionControl());
+    }
+
     return finish("app_link");
 }

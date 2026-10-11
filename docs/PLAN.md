@@ -158,6 +158,7 @@ for bench use.
 | RTCM forward target configurable (was `192.168.5.255:2233`). **Seen working 2026-10-10:** the nightly sends RTCM to loopback when the HAT is its module; check the code path and whether anything is left to do | `MainViewModel.Ntrip.cs:110-111` | AiO boards on 192.168.5.x |
 | Lock to a loopback module, so 100 Hz packets stop being broadcast on every interface | `UdpCommunicationService` `LockToSubnet` | discovery of LAN modules |
 | Service unit: start after `aow-hatd` when a HAT is fitted | `deploy/linux/agopenweb.service` | installs with no HAT |
+| ISOBUS (section 8), optional: send PGN 241 (section control on/off) and read PGN 240 (the implement's section count and reported states), as AgOpenGPS does for AOG-TaskController | `PgnBuilder`, section control | machine modules on PGN 239/229 |
 
 ## 6. Build order
 
@@ -347,6 +348,42 @@ That is accepted: if the implement side has failed there is no reason to keep st
   `-DAOW_ISOBUS=OFF` builds without it. Its logging macros share names with the daemon's:
   see the include order at the top of `daemon/isobus.cpp`.
 - Not yet tried against a second real CAN node.
+
+**Step 2 record (2026-10-10, branch `isobus`).** Section control works against a simulated implement.
+
+- `third_party/aog-taskcontroller/`: upstream's `task_controller.cpp/.hpp` at commit `4ede403`,
+  **unmodified**. The two headers it expects are the daemon's own, in `daemon/isobus_compat/`:
+  its log lines go to `isobus/tc.log` beside the settings file (and to the logger at debug
+  level), and implements' descriptions are saved under `isobus/<NAME>/`.
+- `daemon/isobus.cpp` does what upstream's `app.cpp` did: starts the server 250 ms after the
+  claim, announces basic and section control (1 boom, 64 sections), sends the task controller
+  status every 2 s, and passes section states each way.
+- **Where the sections come from.** `AppLink::sections()`: the 16 bits in PGN 254, or all 64 from
+  PGN 229 while the app sends it. The control thread writes them to two atomics each tick; the
+  ISOBUS thread reads them every 10 ms. No lock between the two.
+- **When section control is on.** Upstream waits for PGN 241 from the app. AgOpenWeb does not
+  send it, so the rule here is: on while the app's PGN 254 is arriving (the 2 s app timeout),
+  unless an app has sent PGN 241 = 0. Going off, every section is set off first. Stopping the
+  daemon does the same.
+- `tests/isobus_tc_probe.py` with `build/isobus_implement` (AgIsoStack++'s section control
+  simulator, 16 or 64 sections) on vcan: connect, sections from PGN 254 and PGN 229 reaching
+  the implement, its reported states coming back in `/api/status`, PGN 241 off and on, app
+  silent (sections off after 2.0 s), implement lost and replaced, sections off when the daemon
+  stops. Section commands reach the implement in 40 to 85 ms, of which 20 ms is the test's
+  own polling.
+- **An upstream cost to raise with them.** `ClientState::get_section_actual_state()` searches
+  the whole description for each section's parents: 2.3 ms a call with a 64-section implement
+  on the CM4, 150 ms for all 64. Upstream calls it for every section ten times a second, which
+  would take a whole core on a Pi. Here `TcServer` (a subclass in `daemon/isobus.cpp`, upstream's
+  file untouched) notes in `on_value_command()` which sections an implement has just reported
+  on, and only those are read again, one every 10 ms from a copy, so setpoints are never held
+  up. ISOBUS thread CPU with an implement connected and idle: 1.2 %, the same for 16 and 64
+  sections (it was 94 % for 64 before this).
+- Upstream uses `std::find_if` without `<algorithm>`; the build adds the include from outside.
+- The first configure sets the build type to Release if none is given.
+
+Not done yet: the tractor ECU role (speed on the bus), the ISOBUS web page, PGN 240 back to the
+app, a real implement, and two real CAN nodes (two HAT channels wired together would do).
 
 **Open.**
 

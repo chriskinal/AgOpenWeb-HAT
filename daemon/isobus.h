@@ -2,7 +2,10 @@
 //
 // The stack runs on its own normal-priority threads and opens its channel itself. The control
 // thread never calls into it and never waits on its locks: what it needs crosses through Shared.
-// For now this claims an address as the task controller and nothing more.
+//
+// It claims an address and runs AOG-TaskController's section control task controller
+// (third_party/aog-taskcontroller): the app's section bits go to the implement as setpoints, and
+// what the implement reports comes back in Shared::isobus().
 #pragma once
 
 #include <atomic>
@@ -20,7 +23,8 @@ public:
 
     // Starts the stack on a SocketCAN interface that is already up at 250 kbit/s. Returns at
     // once; the address claim goes on in the background and shows in Shared::isobus().
-    void start(const std::string& interface, uint8_t channel);
+    // directory: where implements' device descriptions and tc.log are kept.
+    void start(const std::string& interface, uint8_t channel, const std::string& directory);
     void stop();
 
     // The identity number in our NAME: 21 bits from this unit's machine id, so two HATs on
@@ -29,14 +33,14 @@ public:
 
 private:
     void run();
-    void publish(IsobusStatus::State state, uint8_t address = 0xFE);
+    void publish();
     uint64_t framesSent() const;  // the interface's count of acknowledged transmissions
 
     Shared& shared_;
     std::string interface_;
-    uint8_t channel_ = 0;
-    uint64_t name_ = 0;
+    std::string directory_;
     uint64_t sentAtStart_ = 0;
+    IsobusStatus status_;  // the ISOBUS thread's copy; publish() hands it to Shared
     std::atomic<bool> stop_{false};
     std::thread thread_;
 };

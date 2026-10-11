@@ -62,10 +62,13 @@ The Teensy firmware is not being rewritten and nothing is ported back to it.
   (`core/indicators`; `/api/status` shows the LED colours), `aow-hatctl`: done.
   PGNs are accepted only from the `--app` host (loopback); `--any-app` lifts that.
 - **ISOBUS (branch `isobus`, docs/PLAN.md section 8):** AgIsoStack++ is built into the daemon
-  (`daemon/isobus.cpp`, fetched by CMake; `-DAOW_ISOBUS=OFF` leaves it out) and claims an
-  address as a task controller on the channel in the `isobus` settings, off by default. No
-  task controller yet. Include the stack's headers before any `aow/` header and `#undef` its
-  `LOG_*` macros, as `daemon/isobus.cpp` does.
+  (`daemon/isobus.cpp`, fetched by CMake; `-DAOW_ISOBUS=OFF` leaves it out) and runs
+  AOG-TaskController's section control task controller on the channel in the `isobus`
+  settings, off by default: the app's section bits (PGN 254, or 229 for 64) go to the implement.
+  Works against a simulated implement on vcan; no tractor ECU role or web page yet.
+  `third_party/aog-taskcontroller/` is upstream's file **unmodified**: change the stand-in
+  headers in `daemon/isobus_compat/` or `daemon/isobus.cpp` instead. Include the stack's
+  headers before any `aow/` header and `#undef` its `LOG_*` macros, as `daemon/isobus.cpp` does.
 - **Key monitor:** `deploy/aow-keymon.py`, its own service: key off for 3 s runs `poweroff`.
 - **Updates:** `deploy/package.sh` (on Linux arm64) builds a bundle and a signed `.aowpkg`; the
   System Update page (`/ota`) takes the `.aowpkg`, and `deploy/aow-hat-update`, a separate root
@@ -90,7 +93,8 @@ AgOpenWeb-HAT/
 ├── boards/hat/      # HAT pin map (hat_pins.h), device tree overlay and Linux drivers
 ├── web/             # The firmware's web pages (web/pages, copied) and API on POSIX sockets
 ├── daemon/          # The Linux executable: control thread + web thread
-├── third_party/     # ArduinoJson 7.4.2 (the firmware's JSON library, MIT)
+├── third_party/     # ArduinoJson 7.4.2 (the firmware's JSON library, MIT); AOG-TaskController's
+│                    # task controller (GPL-3, unmodified)
 ├── tests/           # Unit tests for core
 ├── deploy/          # install.sh, service units, config.txt block, udev rule, key monitor
 ├── docs/PLAN.md
@@ -124,6 +128,8 @@ scan, then PGN 254 at a set rate, checking every reply and timing the 253.
 `tests/can_probe.py build/aow-hatd` runs Valtra/MF CAN steering and GVRET on vcan0-2.
 `tests/um98x_probe.py build/aow-hatd` runs the GPS page and radio with ptys as the devices.
 `tests/isobus_probe.py build/aow-hatd` checks the ISOBUS address claim on vcan1 (stop the service first).
+`tests/isobus_tc_probe.py build/aow-hatd build/isobus_implement` runs section control against a
+simulated implement on vcan1.
 On the HAT: `tests/adc_read.py` reads all eight ADC channels, `tests/hat_bench.py` plays the app
 with a fixed target angle for a pot-and-meter bench, and `aow-hatd --board hat --indicator-test`
 cycles the LEDs and plays the chime (stop the service first for both daemon tests).

@@ -38,6 +38,10 @@ public:
     Status status() const { std::lock_guard<PiMutex> l(mu_); return status_; }
     void setStatus(const Status& s) { std::lock_guard<PiMutex> l(mu_); status_ = s; }
 
+    // For the ISOBUS thread, written by the control thread every tick. Atomics: no lock at all.
+    std::atomic<uint64_t> isoSections{0};       // section bits wanted, section 1 in bit 0
+    std::atomic<bool> isoSectionControl{false}; // the app is there and wants sections driven
+
     // The ISOBUS thread publishes; the web thread reads.
     IsobusStatus isobus() const { std::lock_guard<PiMutex> l(isobusMu_); return isobus_; }
     void setIsobus(const IsobusStatus& s) { std::lock_guard<PiMutex> l(isobusMu_); isobus_ = s; }

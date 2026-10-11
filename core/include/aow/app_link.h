@@ -39,6 +39,12 @@ public:
     const pgn::SteerCommand& command() const { return command_; }
     // Microseconds since the last valid PGN 254; UINT64_MAX if none has arrived.
     uint64_t usSinceCommand() const;
+    // Section on/off bits, section 1 in bit 0. All 64 from PGN 229 while the app sends it (it
+    // does with more than 16 sections), else the 16 in PGN 254.
+    uint64_t sections() const;
+    // The app's ISOBUS section control switch (PGN 241). True until an app sends one: AgOpenWeb
+    // does not, and its section bits already say what should be on.
+    bool sectionControl() const { return sectionControl_; }
     // Microseconds since any valid frame from the app; UINT64_MAX if none.
     uint64_t usSinceAnyFrame() const { return anyFrame_ ? clock_.nowUs() - anyFrameAtUs_ : UINT64_MAX; }
 
@@ -62,6 +68,10 @@ private:
     pgn::SteerCommand command_;
     bool haveCommand_ = false;
     uint64_t commandAtUs_ = 0;
+    uint64_t sections64_ = 0;
+    bool haveSections64_ = false;
+    uint64_t sections64AtUs_ = 0;
+    bool sectionControl_ = true;
     bool anyFrame_ = false;
     uint64_t anyFrameAtUs_ = 0;
     Counters counters_;

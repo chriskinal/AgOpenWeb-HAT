@@ -1,6 +1,11 @@
 cmake_minimum_required(VERSION 3.18)
 project(aow-hatd VERSION 0.1.0 LANGUAGES CXX)
 
+# Optimised unless told otherwise: an unoptimised ISOBUS stack is several times slower.
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+  set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
+endif()
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
@@ -65,9 +70,27 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
   target_link_libraries(aow-hatd PRIVATE aow_core aow_web Threads::Threads)
   if(AOW_ISOBUS)
     target_compile_definitions(aow-hatd PRIVATE AOW_ISOBUS=1)
+    # AOG-TaskController's task controller, unmodified, with the daemon's stand-ins for the two
+    # headers it expects (third_party/aog-taskcontroller/README.md).
+    target_sources(aow-hatd PRIVATE third_party/aog-taskcontroller/task_controller.cpp
+      daemon/isobus_compat/compat.cpp)
+    target_include_directories(aow-hatd PRIVATE third_party/aog-taskcontroller daemon/isobus_compat)
+    # It uses std::find_if without <algorithm>, which GCC 14 does not pull in for it: include
+    # it from here, so the file stays as upstream has it.
+    set_source_files_properties(third_party/aog-taskcontroller/task_controller.cpp PROPERTIES
+      COMPILE_OPTIONS "-include;algorithm;-Wno-unused-parameter;-Wno-sign-compare;-Wno-pedantic")
     target_link_libraries(aow-hatd PRIVATE isobus::Isobus isobus::HardwareIntegration isobus::Utility)
   endif()
   install(TARGETS aow-hatd RUNTIME DESTINATION bin)
+endif()
+
+# A simulated ISOBUS implement, for tests/isobus_tc_probe.py. Built from the stack's example.
+if(AOW_ISOBUS)
+  set(isobus_example ${isobus_SOURCE_DIR}/examples/task_controller_client)
+  add_executable(isobus_implement tests/isobus_implement.cpp ${isobus_example}/section_control_implement_sim.cpp)
+  target_include_directories(isobus_implement PRIVATE ${isobus_example})
+  set_source_files_properties(${isobus_example}/section_control_implement_sim.cpp PROPERTIES COMPILE_OPTIONS "-w")
+  target_link_libraries(isobus_implement PRIVATE isobus::Isobus isobus::HardwareIntegration isobus::Utility Threads::Threads)
 endif()
 
 enable_testing()

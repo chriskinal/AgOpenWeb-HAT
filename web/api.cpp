@@ -86,6 +86,19 @@ Response status(Backend& b, const char* version) {
     char name[17];
     std::snprintf(name, sizeof name, "%016llX", static_cast<unsigned long long>(is.name));
     iso["name"] = name;
+    JsonObject tc = iso["taskController"].to<JsonObject>();
+    tc["clients"] = is.clients;
+    tc["implement"] = is.implement;
+    tc["sections"] = is.sections;
+    tc["width"] = is.widthM;
+    tc["sectionControl"] = is.sectionControl;
+    std::string setpoint, actual;  // one character a section, section 1 first
+    for (uint8_t i = 0; i < is.sections && i < 64; ++i) {
+        setpoint += (is.setpoint >> i) & 1 ? '1' : '0';
+        actual += (is.actual >> i) & 1 ? '1' : '0';
+    }
+    tc["setpoint"] = setpoint;
+    tc["actual"] = actual;
     static const char* const kColors[] = {"off", "red", "amber", "green", "blue"};
     JsonArray leds = doc["leds"].to<JsonArray>();
     for (uint8_t c : st.leds) leds.add(kColors[c < 5 ? c : 0]);

@@ -59,9 +59,27 @@ void AppLink::handle(const uint8_t* buf, int len) {
     case pgn::SteerSettings:
         if (steer_) steer_->onSteerSettings(f.data, f.len);
         break;
+    case pgn::Sections64:
+        if (f.len >= 8) {
+            sections64_ = 0;
+            for (int i = 0; i < 8; ++i) sections64_ |= static_cast<uint64_t>(f.data[i]) << (8 * i);
+            haveSections64_ = true;
+            sections64AtUs_ = clock_.nowUs();
+        }
+        break;
+    case pgn::SectionControl:
+        if (f.len >= 1) sectionControl_ = f.data[0] == 1;
+        break;
     default:
         break;  // 239 and the rest: machine PGNs, no outputs on the HAT
     }
+}
+
+uint64_t AppLink::sections() const {
+    // PGN 229 stops when the app goes back to 16 sections or fewer; a second without one and
+    // PGN 254 is the source again.
+    if (haveSections64_ && clock_.nowUs() - sections64AtUs_ < 1'000'000) return sections64_;
+    return haveCommand_ ? command_.sections : 0;
 }
 
 void AppLink::sendTurnSensor(uint8_t value) {

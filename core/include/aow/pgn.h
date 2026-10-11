@@ -22,9 +22,11 @@ enum Id : uint8_t {
     Scan = 202,
     ScanReply = 203,
     HardwareMessage = 221,
+    Sections64 = 229,       // 64 section on/off bits (sent when more than 16 are configured)
     MachinePins = 236,
     MachineConfig = 238,
     MachineData = 239,
+    SectionControl = 241,   // AOG-TaskController's: byte 0 = 1, ISOBUS section control on
     TurnSensor = 250,
     SteerConfig = 251,
     SteerSettings = 252,

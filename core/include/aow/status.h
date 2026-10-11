@@ -44,6 +44,15 @@ struct IsobusStatus {
     // A frame of ours has been acknowledged, so something else is on the bus. A claim on an
     // empty or unplugged bus still "succeeds": nothing objected.
     bool busActive = false;
+
+    // The task controller: the first implement with sections (one boom is what the app drives).
+    uint8_t clients = 0;           // control functions connected to the task controller
+    uint8_t sections = 0;          // the implement's section count; 0 = no implement
+    bool sectionControl = false;   // setpoints are being sent (auto mode)
+    uint64_t setpoint = 0;         // section bits asked for, section 1 in bit 0
+    uint64_t actual = 0;           // section bits the implement reports on
+    float widthM = 0;              // working width from the implement's description; 0 = unknown
+    char implement[40] = {};       // its designator
     uint64_t name = 0;         // the 64-bit NAME we claim with
     char interface[16] = {};
 };

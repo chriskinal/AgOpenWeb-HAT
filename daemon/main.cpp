@@ -338,7 +338,11 @@ int main(int argc, char** argv) {
     if (startSettings.isobus.enabled) {
         const int ch = startSettings.isobus.channel;
         if (hooks.bus[ch - 1]) {
-            isobus.start(can[ch - 1].name(), static_cast<uint8_t>(ch));
+            // Implements' descriptions and the task controller's log, beside the settings.
+            std::string dir = opt.config;
+            const size_t slash = dir.rfind('/');
+            dir = (slash == std::string::npos ? std::string(".") : dir.substr(0, slash)) + "/isobus";
+            isobus.start(can[ch - 1].name(), static_cast<uint8_t>(ch), dir);
         } else {
             LOG_ERROR(Can, "ISOBUS: CAN%d is not available", ch);
             aow::IsobusStatus s;
@@ -490,6 +494,10 @@ int main(int argc, char** argv) {
             st.fixQuality = g.fixQuality;
             st.satellites = g.numSatellites;
             st.navSent = gnss.counters().navSent;
+
+            // For the ISOBUS task controller: the app's sections, and none once the app is gone.
+            shared.isoSectionControl.store(st.haveAppLink && app.sectionControl(), std::memory_order_relaxed);
+            shared.isoSections.store(st.haveAppLink ? app.sections() : 0, std::memory_order_relaxed);
 
             if (ticks >= nextLeds) {  // 10 Hz, as the firmware's LED task
                 nextLeds = ticks + 10;
