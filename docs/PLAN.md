@@ -68,7 +68,7 @@ and rates. Line counts are the firmware's (.h + .cpp).
 Section and hydraulic outputs (`MachineProcessor`), a separate IMU (`IMUProcessor`, `I2CManager`),
 the steering-wheel encoder (`EncoderProcessor`), the pressure sensor, JD PWM, the analog work
 switch and its page, the speed pulse (`PWMProcessor`), the Danfoss valve, the ESP32 bridge, the
-second GPS UART. Sections stay on an external machine module or go over CAN.
+second GPS UART. Sections stay on an external machine module or go over ISOBUS (section 8).
 
 ### 2.4 Serial ports
 
@@ -173,6 +173,7 @@ Hardware-free work went first, while the board was being made. The HAT arrived 2
 | 6 | UM98x page, radio RTCM on RS-232 #1 (done, on ptys) | receiver | receiver config read and written from the page (**done 2026-10-10** on a UM982; radio RTCM not yet tried with a radio) |
 | 7 | LED and buzzer logic, `aow-hatctl`, installer, LED and piezo drivers, update page (done); the AgOpenWeb changes | yes | clean install on a fresh image, both hardware choices |
 | 8 | Latency measurement under load | yes | worst case recorded; decide if anything more is needed |
+| 9 | ISOBUS: section control task controller inside the daemon (section 8; planned, not started) | CAN channel | an ISOBUS implement's sections follow AgOpenWeb |
 
 ### Phase 1 record
 
@@ -272,3 +273,65 @@ Settled on the board, 2026-10-10 (details in the phase 1 record):
 The dev CM4 (`chris@192.168.4.217`) runs `aow-hatd --board hat` and `aow-keymon` as services,
 installed by `deploy/install.sh --hat`. Its `~/AgOpenWeb-HAT` is an rsync copy, not a git
 checkout.
+
+## 8. ISOBUS (phase 9, planned)
+
+Decided 2026-10-10. Nothing here is built.
+
+**Why now.** The Teensy had too little memory for an ISOBUS stack. The CM4 has about 1.5 GB
+free with the daemon and AgOpenWeb running; a stack with a large implement pool needs a few MB.
+The RT kernel ships `can-j1939`, and ISOBUS is 250 kbit/s extended-frame CAN, which every HAT
+channel does.
+
+**Scope, in order.**
+
+1. **Stack on one channel**: address claim, and the tractor ECU role (speed, NMEA 2000 course
+   and speed) when the tractor has none.
+2. **Task controller server, section control.** The main deliverable.
+3. **Curvature steering** as one more steering output, off by default. Tractors that take the
+   ISOBUS guidance command want either a bought unlock or an authenticated (TIM) session. Nobody
+   has the certificates, so this covers unlocked tractors and open valves only: uncommon.
+4. Virtual terminal server (the implement's screen in AgOpenWeb): not planned. It is mostly app
+   UI work; AgOpenWeb's `Plans/ISOBUS_VT_FRONTEND.md` discusses it.
+
+**Source.** AOG-TaskController (AgOpenGPS-Official, GPL-3, `/Users/chris/Code/AOG-TaskController`)
+on AgIsoStack++ (MIT). It already runs headless on SocketCAN and does section control only.
+
+- Take `task_controller.cpp/.hpp` (about 1,200 lines, depends only on AgIsoStack++)
+  near-verbatim, under the same rule as the firmware's CAN files: changes marked "AOW HAT" in
+  place, so upstream fixes merge by hand without a fight.
+- Take what is needed from `app.cpp`: control functions, tractor ECU, the status messages.
+- Leave out its UDP layer, its settings file, its Boost and nlohmann dependencies and the
+  Windows CAN drivers. Its own virtual terminal status page: decide when building.
+- Pin AgIsoStack++ to the commit upstream pins.
+
+**Why inside `aow-hatd`, not its own service.** Run separately it binds UDP 8888, which the
+daemon already holds; it picks its network interface by a `192.168.5.x` match and broadcasts
+there; and it has no UI off Windows. Inside the daemon the section states and speed are
+already in memory, the settings and web pages are the daemon's, and it ships in the same update
+package. A crash in the stack takes steering down with it until systemd restarts the daemon.
+That is accepted: if the implement side has failed there is no reason to keep steering.
+
+**Structure.**
+
+- AgIsoStack++ runs its own normal-priority threads and opens its channel itself. The control
+  thread never calls into it and never waits on its locks: section states and speed go across
+  in a small snapshot under a `PiMutex`, status comes back the same way.
+- One channel is set as the ISOBUS channel in settings (default the second, the firmware's
+  `ISO_Bus`). A brand file may still use that channel: SocketCAN allows both on one interface.
+- Leave the channel's 120 ohm jumper open on a tractor's ISOBUS; the bus is terminated already.
+- Section states come from the PGNs AgOpenWeb sends now: 16 sections in PGN 254 and 239, 64 in
+  PGN 229 when more than 16 are configured. No app change for on/off control.
+- A new ISOBUS page (not from the firmware): channel, tractor ECU on or off, address claims,
+  implement name, section count and width, live section states.
+- Curvature steering, when built, sends from the control thread with the stack's claimed
+  address; the tractor's measured curvature stands in for the WAS and its "not accepting" state
+  is a new stop path, with a test.
+
+**Open.**
+
+- Whether the app should learn section count and width from the implement (upstream sends them
+  in PGN 240). That is AgOpenWeb work; until then the user enters them in the app as today.
+- Build time on the CM4 with AgIsoStack++ added, and whether it is fetched or vendored.
+- Rate control: upstream does not do it.
+
