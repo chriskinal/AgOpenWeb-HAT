@@ -182,5 +182,15 @@ int main() {
         CHECK(l.sectionControl());
     }
 
+    // PGN 240 to the app, AOG-TaskController's layout: control, count, then a bit a section.
+    udp.out.clear();
+    link.sendSectionStatus(false, 0, 0);
+    CHECK(udp.out.size() == 1 && parsed(udp.out[0], f) && f.src == 0x80 && f.pgn == 240 && f.len == 2);
+    CHECK(f.data[0] == 0 && f.data[1] == 0);
+    link.sendSectionStatus(true, 12, 0xFA05);  // bits past the count are dropped
+    CHECK(parsed(udp.out[1], f) && f.len == 4 && f.data[0] == 1 && f.data[1] == 12 && f.data[2] == 0x05 && f.data[3] == 0x0A);
+    link.sendSectionStatus(true, 64, 0x8000000000000001ull);
+    CHECK(parsed(udp.out[2], f) && f.len == 10 && f.data[1] == 64 && f.data[2] == 0x01 && f.data[9] == 0x80);
+
     return finish("app_link");
 }

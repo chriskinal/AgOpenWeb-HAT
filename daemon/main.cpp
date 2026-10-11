@@ -488,6 +488,12 @@ int main(int argc, char** argv) {
             if (ticks >= nextTurnSensor) {  // PGN 250, 10 Hz
                 nextTurnSensor = ticks + 10;
                 app.sendTurnSensor(autosteer.turnSensorReading());
+                // PGN 240, as AOG-TaskController: the task controller is alive, and what the
+                // implement reports. Nothing is sent when ISOBUS is off or not on the bus.
+                if (shared.isoTcRunning.load(std::memory_order_relaxed))
+                    app.sendSectionStatus(shared.isoTcControl.load(std::memory_order_relaxed),
+                                          shared.isoTcSections.load(std::memory_order_relaxed),
+                                          shared.isoTcActual.load(std::memory_order_relaxed));
             }
 
             aow::Status st;

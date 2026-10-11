@@ -64,7 +64,8 @@ The Teensy firmware is not being rewritten and nothing is ported back to it.
 - **ISOBUS (branch `isobus`, docs/PLAN.md section 8):** AgIsoStack++ is built into the daemon
   (`daemon/isobus.cpp`, fetched by CMake; `-DAOW_ISOBUS=OFF` leaves it out) and runs
   AOG-TaskController's section control task controller on the channel in the `isobus`
-  settings, off by default: the app's section bits (PGN 254, or 229 for 64) go to the implement.
+  settings, off by default: the app's section bits (PGN 254, or 229 for 64) go to the implement,
+  and what the implement reports comes back in PGN 240 (the app does not read it yet).
   It stands in as the tractor ECU (speed on the bus) when the bus has none, has its own
   page, `/isobus`, and puts upstream's status screen on a virtual terminal if the bus has one
   (`daemon/isobus_vt.cpp`). Works against a simulated implement and a stand-in terminal, on vcan

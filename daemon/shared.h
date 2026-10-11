@@ -56,6 +56,11 @@ public:
     int isoWakeFd() const { return isoWakeFd_; }
     std::atomic<bool> isoAppLink{false};        // the app is sending PGN 254
     std::atomic<int32_t> isoXteMm{0};           // its cross-track error, for the terminal screen
+    // From the ISOBUS thread, for PGN 240 to the app.
+    std::atomic<bool> isoTcRunning{false};      // the task controller is on the bus
+    std::atomic<bool> isoTcControl{false};      // it is sending setpoints to an implement
+    std::atomic<uint8_t> isoTcSections{0};      // the implement's section count; 0 = none
+    std::atomic<uint64_t> isoTcActual{0};       // sections it reports on, section 1 in bit 0
     std::atomic<int32_t> isoSpeedMmS{0};        // ground speed for the tractor ECU role
 
     // The ISOBUS thread publishes; the web thread reads.

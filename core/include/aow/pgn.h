@@ -26,6 +26,7 @@ enum Id : uint8_t {
     MachinePins = 236,
     MachineConfig = 238,
     MachineData = 239,
+    SectionStatus = 240,    // AOG-TaskController's, to the app: section control on, count, bits
     SectionControl = 241,   // AOG-TaskController's: byte 0 = 1, ISOBUS section control on
     TurnSensor = 250,
     SteerConfig = 251,
@@ -40,6 +41,7 @@ enum Src : uint8_t {
     SrcImu = 121,
     SrcMachine = 123,
     SrcSteer = 126,
+    SrcTaskController = 128,  // what AOG-TaskController sends PGN 240 as
 };
 
 struct Frame {

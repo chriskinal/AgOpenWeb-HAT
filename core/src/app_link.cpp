@@ -87,6 +87,16 @@ void AppLink::sendTurnSensor(uint8_t value) {
     send(out, pgn::buildTurnSensor(value, out, sizeof out));
 }
 
+void AppLink::sendSectionStatus(bool sectionControl, uint8_t count, uint64_t actual) {
+    if (count > 64) count = 64;
+    uint8_t data[10] = {static_cast<uint8_t>(sectionControl ? 1 : 0), count};
+    const uint8_t bytes = static_cast<uint8_t>((count + 7) / 8);
+    if (count < 64) actual &= (uint64_t{1} << count) - 1;
+    for (uint8_t i = 0; i < bytes; ++i) data[2 + i] = static_cast<uint8_t>(actual >> (8 * i));
+    uint8_t out[24];
+    send(out, pgn::build(pgn::SrcTaskController, pgn::SectionStatus, data, static_cast<uint8_t>(2 + bytes), out, sizeof out));
+}
+
 void AppLink::sendPopup(const char* message, uint8_t seconds, uint8_t color) {
     uint8_t out[128];
     send(out, pgn::buildHardwareMessage(message, seconds, color, out, sizeof out));

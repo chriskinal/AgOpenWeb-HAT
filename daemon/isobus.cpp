@@ -59,6 +59,10 @@ uint64_t Isobus::framesSent() const {
 
 void Isobus::publish() {
     status_.busActive = framesSent() != sentAtStart_;
+    shared_.isoTcRunning.store(status_.state == IsobusStatus::State::Claimed, std::memory_order_relaxed);
+    shared_.isoTcControl.store(status_.sectionControl, std::memory_order_relaxed);
+    shared_.isoTcSections.store(status_.sections, std::memory_order_relaxed);
+    shared_.isoTcActual.store(status_.actual, std::memory_order_relaxed);
     shared_.setIsobus(status_);
 }
 

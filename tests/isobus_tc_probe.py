@@ -42,11 +42,16 @@ class App:
         self.sections = 0
         self.send64 = False
         self.silent = False
+        self.status240 = None  # the last PGN 240: (section control, count, bits as an integer)
+        self.count240 = 0
 
     def tick(self):
         try:
             while True:
-                self.sock.recv(2048)
+                d = self.sock.recv(2048)
+                if len(d) >= 8 and d[:2] == b"\x80\x81" and d[3] == 240 and sum(d[2:-1]) & 0xFF == d[-1]:
+                    self.status240 = (d[2], d[5], d[6], int.from_bytes(d[7:-1], "little"), d[4])
+                    self.count240 += 1
         except BlockingIOError:
             pass
         if self.silent:
@@ -126,6 +131,10 @@ def main():
     try:
         # 1. The implement finds the task controller, uploads its description and is accepted.
         run(1.0)
+        check(app.status240 == (0x80, 0, 0, 0, 2), "PGN 240 heartbeat with no implement: %s" % (app.status240,))
+        n = app.count240
+        run(1.0)
+        check(8 <= app.count240 - n <= 12, "PGN 240 comes at 10 Hz (%d in 1 s)" % (app.count240 - n))
         imp = Implement(implement_bin, 16)
         t = run(30.0, lambda: imp.connected and status()["taskController"]["sections"] == 16)
         check(t is not None, "a 16-section implement connects (%s s)" % ("%.1f" % t if t else "never"))
@@ -143,6 +152,8 @@ def main():
         tc = status()["taskController"]
         check(tc["setpoint"] == bits(0x80A5, 16) and tc["actual"] == bits(0x80A5, 16) and tc["sectionControl"],
               "status shows setpoint and the implement's actual: %s / %s" % (tc["setpoint"], tc["actual"]))
+        t = run(1.0, lambda: app.status240 == (0x80, 1, 16, 0x80A5, 4))
+        check(t is not None, "PGN 240 carries the implement's 16 sections as it reports them: %s" % (app.status240,))
         app.sections = 0x0001
         t = run(3.0, lambda: imp.sections == bits(0x0001, 16))
         check(t is not None, "a change follows (%s)" % ("%.0f ms" % (t * 1000) if t else imp.sections))
@@ -155,6 +166,8 @@ def main():
         check(t is not None, "PGN 241 off: all sections off")
         t = run(1.0, lambda: not status()["taskController"]["sectionControl"])
         check(t is not None, "status shows section control off")
+        t = run(4.0, lambda: app.status240 == (0x80, 0, 16, 0, 4))
+        check(t is not None, "PGN 240 shows section control off and no sections on: %s" % (app.status240,))
         app.send(pgn(241, [1]))
         t = run(3.0, lambda: imp.sections == bits(0x00FF, 16))
         check(t is not None, "PGN 241 on: sections back")
@@ -182,6 +195,8 @@ def main():
         check(t is not None, "PGN 229: all 64 sections reach the implement (%s)" % ("%.0f ms" % (t * 1000) if t else imp.sections))
         run(6.0, lambda: status()["taskController"]["actual"] == bits(pattern, 64))
         check(status()["taskController"]["actual"] == bits(pattern, 64), "status shows all 64 as the implement reports them")
+        t = run(1.0, lambda: app.status240 == (0x80, 1, 64, pattern, 10))
+        check(t is not None, "PGN 240 carries all 64")
 
         # 6. The daemon stops: sections off on the way out.
         proc.terminate()
