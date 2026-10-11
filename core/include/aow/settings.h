@@ -56,6 +56,8 @@ struct Settings {
         // never started beside a real one, so this only needs switching off to keep speed
         // off the bus altogether.
         bool tractorEcu = true;
+        // Show the status screen on the tractor's terminal (a virtual terminal on the bus).
+        bool terminal = true;
     } isobus;
 
     struct Misc {

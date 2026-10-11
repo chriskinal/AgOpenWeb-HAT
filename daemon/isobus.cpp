@@ -22,6 +22,7 @@
 #endif
 
 #include "isobus.h"
+#include "isobus_vt.h"
 
 #include <poll.h>
 #include <pthread.h>
@@ -169,11 +170,14 @@ bool busHasTractorEcu() {
 
 }  // namespace
 
-void Isobus::start(const std::string& interface, uint8_t channel, const std::string& directory, bool tractorEcu) {
+void Isobus::start(const std::string& interface, uint8_t channel, const std::string& directory, bool tractorEcu,
+                   bool terminal) {
     interface_ = interface;
     directory_ = directory;
     tractorEcu_ = tractorEcu;
+    terminal_ = terminal;
     status_ = {};
+    status_.terminal = terminal ? IsobusStatus::Terminal::Waiting : IsobusStatus::Terminal::Off;
     status_.tecu = tractorEcu ? IsobusStatus::Tecu::Waiting : IsobusStatus::Tecu::Off;
     status_.state = IsobusStatus::State::Starting;
     status_.channel = channel;
@@ -229,6 +233,7 @@ void Isobus::run() {
 
     std::shared_ptr<TcServer> server;
     std::unique_ptr<isobus::ControlFunctionFunctionalities> functionalities;
+    std::unique_ptr<IsobusVt> vt;  // the status screen on a terminal
 
     // The tractor ECU role (as AOG-TaskController's, which announces a class 1 tractor ECU and
     // sends speed). Unlike upstream it is never started on a bus that has a tractor ECU, and
@@ -450,6 +455,37 @@ void Isobus::run() {
             }
         }
 
+        // --- The status screen, once the task controller is up.
+        if (terminal_ && server) {
+            if (!vt)
+                vt = std::make_unique<IsobusVt>(tc, [this](bool on) {
+                    // From the screen's settings page: saved by the web thread, used at the next start.
+                    aow::Settings s = shared_.settings();
+                    s.isobus.tractorEcu = on;
+                    shared_.setSettings(s);
+                    shared_.requestSave();
+                });
+            IsobusVt::View view;
+            view.status = status_;
+            view.implementName = implementName;
+            view.appConnected = shared_.isoAppLink.load(std::memory_order_relaxed);
+            view.speedMmS = shared_.isoSpeedMmS.load(std::memory_order_relaxed);
+            view.xteMm = shared_.isoXteMm.load(std::memory_order_relaxed);
+            view.distanceMm = static_cast<uint32_t>(distanceMm);
+            view.tractorEcuSetting = tractorEcu_;
+            const uint32_t ip = shared_.ownAddresses[0].load(std::memory_order_relaxed);
+            if (ip) {
+                char text[16];
+                std::snprintf(text, sizeof text, "%u.%u.%u.%u", ip & 255, (ip >> 8) & 255, (ip >> 16) & 255, ip >> 24);  // network order
+                view.ip = text;
+            }
+            const auto now = vt->update(view) ? IsobusStatus::Terminal::Connected : IsobusStatus::Terminal::Waiting;
+            if (now != status_.terminal) {
+                status_.terminal = now;
+                publish();
+            }
+        }
+
         // --- The tractor ECU role.
         if (tractorEcu_ && elapsed(lastTecuCheck, 200)) {
             lastTecuCheck = Clock::now();
@@ -544,6 +580,7 @@ void Isobus::run() {
         }
     }
 
+    vt.reset();
     dropTecu();
     if (server) {
         // Leaving: sections off while the bus is still up.

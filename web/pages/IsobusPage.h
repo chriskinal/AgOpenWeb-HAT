@@ -66,6 +66,9 @@ const char ISOBUS_PAGE[] PROGMEM = R"rawliteral(
             const te = TECU[s.tractorEcu.state] || [s.tractorEcu.state, ''];
             set('tecu', s.state === 'disabled' ? '-' : te[0], te[1]);
             set('speed', s.tractorEcu.state === 'active' ? s.tractorEcu.speed.toFixed(1) + ' km/h' : '-');
+            const TERM = { off: ['Off', ''], waiting: ['No terminal on the bus', ''], connected: ['On the terminal', 'good'] };
+            const tm = TERM[s.terminal] || [s.terminal, ''];
+            set('terminal_state', s.state === 'disabled' ? '-' : tm[0], tm[1]);
 
             const tc = s.taskController;
             const have = tc.sections > 0;
@@ -98,6 +101,7 @@ const char ISOBUS_PAGE[] PROGMEM = R"rawliteral(
                 document.getElementById('enabled').checked = d.enabled;
                 document.getElementById('channel').value = d.channel;
                 document.getElementById('tractorEcu').checked = d.tractorEcu;
+                document.getElementById('terminal').checked = d.terminal;
                 showStatus(d.status);
             });
         }
@@ -106,7 +110,8 @@ const char ISOBUS_PAGE[] PROGMEM = R"rawliteral(
             const body = {
                 enabled: document.getElementById('enabled').checked,
                 channel: parseInt(document.getElementById('channel').value),
-                tractorEcu: document.getElementById('tractorEcu').checked
+                tractorEcu: document.getElementById('tractorEcu').checked,
+                terminal: document.getElementById('terminal').checked
             };
             const msg = document.getElementById('status');
             msg.innerHTML = '<div class="status">Saving...</div>';
@@ -185,6 +190,19 @@ const char ISOBUS_PAGE[] PROGMEM = R"rawliteral(
                         <span class="toggle-slider"></span>
                     </label>
                 </div>
+
+                <div class="toggle-container" style="border-bottom: none;">
+                    <div class="toggle-info">
+                        <label for="terminal" class="toggle-label">Show a Status Screen on the Tractor's Terminal</label>
+                        <div class="help-text">
+                            If the bus has a virtual terminal, put the task controller's status screen on it: connection, implement, sections and diagnostics.
+                        </div>
+                    </div>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="terminal">
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
             </div>
         </form>
 
@@ -196,6 +214,7 @@ const char ISOBUS_PAGE[] PROGMEM = R"rawliteral(
             <div class="row"><span>Other devices answering</span><span id="busActive">-</span></div>
             <div class="row"><span>Tractor ECU</span><span id="tecu">-</span></div>
             <div class="row"><span>Speed sent</span><span id="speed">-</span></div>
+            <div class="row"><span>Terminal screen</span><span id="terminal_state">-</span></div>
         </div>
 
         <h2>Implement</h2>

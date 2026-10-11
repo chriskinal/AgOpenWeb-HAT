@@ -54,6 +54,8 @@ public:
         }
     }
     int isoWakeFd() const { return isoWakeFd_; }
+    std::atomic<bool> isoAppLink{false};        // the app is sending PGN 254
+    std::atomic<int32_t> isoXteMm{0};           // its cross-track error, for the terminal screen
     std::atomic<int32_t> isoSpeedMmS{0};        // ground speed for the tractor ECU role
 
     // The ISOBUS thread publishes; the web thread reads.

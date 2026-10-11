@@ -73,8 +73,16 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     # AOG-TaskController's task controller, unmodified, with the daemon's stand-ins for the two
     # headers it expects (third_party/aog-taskcontroller/README.md).
     target_sources(aow-hatd PRIVATE third_party/aog-taskcontroller/task_controller.cpp
-      daemon/isobus_compat/compat.cpp)
-    target_include_directories(aow-hatd PRIVATE third_party/aog-taskcontroller daemon/isobus_compat)
+      daemon/isobus_compat/compat.cpp daemon/isobus_vt.cpp)
+    # Its status screen for a terminal (an object pool), as a byte array, the way upstream does it.
+    set(iop ${CMAKE_CURRENT_SOURCE_DIR}/third_party/aog-taskcontroller/AOG_TC.iop)
+    file(READ ${iop} iop_hex HEX)
+    string(REGEX REPLACE "([0-9a-fA-F][0-9a-fA-F])" "0x\\1," iop_bytes "${iop_hex}")
+    file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/generated/AOG_TC_iop_data.hpp
+      "#pragma once\n\n#include <cstdint>\n\ninline constexpr std::uint8_t AOG_TC_IOP_DATA[] = {${iop_bytes}};\n")
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${iop})
+    target_include_directories(aow-hatd PRIVATE third_party/aog-taskcontroller daemon/isobus_compat
+      ${CMAKE_CURRENT_BINARY_DIR}/generated)
     # It uses std::find_if without <algorithm>, which GCC 14 does not pull in for it: include
     # it from here, so the file stays as upstream has it.
     set_source_files_properties(third_party/aog-taskcontroller/task_controller.cpp PROPERTIES
@@ -91,6 +99,9 @@ if(AOW_ISOBUS)
   target_include_directories(isobus_implement PRIVATE ${isobus_example})
   set_source_files_properties(${isobus_example}/section_control_implement_sim.cpp PROPERTIES COMPILE_OPTIONS "-w")
   target_link_libraries(isobus_implement PRIVATE isobus::Isobus isobus::HardwareIntegration isobus::Utility Threads::Threads)
+  # A stand-in virtual terminal for tests/isobus_vt_probe.py.
+  add_executable(isobus_vt tests/isobus_vt.cpp)
+  target_link_libraries(isobus_vt PRIVATE isobus::Isobus isobus::HardwareIntegration isobus::Utility Threads::Threads)
 endif()
 
 enable_testing()

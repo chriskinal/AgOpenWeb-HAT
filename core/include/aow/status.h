@@ -57,6 +57,14 @@ struct IsobusStatus {
     float widthM = 0;              // working width from the implement's description; 0 = unknown
     char implement[40] = {};       // its designator
 
+    // The status screen on the tractor's terminal (upstream's object pool).
+    enum class Terminal : uint8_t {
+        Off,        // switched off in the settings
+        Waiting,    // no terminal on the bus, or it has not taken the screen yet
+        Connected,  // the screen is on the terminal
+    };
+    Terminal terminal = Terminal::Off;
+
     // The tractor ECU role: ground speed on the bus, at address 240.
     enum class Tecu : uint8_t {
         Off,       // switched off in the settings
@@ -80,6 +88,15 @@ inline const char* isobusStateName(IsobusStatus::State s) {
     }
     return "";
 }
+inline const char* isobusTerminalName(IsobusStatus::Terminal t) {
+    switch (t) {
+    case IsobusStatus::Terminal::Off: return "off";
+    case IsobusStatus::Terminal::Waiting: return "waiting";
+    case IsobusStatus::Terminal::Connected: return "connected";
+    }
+    return "";
+}
+
 inline const char* isobusTecuName(IsobusStatus::Tecu t) {
     switch (t) {
     case IsobusStatus::Tecu::Off: return "off";

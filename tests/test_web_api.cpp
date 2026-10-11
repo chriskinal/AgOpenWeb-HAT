@@ -106,7 +106,8 @@ int main() {
     b.iso.tecu = IsobusStatus::Tecu::Active;
     b.iso.speedMmS = 2000;
     d = parse(request(s, port, "GET /api/isobus HTTP/1.1\r\n\r\n"));
-    CHECK(d["enabled"] == false && d["channel"] == 2 && d["tractorEcu"] == true);
+    CHECK(d["enabled"] == false && d["channel"] == 2 && d["tractorEcu"] == true && d["terminal"] == true);
+    CHECK(d["status"]["terminal"] == "off");
     CHECK(d["status"]["state"] == "claimed" && d["status"]["taskController"]["setpoint"] == "101");
     CHECK(d["status"]["taskController"]["actual"] == "100" && d["status"]["tractorEcu"]["state"] == "active");
     // Strings are copied into the reply: the status they come from is a temporary.
@@ -119,6 +120,9 @@ int main() {
         CHECK(b.s.isobus.enabled && b.s.isobus.channel == 3 && b.s.isobus.tractorEcu);
         r = post(s, port, "/api/isobus", R"({"enabled":true,"channel":9,"tractorEcu":"yes"})");  // bad values: ignored
         CHECK(parse(r)["restartRequired"] == false && b.s.isobus.channel == 3 && b.s.isobus.tractorEcu);
+        r = post(s, port, "/api/isobus", R"({"terminal":false})");
+        CHECK(parse(r)["restartRequired"] == true && !b.s.isobus.terminal);
+        b.s.isobus.terminal = true;
         CHECK(request(s, port, "GET /isobus HTTP/1.1\r\n\r\n").find("/api/isobus") != std::string::npos);
         b.applied = applied;
     }

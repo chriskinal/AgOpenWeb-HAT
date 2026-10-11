@@ -73,6 +73,7 @@ void isobusStatusJson(const IsobusStatus& is, JsonObject iso) {
     JsonObject tecu = iso["tractorEcu"].to<JsonObject>();
     tecu["state"] = isobusTecuName(is.tecu);
     tecu["speed"] = is.speedMmS * 0.0036;  // km/h
+    iso["terminal"] = isobusTerminalName(is.terminal);
 }
 
 Response status(Backend& b, const char* version) {
@@ -212,6 +213,7 @@ Response isobus(Backend& b, const Request& r) {
         doc["enabled"] = s.isobus.enabled;
         doc["channel"] = s.isobus.channel;
         doc["tractorEcu"] = s.isobus.tractorEcu;
+        doc["terminal"] = s.isobus.terminal;
         isobusStatusJson(b.isobusStatus(), doc["status"].to<JsonObject>());
         return Response::json(toString(doc));
     }
@@ -221,12 +223,13 @@ Response isobus(Backend& b, const Request& r) {
     const Settings::Isobus before = s.isobus;
     if (doc["enabled"].is<bool>()) s.isobus.enabled = doc["enabled"];
     if (doc["tractorEcu"].is<bool>()) s.isobus.tractorEcu = doc["tractorEcu"];
+    if (doc["terminal"].is<bool>()) s.isobus.terminal = doc["terminal"];
     if (doc["channel"].is<int>()) {
         const int v = doc["channel"];
         if (v >= 1 && v <= 3) s.isobus.channel = static_cast<uint8_t>(v);
     }
     const bool changed = before.enabled != s.isobus.enabled || before.channel != s.isobus.channel ||
-                         before.tractorEcu != s.isobus.tractorEcu;
+                         before.tractorEcu != s.isobus.tractorEcu || before.terminal != s.isobus.terminal;
     return saveOr500(b, s, changed ? R"({"status":"saved","restartRequired":true})"
                                    : R"({"status":"saved","restartRequired":false})");
 }

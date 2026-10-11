@@ -347,7 +347,8 @@ int main(int argc, char** argv) {
             std::string dir = opt.config;
             const size_t slash = dir.rfind('/');
             dir = (slash == std::string::npos ? std::string(".") : dir.substr(0, slash)) + "/isobus";
-            isobus.start(can[ch - 1].name(), static_cast<uint8_t>(ch), dir, startSettings.isobus.tractorEcu);
+            isobus.start(can[ch - 1].name(), static_cast<uint8_t>(ch), dir, startSettings.isobus.tractorEcu,
+                         startSettings.isobus.terminal);
         } else {
             LOG_ERROR(Can, "ISOBUS: CAN%d is not available", ch);
             aow::IsobusStatus s;
@@ -507,6 +508,8 @@ int main(int argc, char** argv) {
 
             // For the ISOBUS task controller: the app's sections, and none once the app is gone.
             isoAppLink = st.haveAppLink;
+            shared.isoAppLink.store(st.haveAppLink, std::memory_order_relaxed);
+            shared.isoXteMm.store(st.haveAppLink ? app.command().xte * 10 : 0, std::memory_order_relaxed);
             shared.setIsoSections(st.haveAppLink && app.sectionControl(), st.haveAppLink ? app.sections() : 0);
             // Speed for the tractor ECU role: the app's (what its section control works from),
             // or GNSS speed with no app.

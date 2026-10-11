@@ -65,8 +65,10 @@ The Teensy firmware is not being rewritten and nothing is ported back to it.
   (`daemon/isobus.cpp`, fetched by CMake; `-DAOW_ISOBUS=OFF` leaves it out) and runs
   AOG-TaskController's section control task controller on the channel in the `isobus`
   settings, off by default: the app's section bits (PGN 254, or 229 for 64) go to the implement.
-  It stands in as the tractor ECU (speed on the bus) when the bus has none, and has its own
-  page, `/isobus`. Works against a simulated implement on vcan; not yet tried on real CAN.
+  It stands in as the tractor ECU (speed on the bus) when the bus has none, has its own
+  page, `/isobus`, and puts upstream's status screen on a virtual terminal if the bus has one
+  (`daemon/isobus_vt.cpp`). Works against a simulated implement and a stand-in terminal, on vcan
+  and over two linked HAT channels; no real implement or terminal yet.
   `third_party/aog-taskcontroller/` is upstream's file **unmodified**: change the stand-in
   headers in `daemon/isobus_compat/` or `daemon/isobus.cpp` instead. Include the stack's
   headers before any `aow/` header and `#undef` its `LOG_*` macros, as `daemon/isobus.cpp` does.
@@ -134,6 +136,8 @@ scan, then PGN 254 at a set rate, checking every reply and timing the 253.
 vcan1 (stop the service first).
 `tests/isobus_tc_probe.py build/aow-hatd build/isobus_implement` runs section control against a
 simulated implement on vcan1.
+`tests/isobus_vt_probe.py build/aow-hatd build/isobus_vt build/isobus_implement` checks the status
+screen for a tractor's terminal against a stand-in terminal on vcan1.
 On the HAT: `tests/adc_read.py` reads all eight ADC channels, `tests/hat_bench.py` plays the app
 with a fixed target angle for a pot-and-meter bench, and `aow-hatd --board hat --indicator-test`
 cycles the LEDs and plays the chime (stop the service first for both daemon tests).

@@ -447,9 +447,8 @@ daemon's task controller on `hatcan2`, the simulated implement on `hatcan3`.
   loopback lock). They are still dropped, but no longer counted as another host's or warned
   about; only a genuinely foreign sender is.
 
-Not done yet: PGN 240 back to the app, upstream's status screen for a tractor's terminal
-(decide with AgIsoVT on the bench), a real implement, and two real CAN nodes (two HAT channels
-wired together would do).
+Not done yet: PGN 240 back to the app (AgOpenWeb issue 312 is the app side) and a real
+implement.
 
 **Command latency (2026-10-11).** Time from a PGN 254 with new section bits leaving for the
 daemon to the setpoint frame (DDI 290) arriving on the other linked HAT channel, 150 changes a run.
@@ -463,6 +462,38 @@ daemon to the setpoint frame (DDI 290) arriving on the other linked HAT channel,
 - After: 1.0 to 2.7 ms, median 1.5 ms, three runs. ISOBUS thread CPU idle is unchanged (under 2 %).
 - What is left is the implement's own reaction and the valves, which this cannot see, and the
   app's rate of sending PGN 254.
+
+**Terminal screen (2026-10-11, version 0.2.5 on the dev CM4).** Upstream's status screen for a
+tractor's virtual terminal, carried over.
+
+- `third_party/aog-taskcontroller/AOG_TC.iop` and `AOG_TC.iop.h`: upstream's object pool and its
+  object IDs, unmodified; CMake turns the pool into a byte array, as upstream's build does.
+- `daemon/isobus_vt.cpp` does what upstream's `app.cpp` does with it: five pages (status,
+  network, implement, diagnostics, settings) reached by soft keys, filled from the daemon's
+  state once a second, the section map ten times a second. Driven from the ISOBUS loop; the
+  stack's VT client runs without a thread of its own. Nothing is sent until a terminal has an
+  address on the bus.
+- Differences from upstream: "HAT IP" and the unit's address where upstream shows AgIO's; the
+  settings page's only live switch is the tractor ECU role (saved, applies at the next start);
+  NMEA send follows that role and is greyed out with the two things upstream does not do
+  either; boom offset is "n/a". The pool's fixed labels still say AOG-TC.
+- Setting `isobus.terminal`, default on, on the ISOBUS page; `/api/status` `isobus.terminal` is
+  off, waiting or connected.
+- `tests/isobus_vt.cpp` is a stand-in terminal with no display, on AgIsoStack++'s VT server: it
+  parses the pool as AgIsoVT would and prints what a terminal would show.
+  `tests/isobus_vt_probe.py` (17 checks) uses it on vcan: the pool is accepted, the pages fill,
+  an implement and its sections show, a soft key changes the page, the tractor ECU switch is
+  saved, the app going away shows, a different terminal is taken when the first leaves, and
+  with the setting off no screen is offered.
+- Also run with the stand-in on `hatcan3` against the installed daemon on `hatcan2`: the screen
+  went up in about 3 s.
+- AgIsoStack++ ties a partner to the first terminal whose NAME matches and never to another, so
+  after that stand-in test AgIsoVT (a different NAME) was ignored. The daemon now drops the
+  client and its partner after 10 s without a connection and starts again with whichever
+  terminal is on the bus (`IsobusVt::Impl::forget`).
+- Seen on AgIsoVT (Windows VM, CAN adapter on CAN2 at J3), 480x480: the pages show, the soft
+  keys change the page, the tractor ECU switch follows. The AOG-TC labels stay: the user is
+  content with them, so the pool remains upstream's file.
 
 **Open.**
 
