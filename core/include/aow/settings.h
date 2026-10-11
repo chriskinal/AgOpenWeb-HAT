@@ -52,6 +52,10 @@ struct Settings {
     struct Isobus {
         bool enabled = false;
         uint8_t channel = 2;               // 1..3; the firmware's ISO_Bus is CAN2
+        // Stand in as the tractor ECU (ground speed on the bus) when the bus has none. It is
+        // never started beside a real one, so this only needs switching off to keep speed
+        // off the bus altogether.
+        bool tractorEcu = true;
     } isobus;
 
     struct Misc {

@@ -4,6 +4,8 @@
 
 #include <cstring>
 
+#include <cstdio>
+
 #include "check.h"
 #include "http_client.h"
 
@@ -94,6 +96,32 @@ int main() {
     d = parse(request(s, port, "GET /api/status HTTP/1.1\r\n\r\n"));
     CHECK(d["isobus"]["state"] == "claimed" && d["isobus"]["address"] == 247 && d["isobus"]["channel"] == 2);
     CHECK(d["isobus"]["name"] == "A00082000AFE0014" && d["isobus"]["busActive"] == false);
+
+    // The ISOBUS page: settings and the same state; a save says whether a restart is needed.
+    b.iso.sections = 3;
+    std::snprintf(b.iso.implement, sizeof b.iso.implement, "Sprayer 24 m");
+    std::snprintf(b.iso.interface, sizeof b.iso.interface, "hatcan2");
+    b.iso.setpoint = 0b101;
+    b.iso.actual = 0b001;
+    b.iso.tecu = IsobusStatus::Tecu::Active;
+    b.iso.speedMmS = 2000;
+    d = parse(request(s, port, "GET /api/isobus HTTP/1.1\r\n\r\n"));
+    CHECK(d["enabled"] == false && d["channel"] == 2 && d["tractorEcu"] == true);
+    CHECK(d["status"]["state"] == "claimed" && d["status"]["taskController"]["setpoint"] == "101");
+    CHECK(d["status"]["taskController"]["actual"] == "100" && d["status"]["tractorEcu"]["state"] == "active");
+    // Strings are copied into the reply: the status they come from is a temporary.
+    CHECK(d["status"]["taskController"]["implement"] == "Sprayer 24 m" && d["status"]["interface"] == "hatcan2");
+    CHECK(d["status"]["tractorEcu"]["speed"].as<double>() > 7.19 && d["status"]["tractorEcu"]["speed"].as<double>() < 7.21);
+    {
+        const int applied = b.applied;
+        r = post(s, port, "/api/isobus", R"({"enabled":true,"channel":3})");
+        CHECK(parse(r)["restartRequired"] == true && b.applied == applied + 1);
+        CHECK(b.s.isobus.enabled && b.s.isobus.channel == 3 && b.s.isobus.tractorEcu);
+        r = post(s, port, "/api/isobus", R"({"enabled":true,"channel":9,"tractorEcu":"yes"})");  // bad values: ignored
+        CHECK(parse(r)["restartRequired"] == false && b.s.isobus.channel == 3 && b.s.isobus.tractorEcu);
+        CHECK(request(s, port, "GET /isobus HTTP/1.1\r\n\r\n").find("/api/isobus") != std::string::npos);
+        b.applied = applied;
+    }
 
     // Device settings: GET shows the firmware field names.
     d = parse(request(s, port, "GET /api/device/settings HTTP/1.1\r\n\r\n"));

@@ -53,6 +53,17 @@ struct IsobusStatus {
     uint64_t actual = 0;           // section bits the implement reports on
     float widthM = 0;              // working width from the implement's description; 0 = unknown
     char implement[40] = {};       // its designator
+
+    // The tractor ECU role: ground speed on the bus, at address 240.
+    enum class Tecu : uint8_t {
+        Off,       // switched off in the settings
+        Waiting,   // listening for a tractor ECU already on the bus, or claiming 240
+        Active,    // we are the tractor ECU
+        Tractor,   // the bus has its own tractor ECU: ours stays off
+        Failed,    // address 240 could not be claimed
+    };
+    Tecu tecu = Tecu::Off;
+    int32_t speedMmS = 0;          // what the tractor ECU is sending
     uint64_t name = 0;         // the 64-bit NAME we claim with
     char interface[16] = {};
 };
@@ -63,6 +74,16 @@ inline const char* isobusStateName(IsobusStatus::State s) {
     case IsobusStatus::State::Starting: return "starting";
     case IsobusStatus::State::Claimed: return "claimed";
     case IsobusStatus::State::Failed: return "failed";
+    }
+    return "";
+}
+inline const char* isobusTecuName(IsobusStatus::Tecu t) {
+    switch (t) {
+    case IsobusStatus::Tecu::Off: return "off";
+    case IsobusStatus::Tecu::Waiting: return "waiting";
+    case IsobusStatus::Tecu::Active: return "active";
+    case IsobusStatus::Tecu::Tractor: return "tractor has one";
+    case IsobusStatus::Tecu::Failed: return "failed";
     }
     return "";
 }

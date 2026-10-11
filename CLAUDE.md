@@ -65,7 +65,8 @@ The Teensy firmware is not being rewritten and nothing is ported back to it.
   (`daemon/isobus.cpp`, fetched by CMake; `-DAOW_ISOBUS=OFF` leaves it out) and runs
   AOG-TaskController's section control task controller on the channel in the `isobus`
   settings, off by default: the app's section bits (PGN 254, or 229 for 64) go to the implement.
-  Works against a simulated implement on vcan; no tractor ECU role or web page yet.
+  It stands in as the tractor ECU (speed on the bus) when the bus has none, and has its own
+  page, `/isobus`. Works against a simulated implement on vcan; not yet tried on real CAN.
   `third_party/aog-taskcontroller/` is upstream's file **unmodified**: change the stand-in
   headers in `daemon/isobus_compat/` or `daemon/isobus.cpp` instead. Include the stack's
   headers before any `aow/` header and `#undef` its `LOG_*` macros, as `daemon/isobus.cpp` does.
@@ -127,7 +128,8 @@ scan, then PGN 254 at a set rate, checking every reply and timing the 253.
 `tests/steer_probe.py` closes the steering loop against `--board sim`.
 `tests/can_probe.py build/aow-hatd` runs Valtra/MF CAN steering and GVRET on vcan0-2.
 `tests/um98x_probe.py build/aow-hatd` runs the GPS page and radio with ptys as the devices.
-`tests/isobus_probe.py build/aow-hatd` checks the ISOBUS address claim on vcan1 (stop the service first).
+`tests/isobus_probe.py build/aow-hatd` checks the ISOBUS address claim and the tractor ECU role on
+vcan1 (stop the service first).
 `tests/isobus_tc_probe.py build/aow-hatd build/isobus_implement` runs section control against a
 simulated implement on vcan1.
 On the HAT: `tests/adc_read.py` reads all eight ADC channels, `tests/hat_bench.py` plays the app

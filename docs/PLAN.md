@@ -382,8 +382,28 @@ That is accepted: if the implement side has failed there is no reason to keep st
 - Upstream uses `std::find_if` without `<algorithm>`; the build adds the include from outside.
 - The first configure sets the build type to Release if none is given.
 
-Not done yet: the tractor ECU role (speed on the bus), the ISOBUS web page, PGN 240 back to the
-app, a real implement, and two real CAN nodes (two HAT channels wired together would do).
+**Step 3 record (2026-10-10, branch `isobus`).** The tractor ECU role and the ISOBUS page.
+
+- **Tractor ECU role** (`isobus.tractorEcu`, default on): two seconds after the claim, if no
+  other device on the bus is a tractor ECU, the daemon claims the fixed address 240 and sends
+  wheel, ground and machine-selected speed, the NMEA 2000 speed message and J1939 PGN 65256,
+  as upstream does. Unlike upstream it never starts beside a real tractor ECU, and it stops
+  if one appears: taking 240 from the tractor's own would put our speed in place of the
+  tractor's.
+- Speed is the app's (PGN 254), or GNSS speed with no app. Direction is always forward: PGN 254
+  has no sign. Distance is summed in the daemon. No course is sent.
+- `tests/isobus_probe.py` now covers it: the 240 claim, 5.0 km/h from the app arriving as
+  1389 mm/s on the bus, stopping when a tractor ECU appears, never claiming with one there
+  from the start, and the setting off.
+- **ISOBUS page** (`/isobus`, a tile on the home page, `web/pages/IsobusPage.h`, the HAT's own):
+  the three settings, bus state, tractor ECU state and speed, the implement's name, section
+  count and width, and a box per section coloured by asked-for against reported. Settings are
+  read at startup, so a save offers to restart the daemon. `/api/isobus` serves it.
+- Checked in a browser against the simulated implement.
+
+Not done yet: PGN 240 back to the app, upstream's status screen for a tractor's terminal
+(decide with AgIsoVT on the bench), a real implement, and two real CAN nodes (two HAT channels
+wired together would do).
 
 **Open.**
 

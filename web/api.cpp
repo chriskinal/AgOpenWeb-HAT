@@ -10,6 +10,7 @@
 #include "pages/CANConfigUploadPage.h"
 #include "pages/CANInfoJSON.h"
 #include "pages/DragDropCANConfigPage.h"
+#include "pages/IsobusPage.h"
 #include "pages/TouchFriendlyDeviceSettingsPage.h"
 #include "pages/TouchFriendlyEventLoggerPage.h"
 #include "pages/TouchFriendlyGPSConfigPage.h"
@@ -46,6 +47,34 @@ void page(Server& server, const char* path, const char* html) {
     server.route(path, [html](const Request&) { return Response::html(html); });
 }
 
+// The ISOBUS state, for /api/status and the ISOBUS page.
+void isobusStatusJson(const IsobusStatus& is, JsonObject iso) {
+    iso["state"] = isobusStateName(is.state);
+    iso["channel"] = is.channel;
+    iso["interface"] = std::string(is.interface);  // copied: the document outlives is
+    iso["busActive"] = is.busActive;
+    if (is.state == IsobusStatus::State::Claimed) iso["address"] = is.address;
+    char name[17];
+    std::snprintf(name, sizeof name, "%016llX", static_cast<unsigned long long>(is.name));
+    iso["name"] = name;
+    JsonObject tc = iso["taskController"].to<JsonObject>();
+    tc["clients"] = is.clients;
+    tc["implement"] = std::string(is.implement);
+    tc["sections"] = is.sections;
+    tc["width"] = is.widthM;
+    tc["sectionControl"] = is.sectionControl;
+    std::string setpoint, actual;  // one character a section, section 1 first
+    for (uint8_t i = 0; i < is.sections && i < 64; ++i) {
+        setpoint += (is.setpoint >> i) & 1 ? '1' : '0';
+        actual += (is.actual >> i) & 1 ? '1' : '0';
+    }
+    tc["setpoint"] = setpoint;
+    tc["actual"] = actual;
+    JsonObject tecu = iso["tractorEcu"].to<JsonObject>();
+    tecu["state"] = isobusTecuName(is.tecu);
+    tecu["speed"] = is.speedMmS * 0.0036;  // km/h
+}
+
 Response status(Backend& b, const char* version) {
     const Status st = b.status();
     JsonDocument doc;
@@ -76,29 +105,7 @@ Response status(Backend& b, const char* version) {
     gnss["fixQuality"] = st.fixQuality;
     gnss["satellites"] = st.satellites;
     doc["appConnected"] = st.haveAppLink;
-    const IsobusStatus is = b.isobusStatus();  // AOW HAT: not in the firmware's status
-    JsonObject iso = doc["isobus"].to<JsonObject>();
-    iso["state"] = isobusStateName(is.state);
-    iso["channel"] = is.channel;
-    iso["interface"] = is.interface;
-    iso["busActive"] = is.busActive;
-    if (is.state == IsobusStatus::State::Claimed) iso["address"] = is.address;
-    char name[17];
-    std::snprintf(name, sizeof name, "%016llX", static_cast<unsigned long long>(is.name));
-    iso["name"] = name;
-    JsonObject tc = iso["taskController"].to<JsonObject>();
-    tc["clients"] = is.clients;
-    tc["implement"] = is.implement;
-    tc["sections"] = is.sections;
-    tc["width"] = is.widthM;
-    tc["sectionControl"] = is.sectionControl;
-    std::string setpoint, actual;  // one character a section, section 1 first
-    for (uint8_t i = 0; i < is.sections && i < 64; ++i) {
-        setpoint += (is.setpoint >> i) & 1 ? '1' : '0';
-        actual += (is.actual >> i) & 1 ? '1' : '0';
-    }
-    tc["setpoint"] = setpoint;
-    tc["actual"] = actual;
+    isobusStatusJson(b.isobusStatus(), doc["isobus"].to<JsonObject>());  // AOW HAT: not in the firmware's status
     static const char* const kColors[] = {"off", "red", "amber", "green", "blue"};
     JsonArray leds = doc["leds"].to<JsonArray>();
     for (uint8_t c : st.leds) leds.add(kColors[c < 5 ? c : 0]);
@@ -192,6 +199,34 @@ Response deviceSettings(Backend& b, const Request& r) {
         s.misc.ledBrightness = static_cast<uint8_t>(v < 5 ? 5 : v > 100 ? 100 : v);
     }
     return saveOr500(b, s, R"({"status":"saved"})");
+}
+
+// AOW HAT: the ISOBUS page's settings and live state. The settings apply at the next start of
+// the daemon, so a save says whether anything changed.
+Response isobus(Backend& b, const Request& r) {
+    Settings s = b.settings();
+    if (r.method == "GET") {
+        JsonDocument doc;
+        doc["enabled"] = s.isobus.enabled;
+        doc["channel"] = s.isobus.channel;
+        doc["tractorEcu"] = s.isobus.tractorEcu;
+        isobusStatusJson(b.isobusStatus(), doc["status"].to<JsonObject>());
+        return Response::json(toString(doc));
+    }
+    if (r.method != "POST") return methodNotAllowed();
+    JsonDocument doc;
+    if (deserializeJson(doc, r.body) || !doc.is<JsonObject>()) return invalidJson();
+    const Settings::Isobus before = s.isobus;
+    if (doc["enabled"].is<bool>()) s.isobus.enabled = doc["enabled"];
+    if (doc["tractorEcu"].is<bool>()) s.isobus.tractorEcu = doc["tractorEcu"];
+    if (doc["channel"].is<int>()) {
+        const int v = doc["channel"];
+        if (v >= 1 && v <= 3) s.isobus.channel = static_cast<uint8_t>(v);
+    }
+    const bool changed = before.enabled != s.isobus.enabled || before.channel != s.isobus.channel ||
+                         before.tractorEcu != s.isobus.tractorEcu;
+    return saveOr500(b, s, changed ? R"({"status":"saved","restartRequired":true})"
+                                   : R"({"status":"saved","restartRequired":false})");
 }
 
 Response networkConfig(Backend& b, const Request& r) {
@@ -373,6 +408,8 @@ void addRoutes(Server& server, Backend& b, const char* version) {
     page(server, "/logs", TOUCH_FRIENDLY_LOG_VIEWER_PAGE);
     page(server, "/network", TOUCH_FRIENDLY_NETWORK_PAGE);
     page(server, "/can", DRAG_DROP_CAN_CONFIG_PAGE);
+    page(server, "/isobus", ISOBUS_PAGE);
+    server.route("/api/isobus", [&b](const Request& r) { return isobus(b, r); });
     page(server, "/um98x-config", TOUCH_FRIENDLY_GPS_CONFIG_PAGE);
     page(server, "/gps", TOUCH_FRIENDLY_GPS_CONFIG_PAGE);
     server.route("/api/um98x/read", [&b](const Request&) { return um98xRead(b); });

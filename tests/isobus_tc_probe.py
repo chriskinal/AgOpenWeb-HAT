@@ -130,7 +130,7 @@ def main():
         t = run(30.0, lambda: imp.connected and status()["taskController"]["sections"] == 16)
         check(t is not None, "a 16-section implement connects (%s s)" % ("%.1f" % t if t else "never"))
         tc = status()["taskController"]
-        check(tc["clients"] >= 1 and tc["width"] > 0 and tc["implement"], "status names it: %s" % tc)
+        check(tc["clients"] >= 1 and tc["width"] > 0 and tc["implement"] == "AgIsoStack++ UnitTest", "status names it: %s" % tc)
         check(os.path.exists(os.path.join(cfgdir, "isobus", "tc.log")), "the task controller's log file is written")
         saved = [f for _, _, fs in os.walk(os.path.join(cfgdir, "isobus")) for f in fs if f.endswith(".ddop")]
         check(saved, "the implement's description is saved (%d files)" % len(saved))

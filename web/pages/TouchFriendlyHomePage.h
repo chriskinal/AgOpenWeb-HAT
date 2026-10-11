@@ -6,6 +6,7 @@
 
 // AOW HAT: copied from Firmware_Teensy_AiO_26 v26.5.5 web_pages/TouchFriendlyHomePage.h.
 // HAT changes: title; no Work Switch tile (the HAT work switch is digital only). Restart restarts the daemon.
+// An ISOBUS tile (the HAT's own page).
 
 // TouchFriendlyHomePage.h
 // Home page optimized for touchscreen tablets
@@ -48,6 +49,12 @@ const char TOUCH_FRIENDLY_HOME_PAGE[] PROGMEM = R"rawliteral(
                     <path d="M17,12V6C17,5.45 16.55,5 16,5H13V7H16V11H12V13H16V17H13V19H16A1,1 0 0,0 17,18V12M3,5H11A1,1 0 0,1 12,6V18A1,1 0 0,1 11,19H3A1,1 0 0,1 2,18V6A1,1 0 0,1 3,5M4,7V11H10V7H4M4,13V17H10V13H4Z"/>
                 </svg>
                 CAN Steering
+            </a></li>
+            <li><a href="/isobus">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="white" style="margin-right: 10px;">
+                    <path d="M3 5h4v14H3V5m7 0h4v14h-4V5m7 0h4v14h-4V5Z"/>
+                </svg>
+                ISOBUS
             </a></li>
             <li><a href="/eventlogger">
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="white" style="margin-right: 10px;">

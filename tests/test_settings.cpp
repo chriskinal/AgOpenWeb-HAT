@@ -11,7 +11,7 @@ int main() {
     CHECK(d.gains.steerSensorCounts == 30 && d.steer.minSpeed == 3 && d.steer.softStartDurationMs == 500);
     CHECK(d.gps.radioBaud == 115200 && d.can.moduleId == 0x1C && d.misc.ledBrightness == 25);
     CHECK(d.log.consoleLevel == log::Severity::Info && d.log.udpLevel == log::Severity::Warning);
-    CHECK(!d.isobus.enabled && d.isobus.channel == 2);
+    CHECK(!d.isobus.enabled && d.isobus.channel == 2 && d.isobus.tractorEcu);
 
     // Round trip of changed values.
     Settings s;
@@ -27,6 +27,7 @@ int main() {
     s.misc.buzzerVolume = 2;
     s.isobus.enabled = true;
     s.isobus.channel = 3;
+    s.isobus.tractorEcu = false;
     s.log.udpEnabled = true;
     s.log.consoleLevel = log::Severity::Debug;
     Settings r;
@@ -36,7 +37,7 @@ int main() {
     CHECK(r.gps.radioBaud == 38400 && r.can.brand == 4);
     CHECK(r.can.bus[2].function == 16 && r.can.bus[2].speed == 1 && r.can.bus[0].function == 0);
     CHECK(r.misc.buzzerVolume == 2 && r.log.udpEnabled && r.log.consoleLevel == log::Severity::Debug);
-    CHECK(r.isobus.enabled && r.isobus.channel == 3);
+    CHECK(r.isobus.enabled && r.isobus.channel == 3 && !r.isobus.tractorEcu);
     CHECK(toJson(r) == toJson(s));
 
     // An ISOBUS channel that does not exist falls back to CAN2.

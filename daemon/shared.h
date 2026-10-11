@@ -41,6 +41,7 @@ public:
     // For the ISOBUS thread, written by the control thread every tick. Atomics: no lock at all.
     std::atomic<uint64_t> isoSections{0};       // section bits wanted, section 1 in bit 0
     std::atomic<bool> isoSectionControl{false}; // the app is there and wants sections driven
+    std::atomic<int32_t> isoSpeedMmS{0};        // ground speed for the tractor ECU role
 
     // The ISOBUS thread publishes; the web thread reads.
     IsobusStatus isobus() const { std::lock_guard<PiMutex> l(isobusMu_); return isobus_; }

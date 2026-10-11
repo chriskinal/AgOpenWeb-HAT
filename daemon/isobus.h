@@ -24,7 +24,8 @@ public:
     // Starts the stack on a SocketCAN interface that is already up at 250 kbit/s. Returns at
     // once; the address claim goes on in the background and shows in Shared::isobus().
     // directory: where implements' device descriptions and tc.log are kept.
-    void start(const std::string& interface, uint8_t channel, const std::string& directory);
+    // tractorEcu: also stand in as the tractor ECU if the bus has none.
+    void start(const std::string& interface, uint8_t channel, const std::string& directory, bool tractorEcu);
     void stop();
 
     // The identity number in our NAME: 21 bits from this unit's machine id, so two HATs on
@@ -39,6 +40,7 @@ private:
     Shared& shared_;
     std::string interface_;
     std::string directory_;
+    bool tractorEcu_ = false;
     uint64_t sentAtStart_ = 0;
     IsobusStatus status_;  // the ISOBUS thread's copy; publish() hands it to Shared
     std::atomic<bool> stop_{false};

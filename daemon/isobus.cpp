@@ -10,6 +10,8 @@
 #include "isobus/isobus/isobus_device_descriptor_object_pool_helpers.hpp"
 #include "isobus/isobus/isobus_functionalities.hpp"
 #include "isobus/isobus/isobus_preferred_addresses.hpp"
+#include "isobus/isobus/isobus_speed_distance_messages.hpp"
+#include "isobus/isobus/nmea2000_message_interface.hpp"
 #include "settings.hpp"         // daemon/isobus_compat: where the task controller keeps files
 #include "task_controller.hpp"  // third_party/aog-taskcontroller
 #undef LOG_CRITICAL
@@ -64,7 +66,7 @@ void Isobus::stop() {
 
 #if !AOW_ISOBUS
 
-void Isobus::start(const std::string& interface, uint8_t channel, const std::string&) {
+void Isobus::start(const std::string& interface, uint8_t channel, const std::string&, bool) {
     interface_ = interface;
     status_.channel = channel;
     std::snprintf(status_.interface, sizeof status_.interface, "%s", interface.c_str());
@@ -153,12 +155,24 @@ private:
     std::atomic<uint64_t> dirty_{0};  // set on the stack's thread, taken on the ISOBUS thread
 };
 
+// True if some other device on the bus is a tractor ECU.
+bool busHasTractorEcu() {
+    for (const auto& cf : isobus::CANNetworkManager::CANNetwork.get_control_functions(false)) {
+        if (!cf || !cf->get_address_valid() || cf->get_type() == isobus::ControlFunction::Type::Internal) continue;
+        if (cf->get_NAME().get_function_code() == static_cast<std::uint8_t>(isobus::NAME::Function::TractorECU))
+            return true;
+    }
+    return false;
+}
+
 }  // namespace
 
-void Isobus::start(const std::string& interface, uint8_t channel, const std::string& directory) {
+void Isobus::start(const std::string& interface, uint8_t channel, const std::string& directory, bool tractorEcu) {
     interface_ = interface;
     directory_ = directory;
+    tractorEcu_ = tractorEcu;
     status_ = {};
+    status_.tecu = tractorEcu ? IsobusStatus::Tecu::Waiting : IsobusStatus::Tecu::Off;
     status_.state = IsobusStatus::State::Starting;
     status_.channel = channel;
     std::snprintf(status_.interface, sizeof status_.interface, "%s", interface.c_str());
@@ -213,6 +227,38 @@ void Isobus::run() {
 
     std::shared_ptr<TcServer> server;
     std::unique_ptr<isobus::ControlFunctionFunctionalities> functionalities;
+
+    // The tractor ECU role (as AOG-TaskController's, which announces a class 1 tractor ECU and
+    // sends speed). Unlike upstream it is never started on a bus that has a tractor ECU, and
+    // it gives way if one turns up: its address, 240, is fixed, and taking it from the
+    // tractor's own would leave the implement with our speed in place of the tractor's.
+    isobus::NAME tecuName = name;
+    tecuName.set_function_code(static_cast<std::uint8_t>(isobus::NAME::Function::TractorECU));
+    tecuName.set_arbitrary_address_capable(false);
+    const std::uint8_t tecuAddress = isobus::preferred_addresses::IndustryGroup2::TractorECU;
+    std::shared_ptr<isobus::InternalControlFunction> tecu;
+    std::unique_ptr<isobus::ControlFunctionFunctionalities> tecuFunctionalities;
+    std::unique_ptr<isobus::SpeedMessagesInterface> speedMessages;
+    std::unique_ptr<isobus::NMEA2000MessageInterface> nmea;
+    auto tecuAt = Clock::now(), lastTecuCheck = tecuAt, lastJ1939Speed = tecuAt, lastDistance = tecuAt;
+    auto lastSpeedPublish = tecuAt;
+    bool tecuClaimed = false;
+    double distanceMm = 0;
+    std::uint8_t nmeaSequence = 0;
+    auto setTecu = [this](IsobusStatus::Tecu t) {
+        if (status_.tecu == t) return;
+        status_.tecu = t;
+        if (t != IsobusStatus::Tecu::Active) status_.speedMmS = 0;
+        publish();
+    };
+    auto dropTecu = [&] {
+        nmea.reset();
+        speedMessages.reset();
+        tecuFunctionalities.reset();
+        if (tecu) isobus::CANNetworkManager::CANNetwork.deactivate_control_function(tecu);
+        tecu.reset();
+        tecuClaimed = false;
+    };
 
     // The stack's own thread handles the bus. This loop watches the address claim, runs the task
     // controller's periodic work and passes section states each way.
@@ -391,9 +437,96 @@ void Isobus::run() {
             if (wanted) server->update_section_states(states);
         }
 
+        // --- The tractor ECU role.
+        if (tractorEcu_ && elapsed(lastTecuCheck, 200)) {
+            lastTecuCheck = Clock::now();
+            const bool other = busHasTractorEcu();
+            if (other && status_.tecu != IsobusStatus::Tecu::Tractor) {
+                if (tecu) LOG_WARNING(Can, "ISOBUS: a tractor ECU appeared on the bus: ours stops");
+                else LOG_NOTICE(Can, "ISOBUS: the bus has a tractor ECU: not standing in for one");
+                dropTecu();
+                setTecu(IsobusStatus::Tecu::Tractor);
+            } else if (!other && !tecu && status_.tecu == IsobusStatus::Tecu::Waiting && server &&
+                       elapsed(claimedAt, 2000)) {
+                // Two seconds on the bus and no tractor ECU has answered: stand in.
+                tecu = isobus::CANNetworkManager::CANNetwork.create_internal_control_function(tecuName, 0, tecuAddress);
+                tecuAt = Clock::now();
+            } else if (tecu && !tecuClaimed && tecu->get_address_valid() && tecu->get_address() == tecuAddress) {
+                tecuClaimed = true;
+                tecuAt = Clock::now();
+            } else if (tecu && !tecuClaimed && elapsed(tecuAt, 5000)) {
+                LOG_ERROR(Can, "ISOBUS: could not claim address %u as the tractor ECU", tecuAddress);
+                dropTecu();
+                setTecu(IsobusStatus::Tecu::Failed);
+            } else if (tecu && tecuClaimed && !tecu->get_address_valid()) {
+                LOG_WARNING(Can, "ISOBUS: lost the tractor ECU's address %u", tecuAddress);
+                dropTecu();
+                setTecu(IsobusStatus::Tecu::Failed);
+            } else if (tecuClaimed && !speedMessages && elapsed(tecuAt, 250)) {
+                using F = isobus::ControlFunctionFunctionalities;
+                tecuFunctionalities = std::make_unique<F>(tecu);
+                tecuFunctionalities->set_functionality_is_supported(F::Functionalities::BasicTractorECUServer, 2, true);
+                tecuFunctionalities->set_basic_tractor_ECU_server_option_state(F::BasicTractorECUOptions::Class1NoOptions, true);
+                speedMessages = std::make_unique<isobus::SpeedMessagesInterface>(tecu, true, true, true, false);
+                speedMessages->initialize();
+                auto& wheel = speedMessages->wheelBasedSpeedTransmitData;
+                wheel.set_implement_start_stop_operations_state(isobus::WheelBasedMachineSpeedData::ImplementStartStopOperations::NotAvailable);
+                wheel.set_key_switch_state(isobus::WheelBasedMachineSpeedData::KeySwitchState::NotAvailable);
+                wheel.set_operator_direction_reversed_state(isobus::WheelBasedMachineSpeedData::OperatorDirectionReversed::NotAvailable);
+                speedMessages->machineSelectedSpeedTransmitData.set_speed_source(isobus::MachineSelectedSpeedData::SpeedSource::NavigationBasedSpeed);
+                nmea = std::make_unique<isobus::NMEA2000MessageInterface>(tecu, true, false, false, false, false, false, false);
+                nmea->initialize();
+                lastDistance = Clock::now();
+                LOG_NOTICE(Can, "ISOBUS: standing in as the tractor ECU at address %u (speed on the bus)", tecuAddress);
+                setTecu(IsobusStatus::Tecu::Active);
+            }
+        }
+        if (speedMessages) {
+            // Speed, forward: the app's PGN 254 carries no direction. Distance is summed here.
+            const std::int32_t mmS = shared_.isoSpeedMmS.load(std::memory_order_relaxed);
+            const auto speed = static_cast<std::uint16_t>(mmS < 0 ? 0 : (mmS > 65000 ? 65000 : mmS));
+            const auto now = Clock::now();
+            distanceMm += speed * std::chrono::duration<double>(now - lastDistance).count();
+            lastDistance = now;
+            const auto distance = static_cast<std::uint32_t>(distanceMm);
+            auto& ground = speedMessages->groundBasedSpeedTransmitData;
+            auto& wheel = speedMessages->wheelBasedSpeedTransmitData;
+            auto& selected = speedMessages->machineSelectedSpeedTransmitData;
+            ground.set_machine_direction_of_travel(isobus::MachineDirection::Forward);
+            wheel.set_machine_direction_of_travel(isobus::MachineDirection::Forward);
+            selected.set_machine_direction_of_travel(isobus::MachineDirection::Forward);
+            ground.set_machine_speed(speed);
+            wheel.set_machine_speed(speed);
+            selected.set_machine_speed(speed);
+            ground.set_machine_distance(distance);
+            wheel.set_machine_distance(distance);
+            selected.set_machine_distance(distance);
+            auto& cogSog = nmea->get_cog_sog_transmit_message();
+            if (cogSog.set_speed_over_ground(static_cast<std::uint16_t>(speed / 10))) cogSog.set_sequence_id(nmeaSequence++);
+            cogSog.set_course_over_ground(0);
+            cogSog.set_course_over_ground_reference(
+                isobus::NMEA2000Messages::CourseOverGroundSpeedOverGroundRapidUpdate::CourseOverGroundReference::NotApplicableOrNull);
+            tecuFunctionalities->update();
+            speedMessages->update();
+            nmea->update();
+            if (elapsed(lastJ1939Speed, 100)) {  // J1939 PGN 65256, as upstream: speed in km/h * 256
+                lastJ1939Speed = now;
+                const auto kmh256 = static_cast<std::uint16_t>((static_cast<std::uint32_t>(speed) * 576u + 312u) / 625u);
+                const std::array<std::uint8_t, 8> data = {0xFF, 0xFF, static_cast<std::uint8_t>(kmh256 & 0xFF),
+                                                          static_cast<std::uint8_t>(kmh256 >> 8), 0xFF, 0xFF, 0xFF, 0xFF};
+                isobus::CANNetworkManager::CANNetwork.send_can_message(0xFEE8, data.data(), data.size(), tecu);
+            }
+            if (mmS != status_.speedMmS && elapsed(lastSpeedPublish, 500)) {
+                lastSpeedPublish = now;
+                status_.speedMmS = mmS;
+                publish();
+            }
+        }
+
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
 
+    dropTecu();
     if (server) {
         // Leaving: sections off while the bus is still up.
         std::vector<bool> off(64, false);
