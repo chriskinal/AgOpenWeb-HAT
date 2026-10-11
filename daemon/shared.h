@@ -8,6 +8,9 @@
 #include <mutex>
 #include <string>
 
+#include <sys/eventfd.h>
+#include <unistd.h>
+
 #include "aow/hal.h"
 #include "aow/pi_mutex.h"
 #include "aow/settings.h"
@@ -38,9 +41,19 @@ public:
     Status status() const { std::lock_guard<PiMutex> l(mu_); return status_; }
     void setStatus(const Status& s) { std::lock_guard<PiMutex> l(mu_); status_ = s; }
 
-    // For the ISOBUS thread, written by the control thread every tick. Atomics: no lock at all.
+    // For the ISOBUS thread, written by the control thread. Atomics: no lock at all. A change
+    // also wakes the ISOBUS thread through an eventfd (a write that never blocks), so a section
+    // goes to the implement without waiting for that thread's next pass.
     std::atomic<uint64_t> isoSections{0};       // section bits wanted, section 1 in bit 0
     std::atomic<bool> isoSectionControl{false}; // the app is there and wants sections driven
+    void setIsoSections(bool control, uint64_t bits) {
+        const bool changed = isoSectionControl.exchange(control, std::memory_order_relaxed) != control;
+        if (isoSections.exchange(bits, std::memory_order_relaxed) != bits || changed) {
+            const uint64_t one = 1;
+            (void)!write(isoWakeFd_, &one, sizeof one);
+        }
+    }
+    int isoWakeFd() const { return isoWakeFd_; }
     std::atomic<int32_t> isoSpeedMmS{0};        // ground speed for the tractor ECU role
 
     // The ISOBUS thread publishes; the web thread reads.
@@ -95,6 +108,7 @@ private:
     mutable PiMutex mu_;
     Settings settings_;
     Status status_;
+    const int isoWakeFd_ = eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
     mutable PiMutex isobusMu_;
     IsobusStatus isobus_;
     std::atomic<unsigned> settingsVersion_{0};

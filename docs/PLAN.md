@@ -451,6 +451,19 @@ Not done yet: PGN 240 back to the app, upstream's status screen for a tractor's 
 (decide with AgIsoVT on the bench), a real implement, and two real CAN nodes (two HAT channels
 wired together would do).
 
+**Command latency (2026-10-11).** Time from a PGN 254 with new section bits leaving for the
+daemon to the setpoint frame (DDI 290) arriving on the other linked HAT channel, 150 changes a run.
+
+- The "42 to 63 ms" above was mostly the test: the probe looks every 20 ms and the simulator
+  every 5 ms. Measured on the bus it was 6 to 16.5 ms, median 11 ms.
+- Two waits made that up, and both are gone. The control thread passed the bits on at its 10 ms
+  tick: it now does so as the PGN arrives (the tick still clears them when the app goes away).
+  The ISOBUS thread looked every 10 ms: `Shared::setIsoSections()` now wakes it through an
+  eventfd when the bits change, and it sends setpoints before reading reported states.
+- After: 1.0 to 2.7 ms, median 1.5 ms, three runs. ISOBUS thread CPU idle is unchanged (under 2 %).
+- What is left is the implement's own reaction and the valves, which this cannot see, and the
+  app's rate of sending PGN 254.
+
 **Open.**
 
 - Whether the app should learn section count and width from the implement (upstream sends them

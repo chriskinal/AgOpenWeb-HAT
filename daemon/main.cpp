@@ -398,7 +398,7 @@ int main(int argc, char** argv) {
     uint8_t ledColors[4] = {};
     const uint64_t summaryTicks = opt.verbose ? 500 : 6000;
     uint64_t ticks = 0, nextSummary = summaryTicks, nextTurnSensor = 0, nextMotorProcess = 0, nextKick = 0;
-    bool watchdogOn = false;
+    bool watchdogOn = false, isoAppLink = false;
     int code = 0;
     for (;;) {
         if (poll(fds, 6, -1) < 0) {
@@ -412,7 +412,12 @@ int main(int argc, char** argv) {
             if (read(sigFd, &si, sizeof si) == sizeof si) LOG_NOTICE(System, "Signal %u: stopping", si.ssi_signo);
             break;
         }
-        if (fds[kApp].revents) app.poll();
+        if (fds[kApp].revents) {
+            app.poll();
+            // New section bits go to the ISOBUS thread now, not at the next tick. The tick
+            // still does it too: that is what clears them when the app goes away.
+            if (isoAppLink) shared.setIsoSections(app.sectionControl(), app.sections());
+        }
         if (fds[kGnss].revents & (POLLERR | POLLHUP | POLLNVAL)) {
             // A USB receiver unplugged. Exit; systemd restarts us and we reopen it.
             LOG_ERROR(Gnss, "%s went away", opt.gnssDevice);
@@ -501,8 +506,8 @@ int main(int argc, char** argv) {
             st.navSent = gnss.counters().navSent;
 
             // For the ISOBUS task controller: the app's sections, and none once the app is gone.
-            shared.isoSectionControl.store(st.haveAppLink && app.sectionControl(), std::memory_order_relaxed);
-            shared.isoSections.store(st.haveAppLink ? app.sections() : 0, std::memory_order_relaxed);
+            isoAppLink = st.haveAppLink;
+            shared.setIsoSections(st.haveAppLink && app.sectionControl(), st.haveAppLink ? app.sections() : 0);
             // Speed for the tractor ECU role: the app's (what its section control works from),
             // or GNSS speed with no app.
             const float isoKmh = st.haveAppLink ? app.command().speedKmh : (g.fixQuality ? st.speedKph : 0.0f);

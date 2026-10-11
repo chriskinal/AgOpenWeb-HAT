@@ -23,8 +23,10 @@
 
 #include "isobus.h"
 
+#include <poll.h>
 #include <pthread.h>
 #include <sched.h>
+#include <unistd.h>
 
 #include <array>
 #include <chrono>
@@ -401,6 +403,25 @@ void Isobus::run() {
                 if (changed) publish();
             }
 
+            // The app's side, ahead of the slower reading below: a setpoint goes out on the pass
+            // that sees it. Setpoints are only sent in auto mode, so: switching off, all
+            // sections off first and then leave auto; switching on, enter auto first. A new
+            // implement is told the mode again.
+            const bool wanted = shared_.isoSectionControl.load(std::memory_order_relaxed);
+            const uint64_t bits = wanted ? shared_.isoSections.load(std::memory_order_relaxed) : 0;
+            std::vector<bool> states(64);
+            for (int i = 0; i < 64; ++i) states[i] = (bits >> i) & 1;
+            if (!wanted && sectionControl) {
+                server->update_section_states(states);
+                server->update_section_control_enabled(false);
+                LOG_INFO(Can, "ISOBUS: section control off");
+            } else if (wanted && (!sectionControl || newImplement)) {
+                server->update_section_control_enabled(true);
+                if (!sectionControl) LOG_INFO(Can, "ISOBUS: section control on");
+            }
+            sectionControl = wanted;
+            if (wanted) server->update_section_states(states);
+
             // Reported states. With nothing in hand, take what has been marked since and a fresh
             // copy of the implement's state; then one marked section a pass.
             if (!scanPending && implementName) {
@@ -427,24 +448,6 @@ void Isobus::run() {
                 }
                 if (!scanPending) scanChanged = false;
             }
-
-            // The app's side. Setpoints are only sent in auto mode, so: switching off, all
-            // sections off first and then leave auto; switching on, enter auto first. A new
-            // implement is told the mode again.
-            const bool wanted = shared_.isoSectionControl.load(std::memory_order_relaxed);
-            const uint64_t bits = wanted ? shared_.isoSections.load(std::memory_order_relaxed) : 0;
-            std::vector<bool> states(64);
-            for (int i = 0; i < 64; ++i) states[i] = (bits >> i) & 1;
-            if (!wanted && sectionControl) {
-                server->update_section_states(states);
-                server->update_section_control_enabled(false);
-                LOG_INFO(Can, "ISOBUS: section control off");
-            } else if (wanted && (!sectionControl || newImplement)) {
-                server->update_section_control_enabled(true);
-                if (!sectionControl) LOG_INFO(Can, "ISOBUS: section control on");
-            }
-            sectionControl = wanted;
-            if (wanted) server->update_section_states(states);
         }
 
         // --- The tractor ECU role.
@@ -533,7 +536,12 @@ void Isobus::run() {
             }
         }
 
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        // 10 ms, or at once when the control thread has new section bits.
+        pollfd wake = {shared_.isoWakeFd(), POLLIN, 0};
+        if (poll(&wake, 1, 10) > 0) {
+            uint64_t n;
+            (void)!read(wake.fd, &n, sizeof n);
+        }
     }
 
     dropTecu();
