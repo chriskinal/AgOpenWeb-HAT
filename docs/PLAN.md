@@ -447,7 +447,7 @@ daemon's task controller on `hatcan2`, the simulated implement on `hatcan3`.
   loopback lock). They are still dropped, but no longer counted as another host's or warned
   about; only a genuinely foreign sender is.
 
-Not done yet: a real implement, and the app reading PGN 240 (AgOpenWeb issue 312).
+Not done yet: a real implement.
 
 **Command latency (2026-10-11).** Time from a PGN 254 with new section bits leaving for the
 daemon to the setpoint frame (DDI 290) arriving on the other linked HAT channel, 150 changes a run.
@@ -492,15 +492,20 @@ tractor's virtual terminal, carried over.
   terminal is on the bus (`IsobusVt::Impl::forget`).
 - Seen on AgIsoVT (Windows VM, CAN adapter on CAN2 at J3), 480x480: the pages show, the soft
   keys change the page, the tractor ECU switch follows. The AOG-TC labels stay: the user is
-  content with them, so the pool remains upstream's file.
+  content with them, so the pool remains upstream's file. With the simulated implement on
+  `hatcan3`, the screen follows the app's sections and the section control switch.
 
 **PGN 240 to the app (2026-10-11, version 0.2.6).** As AOG-TaskController
 sends it: source 0x80, every 100 ms from the control loop while the task controller has its
 address; byte 0 section control on, byte 1 the implement's section count, then a bit a section
 as the implement reports them. Count 0 with no implement, as upstream's heartbeat.
 `AppLink::sendSectionStatus`; checked in `tests/test_app_link.cpp` and against the simulated
-implement in `tests/isobus_tc_probe.py` (16 and 64 sections, section control off). The app does
-not read it yet (AgOpenWeb issue 312) and has not been run against a daemon that sends it.
+implement in `tests/isobus_tc_probe.py` (16 and 64 sections, section control off).
+Seen in AgOpenWeb's nightly of 2026-10-11 (37212a7, which reads PGN 240 and sends 241): its
+ISOBUS button appears on the heartbeat, shows section control once the simulated implement on
+`hatcan3` connects, and the row of reported sections under the section buttons follows the
+section buttons. The button switches the implement's section control off and on (PGN 241):
+off, the reported row goes dark while the app's section buttons keep their state.
 
 **Open.**
 
