@@ -4,6 +4,22 @@ project(aow-hatd VERSION 0.1.0 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
+
+# ISOBUS (docs/PLAN.md section 8): AgIsoStack++ (MIT), at the commit AOG-TaskController pins.
+# Fetched before our warning flags are set, so they do not apply to it. Needs the network at
+# the first configure; -DAOW_ISOBUS=OFF builds the daemon without the stack.
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+  option(AOW_ISOBUS "Build the ISOBUS stack into aow-hatd" ON)
+endif()
+if(AOW_ISOBUS)
+  include(FetchContent)
+  set(CAN_DRIVER "SocketCAN" CACHE STRING "" FORCE)
+  FetchContent_Declare(isobus
+    URL https://github.com/Open-Agriculture/AgIsoStack-plus-plus/archive/c0e1ebb06a2ad9d5bf86c98b3d028ab8fa350130.tar.gz
+    DOWNLOAD_EXTRACT_TIMESTAMP TRUE)
+  FetchContent_MakeAvailable(isobus)
+endif()
+
 add_compile_options(-Wall -Wextra -Wpedantic)
 
 # core: pure logic. No Linux, no hardware. Builds and tests on any desktop.
@@ -41,11 +57,16 @@ find_package(Threads REQUIRED)
 # daemon: Linux only (the HAT drivers need spidev, SocketCAN, termios).
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
   add_executable(aow-hatd daemon/main.cpp daemon/linux_io.cpp daemon/shared.cpp daemon/web_thread.cpp
+    daemon/isobus.cpp
     boards/hat/hat_board.cpp boards/hat/hat_leds.cpp boards/hat/hat_piezo.cpp)
   target_include_directories(aow-hatd PRIVATE boards/hat daemon)
   set(AOW_VERSION "${PROJECT_VERSION}" CACHE STRING "Version reported by aow-hatd and stamped on update packages")
   target_compile_definitions(aow-hatd PRIVATE AOW_VERSION="${AOW_VERSION}")
   target_link_libraries(aow-hatd PRIVATE aow_core aow_web Threads::Threads)
+  if(AOW_ISOBUS)
+    target_compile_definitions(aow-hatd PRIVATE AOW_ISOBUS=1)
+    target_link_libraries(aow-hatd PRIVATE isobus::Isobus isobus::HardwareIntegration isobus::Utility)
+  endif()
   install(TARGETS aow-hatd RUNTIME DESTINATION bin)
 endif()
 

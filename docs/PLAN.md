@@ -328,10 +328,31 @@ That is accepted: if the implement side has failed there is no reason to keep st
   address; the tractor's measured curvature stands in for the WAS and its "not accepting" state
   is a new stop path, with a test.
 
+**Step 1 record (2026-10-10, branch `isobus`).** The stack is in the daemon and claims an address.
+
+- `daemon/isobus.cpp`: starts AgIsoStack++ on the channel set in `isobus.enabled` and
+  `isobus.channel` (default off, CAN2), claims as a task controller at address 247, and
+  publishes state, address and NAME in `/api/status` under `isobus`. The NAME's identity
+  number comes from the unit's machine id, so two HATs on one bus differ.
+- Its threads run at normal priority while the control thread is SCHED_FIFO 80 (checked with
+  `chrt` and `ps -L`).
+- `tests/isobus_probe.py` on vcan: claims 247 with the right NAME, answers a request for
+  address claimed, and moves to 128 when a higher-priority NAME takes 247.
+- On the real `hatcan2` with nothing connected the claim still "succeeds", because nothing
+  objects. `busActive` in the status turns true only once a frame of ours is acknowledged,
+  and the log warns after 5 s without that.
+- Cost on the CM4: the stack takes about 4.5 minutes to build the first time; the binary grew
+  from 0.7 to 1.0 MB; resident memory 39 MB with ISOBUS running against 23 MB without.
+- AgIsoStack++ is fetched by CMake as a tarball of the pinned commit (no git needed);
+  `-DAOW_ISOBUS=OFF` builds without it. Its logging macros share names with the daemon's:
+  see the include order at the top of `daemon/isobus.cpp`.
+- Not yet tried against a second real CAN node.
+
 **Open.**
 
 - Whether the app should learn section count and width from the implement (upstream sends them
   in PGN 240). That is AgOpenWeb work; until then the user enters them in the app as today.
-- Build time on the CM4 with AgIsoStack++ added, and whether it is fetched or vendored.
+- Whether AgIsoStack++ stays fetched at build time or is vendored: fetching needs the network
+  wherever a package is built.
 - Rate control: upstream does not do it.
 

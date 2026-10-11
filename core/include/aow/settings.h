@@ -48,6 +48,12 @@ struct Settings {
         uint8_t moduleId = 0x1C;
     } can;
 
+    // ISOBUS (docs/PLAN.md section 8). Applied at startup: a change needs a restart.
+    struct Isobus {
+        bool enabled = false;
+        uint8_t channel = 2;               // 1..3; the firmware's ISO_Bus is CAN2
+    } isobus;
+
     struct Misc {
         bool invertWorkSwitch = false;
         uint8_t ledBrightness = 25;        // %, 5..100

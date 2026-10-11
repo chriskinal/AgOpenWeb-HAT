@@ -11,6 +11,7 @@ int main() {
     CHECK(d.gains.steerSensorCounts == 30 && d.steer.minSpeed == 3 && d.steer.softStartDurationMs == 500);
     CHECK(d.gps.radioBaud == 115200 && d.can.moduleId == 0x1C && d.misc.ledBrightness == 25);
     CHECK(d.log.consoleLevel == log::Severity::Info && d.log.udpLevel == log::Severity::Warning);
+    CHECK(!d.isobus.enabled && d.isobus.channel == 2);
 
     // Round trip of changed values.
     Settings s;
@@ -24,6 +25,8 @@ int main() {
     s.can.bus[2].function = 16;
     s.can.bus[2].speed = 1;
     s.misc.buzzerVolume = 2;
+    s.isobus.enabled = true;
+    s.isobus.channel = 3;
     s.log.udpEnabled = true;
     s.log.consoleLevel = log::Severity::Debug;
     Settings r;
@@ -33,7 +36,13 @@ int main() {
     CHECK(r.gps.radioBaud == 38400 && r.can.brand == 4);
     CHECK(r.can.bus[2].function == 16 && r.can.bus[2].speed == 1 && r.can.bus[0].function == 0);
     CHECK(r.misc.buzzerVolume == 2 && r.log.udpEnabled && r.log.consoleLevel == log::Severity::Debug);
+    CHECK(r.isobus.enabled && r.isobus.channel == 3);
     CHECK(toJson(r) == toJson(s));
+
+    // An ISOBUS channel that does not exist falls back to CAN2.
+    Settings iso;
+    CHECK(fromJson(R"({"isobus":{"enabled":true,"channel":7}})", iso));
+    CHECK(iso.isobus.enabled && iso.isobus.channel == 2);
 
     // Partial file: only the keys present change; the rest keep their current values.
     Settings p = s;

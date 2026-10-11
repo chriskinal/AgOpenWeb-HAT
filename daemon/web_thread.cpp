@@ -174,6 +174,7 @@ public:
     }
 
     Status status() override { return shared_.status(); }
+    IsobusStatus isobusStatus() override { return shared_.isobus(); }
 
     void restart() override {
         LOG_WARNING(System, "Restart requested from the web page");

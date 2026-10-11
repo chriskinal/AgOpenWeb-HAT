@@ -63,6 +63,10 @@ std::string toJson(const Settings& s) {
         o["name"] = b.name;
     }
 
+    JsonObject iso = doc["isobus"].to<JsonObject>();
+    iso["enabled"] = s.isobus.enabled;
+    iso["channel"] = s.isobus.channel;
+
     JsonObject m = doc["misc"].to<JsonObject>();
     m["invertWorkSwitch"] = s.misc.invertWorkSwitch;
     m["ledBrightness"] = s.misc.ledBrightness;
@@ -126,6 +130,11 @@ bool fromJson(const std::string& json, Settings& s, std::string* error) {
         get(buses[i], "function", n.can.bus[i].function);
         get(buses[i], "name", n.can.bus[i].name);
     }
+
+    JsonVariantConst iso = doc["isobus"];
+    get(iso, "enabled", n.isobus.enabled);
+    get(iso, "channel", n.isobus.channel);
+    if (n.isobus.channel < 1 || n.isobus.channel > 3) n.isobus.channel = 2;
 
     JsonVariantConst m = doc["misc"];
     get(m, "invertWorkSwitch", n.misc.invertWorkSwitch);

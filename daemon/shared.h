@@ -38,6 +38,10 @@ public:
     Status status() const { std::lock_guard<PiMutex> l(mu_); return status_; }
     void setStatus(const Status& s) { std::lock_guard<PiMutex> l(mu_); status_ = s; }
 
+    // The ISOBUS thread publishes; the web thread reads.
+    IsobusStatus isobus() const { std::lock_guard<PiMutex> l(isobusMu_); return isobus_; }
+    void setIsobus(const IsobusStatus& s) { std::lock_guard<PiMutex> l(isobusMu_); isobus_ = s; }
+
     // The control thread changed the settings (PGN 251/252); the web thread saves them.
     void requestSave() { saveRequested_.store(true); }
     bool takeSaveRequest() { return saveRequested_.exchange(false); }
@@ -78,6 +82,8 @@ private:
     mutable PiMutex mu_;
     Settings settings_;
     Status status_;
+    mutable PiMutex isobusMu_;
+    IsobusStatus isobus_;
     std::atomic<unsigned> settingsVersion_{0};
     std::atomic<bool> saveRequested_{false};
     static constexpr size_t kMirror = 1024;

@@ -23,6 +23,8 @@ struct FakeBackend : Backend {
         return true;
     }
     Status status() override { return st; }
+    IsobusStatus iso;
+    IsobusStatus isobusStatus() override { return iso; }
     void restart() override { ++restarts; }
     std::string updatePackage, updateJson;
     int reboots = 0;
@@ -84,6 +86,14 @@ int main() {
     JsonDocument d = parse(request(s, port, "GET /api/status HTTP/1.1\r\n\r\n"));
     CHECK(d["version"] == "0.1.0" && d["uptime"] == 12345 && d["moduleId"] == 126);
     CHECK(d["network"]["interfaces"].size() == 3 && d["gnss"]["fixQuality"] == 4);
+    CHECK(d["isobus"]["state"] == "disabled" && d["isobus"]["address"].isNull());
+    b.iso.state = IsobusStatus::State::Claimed;
+    b.iso.channel = 2;
+    b.iso.address = 247;
+    b.iso.name = 0xA00082000AFE0014ull;
+    d = parse(request(s, port, "GET /api/status HTTP/1.1\r\n\r\n"));
+    CHECK(d["isobus"]["state"] == "claimed" && d["isobus"]["address"] == 247 && d["isobus"]["channel"] == 2);
+    CHECK(d["isobus"]["name"] == "A00082000AFE0014" && d["isobus"]["busActive"] == false);
 
     // Device settings: GET shows the firmware field names.
     d = parse(request(s, port, "GET /api/device/settings HTTP/1.1\r\n\r\n"));

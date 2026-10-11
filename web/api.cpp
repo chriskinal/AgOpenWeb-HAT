@@ -4,6 +4,7 @@
 
 #include <ArduinoJson.h>
 
+#include <cstdio>
 #include <cstring>
 
 #include "pages/CANConfigUploadPage.h"
@@ -75,6 +76,16 @@ Response status(Backend& b, const char* version) {
     gnss["fixQuality"] = st.fixQuality;
     gnss["satellites"] = st.satellites;
     doc["appConnected"] = st.haveAppLink;
+    const IsobusStatus is = b.isobusStatus();  // AOW HAT: not in the firmware's status
+    JsonObject iso = doc["isobus"].to<JsonObject>();
+    iso["state"] = isobusStateName(is.state);
+    iso["channel"] = is.channel;
+    iso["interface"] = is.interface;
+    iso["busActive"] = is.busActive;
+    if (is.state == IsobusStatus::State::Claimed) iso["address"] = is.address;
+    char name[17];
+    std::snprintf(name, sizeof name, "%016llX", static_cast<unsigned long long>(is.name));
+    iso["name"] = name;
     static const char* const kColors[] = {"off", "red", "amber", "green", "blue"};
     JsonArray leds = doc["leds"].to<JsonArray>();
     for (uint8_t c : st.leds) leds.add(kColors[c < 5 ? c : 0]);

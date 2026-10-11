@@ -61,6 +61,11 @@ The Teensy firmware is not being rewritten and nothing is ported back to it.
   UM98x (GPS) page, radio RTCM (`--radio`) and GPS passthrough: done. LED and buzzer logic
   (`core/indicators`; `/api/status` shows the LED colours), `aow-hatctl`: done.
   PGNs are accepted only from the `--app` host (loopback); `--any-app` lifts that.
+- **ISOBUS (branch `isobus`, docs/PLAN.md section 8):** AgIsoStack++ is built into the daemon
+  (`daemon/isobus.cpp`, fetched by CMake; `-DAOW_ISOBUS=OFF` leaves it out) and claims an
+  address as a task controller on the channel in the `isobus` settings, off by default. No
+  task controller yet. Include the stack's headers before any `aow/` header and `#undef` its
+  `LOG_*` macros, as `daemon/isobus.cpp` does.
 - **Key monitor:** `deploy/aow-keymon.py`, its own service: key off for 3 s runs `poweroff`.
 - **Updates:** `deploy/package.sh` (on Linux arm64) builds a bundle and a signed `.aowpkg`; the
   System Update page (`/ota`) takes the `.aowpkg`, and `deploy/aow-hat-update`, a separate root
@@ -118,6 +123,7 @@ scan, then PGN 254 at a set rate, checking every reply and timing the 253.
 `tests/steer_probe.py` closes the steering loop against `--board sim`.
 `tests/can_probe.py build/aow-hatd` runs Valtra/MF CAN steering and GVRET on vcan0-2.
 `tests/um98x_probe.py build/aow-hatd` runs the GPS page and radio with ptys as the devices.
+`tests/isobus_probe.py build/aow-hatd` checks the ISOBUS address claim on vcan1 (stop the service first).
 On the HAT: `tests/adc_read.py` reads all eight ADC channels, `tests/hat_bench.py` plays the app
 with a fixed target angle for a pot-and-meter bench, and `aow-hatd --board hat --indicator-test`
 cycles the LEDs and plays the chime (stop the service first for both daemon tests).

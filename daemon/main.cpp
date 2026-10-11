@@ -30,6 +30,7 @@
 #include "aow/steer.h"
 #include "board.h"
 #include "hat_board.h"
+#include "isobus.h"
 #include "linux_io.h"
 #include "shared.h"
 #include "web_thread.h"
@@ -319,7 +320,11 @@ int main(int argc, char** argv) {
             const size_t comma = list.find(',');
             const std::string name = list.substr(0, comma);
             list = comma == std::string::npos ? "" : list.substr(comma + 1);
-            const uint32_t bitrate = startSettings.can.bus[i].speed ? 500000 : 250000;
+            uint32_t bitrate = startSettings.can.bus[i].speed ? 500000 : 250000;
+            if (startSettings.isobus.enabled && startSettings.isobus.channel == i + 1 && bitrate != 250000) {
+                LOG_WARNING(Can, "CAN%d is the ISOBUS channel: 250 kbit/s, not the 500 set for it", i + 1);
+                bitrate = 250000;
+            }
             if (!name.empty() && can[i].open(name.c_str(), bitrate)) {
                 hooks.bus[i] = &can[i];
                 LOG_INFO(Can, "CAN%d on %s, %u bit/s", i + 1, name.c_str(), bitrate);
@@ -327,6 +332,21 @@ int main(int argc, char** argv) {
         }
     }
     canCompatSetup(hooks);
+
+    // ISOBUS shares its channel with the brand engine above: two sockets on one interface.
+    aow::Isobus isobus(shared);
+    if (startSettings.isobus.enabled) {
+        const int ch = startSettings.isobus.channel;
+        if (hooks.bus[ch - 1]) {
+            isobus.start(can[ch - 1].name(), static_cast<uint8_t>(ch));
+        } else {
+            LOG_ERROR(Can, "ISOBUS: CAN%d is not available", ch);
+            aow::IsobusStatus s;
+            s.state = aow::IsobusStatus::State::Failed;
+            s.channel = static_cast<uint8_t>(ch);
+            shared.setIsobus(s);
+        }
+    }
 
     // The motor, chosen as the firmware's MotorDriverManager: tractor CAN if a brand is set,
     // else a Keya on RS-232 if one answers, else the board's PWM output.
@@ -517,6 +537,7 @@ int main(int argc, char** argv) {
     motor->process();
     motor->process();
     board.drive({});  // the service unit's ExecStopPost is the backstop
+    isobus.stop();
     if (watchdogOn) board.watchdog(false);
     close(tickFd);
     close(sigFd);
