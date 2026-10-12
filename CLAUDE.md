@@ -61,7 +61,7 @@ The Teensy firmware is not being rewritten and nothing is ported back to it.
   UM98x (GPS) page, radio RTCM (`--radio`) and GPS passthrough: done. LED and buzzer logic
   (`core/indicators`; `/api/status` shows the LED colours), `aow-hatctl`: done.
   PGNs are accepted only from the `--app` host (loopback); `--any-app` lifts that.
-- **ISOBUS (branch `isobus`, docs/PLAN.md section 8):** AgIsoStack++ is built into the daemon
+- **ISOBUS (docs/PLAN.md section 8):** AgIsoStack++ is built into the daemon
   (`daemon/isobus.cpp`, fetched by CMake; `-DAOW_ISOBUS=OFF` leaves it out) and runs
   AOG-TaskController's section control task controller on the channel in the `isobus`
   settings, off by default: the app's section bits (PGN 254, or 229 for 64) go to the implement,

@@ -331,7 +331,7 @@ That is accepted: if the implement side has failed there is no reason to keep st
   address; the tractor's measured curvature stands in for the WAS and its "not accepting" state
   is a new stop path, with a test.
 
-**Step 1 record (2026-10-10, branch `isobus`).** The stack is in the daemon and claims an address.
+**Step 1 record (2026-10-10).** The stack is in the daemon and claims an address.
 
 - `daemon/isobus.cpp`: starts AgIsoStack++ on the channel set in `isobus.enabled` and
   `isobus.channel` (default off, CAN2), claims as a task controller at address 247, and
@@ -351,7 +351,7 @@ That is accepted: if the implement side has failed there is no reason to keep st
   see the include order at the top of `daemon/isobus.cpp`.
 - Not yet tried against a second real CAN node.
 
-**Step 2 record (2026-10-10, branch `isobus`).** Section control works against a simulated implement.
+**Step 2 record (2026-10-10).** Section control works against a simulated implement.
 
 - `third_party/aog-taskcontroller/`: upstream's `task_controller.cpp/.hpp` at commit `4ede403`,
   **unmodified**. The two headers it expects are the daemon's own, in `daemon/isobus_compat/`:
@@ -384,7 +384,7 @@ That is accepted: if the implement side has failed there is no reason to keep st
 - Upstream uses `std::find_if` without `<algorithm>`; the build adds the include from outside.
 - The first configure sets the build type to Release if none is given.
 
-**Step 3 record (2026-10-10, branch `isobus`).** The tractor ECU role and the ISOBUS page.
+**Step 3 record (2026-10-10).** The tractor ECU role and the ISOBUS page.
 
 - **Tractor ECU role** (`isobus.tractorEcu`, default on): two seconds after the claim, if no
   other device on the bus is a tractor ECU, the daemon claims the fixed address 240 and sends
