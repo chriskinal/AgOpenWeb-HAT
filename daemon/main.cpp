@@ -64,6 +64,7 @@ struct Options {
     bool noWatchdog = false;                   // --board hat: leave the STWD100 off (debugging)
     bool anyApp = false;                       // accept PGNs from any host, not only --app
     bool indicatorTest = false;                // light each LED in turn, play the chime, exit
+    unsigned testHangAfterS = 0;               // watchdog test: the control loop stops after this
     bool verbose = false;
 };
 
@@ -85,6 +86,9 @@ void usage() {
         "  --adc-ref V       hat: the measured 5V_MAIN, the ADC reference (default 5.0)\n"
         "  --no-watchdog     hat: leave the hardware watchdog off (for debugging)\n"
         "  --indicator-test  each LED red, green, blue in turn, then the chime; then exit\n"
+        "  --test-hang-after S  watchdog test: the control loop stops for good after S seconds,\n"
+        "                    the web thread carries on. By hand only, never in daemon.env:\n"
+        "                    on the HAT it resets the CM4\n"
         "  --can A,B,C       SocketCAN interfaces for CAN1-3 (default can0,can1,can2)\n"
         "  --gvret-port N    SavvyCAN (GVRET) over TCP (default 23; 0 = off)\n"
         "  --keya-serial DEV probe for a Keya motor on this serial port at startup\n"
@@ -115,6 +119,7 @@ bool parseArgs(int argc, char** argv, Options& o) {
         else if (!std::strcmp(a, "--no-watchdog")) o.noWatchdog = true;
         else if (!std::strcmp(a, "--any-app")) o.anyApp = true;
         else if (!std::strcmp(a, "--indicator-test")) o.indicatorTest = true;
+        else if (!std::strcmp(a, "--test-hang-after") && hasValue) o.testHangAfterS = static_cast<unsigned>(std::atoi(argv[++i]));
         else if (!std::strcmp(a, "-v") || !std::strcmp(a, "--verbose")) o.verbose = true;
         else if (!std::strcmp(a, "--version")) { std::printf("aow-hatd %s\n", kVersion); std::exit(0); }
         else { usage(); return false; }
@@ -456,6 +461,12 @@ int main(int argc, char** argv) {
                     nextKick = ticks + 10;
                     board.kickWatchdog();
                 }
+            }
+            // --test-hang-after: a hung control loop, for the hardware watchdog to catch. After
+            // the kick, so the timeout runs from here; the outputs stay as they are.
+            if (opt.testHangAfterS && ticks >= opt.testHangAfterS * 100ULL) {
+                LOG_ERROR(System, "Test: control loop hung on purpose (--test-hang-after %u)", opt.testHangAfterS);
+                for (;;) pause();  // SIGTERM and SIGINT are blocked: only a reset or SIGKILL ends it
             }
             // The UM98x page borrowing the GNSS port, or giving it back.
             if (shared.gnssPauseRequested.load() && !shared.gnssPaused.load()) {

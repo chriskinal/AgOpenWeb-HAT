@@ -142,6 +142,9 @@ screen for a tractor's terminal against a stand-in terminal on vcan1.
 On the HAT: `tests/adc_read.py` reads all eight ADC channels, `tests/hat_bench.py` plays the app
 with a fixed target angle for a pot-and-meter bench, and `aow-hatd --board hat --indicator-test`
 cycles the LEDs and plays the chime (stop the service first for both daemon tests).
+`aow-hatd --test-hang-after S` stops the control loop for good after S seconds while the web thread
+carries on, so the hardware watchdog resets the CM4. Run it by hand with the service stopped;
+never put it in `daemon.env`, or the board resets on every boot.
 
 ## Hardware audit scripts
 
