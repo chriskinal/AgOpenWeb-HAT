@@ -5,7 +5,8 @@
 // Like most Arduino code, portions of this are based on other open source Arduino code with a compatiable license.
 
 // AOW HAT: copied from Firmware_Teensy_AiO_26 v26.5.5 web_pages/TouchFriendlyLogViewerPage.h.
-// HAT changes: none.
+// HAT changes: a severity filter shows that level and everything more serious (the firmware's
+// shows that level alone).
 
 // TouchFriendlyLogViewerPage.h
 // Touch-optimized log viewer page with filtering
@@ -269,7 +270,7 @@ const char TOUCH_FRIENDLY_LOG_VIEWER_PAGE[] PROGMEM = R"rawliteral(
 
             // Filter logs
             let filtered = logs.filter(log => {
-                if (severityFilter >= 0 && log.severity !== severityFilter) return false;
+                if (severityFilter >= 0 && log.severity > severityFilter) return false;  // AOW HAT: this level and more serious
                 if (sourceFilter >= 0 && log.source !== sourceFilter) return false;
                 return true;
             });

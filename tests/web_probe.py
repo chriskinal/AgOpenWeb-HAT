@@ -99,6 +99,13 @@ def main():
     check(80 <= n <= 110 and last is not None and len(last) == 32, "telemetry 8082: %d packets in 1 s, 32 bytes each" % n)
 
     lg = WebSocket(a.host, 8083)
+    lg.s.settimeout(2)
+    try:
+        hist = json.loads(lg.recv()[1])
+    except (socket.timeout, EOFError):
+        hist = {}
+    check(hist.get("type") == "history" and len(hist.get("logs", [])) > 0 and "message" in hist["logs"][-1],
+          "log 8083: history on connect, %d entries" % len(hist.get("logs", [])))
     new_led = 50 if dev.get("ledBrightness") != 50 else 75
     code, _, body = http(base, "/api/device/settings", json.dumps({"ledBrightness": new_led}))
     check(json.loads(body).get("status") == "saved", "POST ledBrightness=%d -> %s" % (new_led, body))

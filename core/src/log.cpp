@@ -183,6 +183,15 @@ size_t Logger::history(Entry* out, size_t cap) const {
     return n;
 }
 
+size_t Logger::drainedHistory(Entry* out, size_t cap) const {
+    std::lock_guard<PiMutex> lock(mu_);
+    const size_t have = historyCount_ > pendingCount_ ? historyCount_ - pendingCount_ : 0;
+    const size_t n = std::min(cap, have);
+    const size_t first = (historyHead_ + kHistory - historyCount_) % kHistory;
+    for (size_t i = 0; i < n; ++i) out[i] = history_[(first + have - n + i) % kHistory];
+    return n;
+}
+
 Logger& global() {
     static Logger logger;
     return logger;

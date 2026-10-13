@@ -199,6 +199,8 @@ uint16_t Server::listen(uint16_t port, Kind kind) {
 
 void Server::route(const std::string& path, Handler h) { routes_[path] = std::move(h); }
 
+void Server::greet(uint16_t wsPort, std::function<std::string()> text) { greetings_[wsPort] = std::move(text); }
+
 size_t Server::clientCount(uint16_t wsPort) const {
     size_t n = 0;
     for (const auto& c : conns_)
@@ -427,6 +429,11 @@ void Server::handleWebSocketHandshake(Conn& c) {
     c.out = "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n"
             "Sec-WebSocket-Accept: " + webSocketAccept(key) + "\r\n\r\n";
     c.open = true;
+    const auto greeting = greetings_.find(c.port);
+    if (greeting != greetings_.end()) {
+        const std::string text = greeting->second();
+        c.out += frame(text.data(), text.size(), 0x1);
+    }
     handleWebSocketFrames(c);  // in case a frame came with the handshake
 }
 

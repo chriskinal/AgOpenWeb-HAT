@@ -76,6 +76,8 @@ public:
 
     // Copies the history, oldest first. Returns the count.
     size_t history(Entry* out, size_t cap) const;
+    // The same without the entries still waiting for drain(): what the web output has been given.
+    size_t drainedHistory(Entry* out, size_t cap) const;
 
 private:
     bool allow(Severity sev, uint32_t now);  // token bucket; caller holds mu_

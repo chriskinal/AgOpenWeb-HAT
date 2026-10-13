@@ -83,6 +83,15 @@ int main() {
     CHECK(lg.drain(out) == Logger::kPending);
     CHECK(web.front() == "q10");
 
+    // What a new log viewer is sent: the history without the entries still waiting for drain().
+    lg.log(Severity::Error, Source::User, "waiting1");
+    lg.log(Severity::Error, Source::User, "waiting2");
+    CHECK(lg.history(last2, 2) == 2 && std::strcmp(last2[1].message, "waiting2") == 0);
+    CHECK(lg.drainedHistory(last2, 2) == 2 && std::strcmp(last2[1].message, web.back().c_str()) == 0);
+    CHECK(lg.drainedHistory(h, Logger::kHistory) == Logger::kHistory - 2);
+    lg.drain(out);
+    CHECK(lg.drainedHistory(last2, 2) == 2 && std::strcmp(last2[1].message, "waiting2") == 0);
+
     // Severity names, both forms.
     Severity s;
     CHECK(parseSeverity("warn", s) && s == Severity::Warning);

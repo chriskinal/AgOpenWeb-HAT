@@ -60,5 +60,8 @@ std::string telemetryPacket(const Status& s);
 
 // One log entry as the firmware's log WebSocket sends it on 8083.
 std::string logEntryJson(const log::Entry& e);
+// AOW HAT: the entries already sent, for a viewer that has just connected. The firmware's page
+// handles this message ({"type":"history","logs":[...]}) though the firmware never sends it.
+std::string logHistoryJson();
 
 }  // namespace aow::web

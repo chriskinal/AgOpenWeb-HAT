@@ -297,6 +297,7 @@ void WebThread::run() {
         pages = server.listenHttp(opt_.httpPort) != 0;
         pages = server.listenWebSocket(web::kTelemetryPort) != 0 && pages;
         pages = server.listenWebSocket(web::kLogPort) != 0 && pages;
+        server.greet(web::kLogPort, web::logHistoryJson);
         web::addRoutes(server, backend, opt_.version);
         if (pages) LOG_INFO(Network, "Web pages on port %u", opt_.httpPort);
     }

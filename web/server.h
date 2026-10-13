@@ -52,6 +52,8 @@ public:
     // Sends one message to every client of the WebSocket listener on this port.
     void broadcast(uint16_t wsPort, const void* data, size_t len, bool binary);
     size_t clientCount(uint16_t wsPort) const;
+    // A text message for each new client of this WebSocket listener, sent when it connects.
+    void greet(uint16_t wsPort, std::function<std::string()> text);
 
     // Waits up to timeoutMs for activity and handles it.
     void poll(int timeoutMs);
@@ -86,6 +88,7 @@ private:
     std::vector<Listener> listeners_;
     std::map<int, Conn> conns_;
     std::map<std::string, Handler> routes_;
+    std::map<uint16_t, std::function<std::string()>> greetings_;
 };
 
 // Exposed for tests.

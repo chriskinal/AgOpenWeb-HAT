@@ -143,10 +143,7 @@ Response eventLogger(Backend& b, const Request& r) {
     return saveOr500(b, s, R"({"status":"saved"})");
 }
 
-Response logData() {
-    static log::Entry entries[log::Logger::kHistory];
-    const size_t n = log::global().history(entries, log::Logger::kHistory);
-    JsonDocument doc;
+void putLogs(JsonDocument& doc, const log::Entry* entries, size_t n) {
     JsonArray logs = doc["logs"].to<JsonArray>();
     for (size_t i = 0; i < n; ++i) {
         const log::Entry& e = entries[i];
@@ -158,6 +155,13 @@ Response logData() {
         o["sourceName"] = log::sourceName(e.source);
         o["message"] = e.message;
     }
+}
+
+Response logData() {
+    static log::Entry entries[log::Logger::kHistory];
+    const size_t n = log::global().history(entries, log::Logger::kHistory);
+    JsonDocument doc;
+    putLogs(doc, entries, n);
     return Response::json(toString(doc));
 }
 
@@ -460,6 +464,15 @@ std::string telemetryPacket(const Status& s) {
     put(p, 29, &work, 1);
     put(p, 30, &workPct, 1);
     return p;
+}
+
+std::string logHistoryJson() {
+    static log::Entry entries[log::Logger::kHistory];
+    const size_t n = log::global().drainedHistory(entries, log::Logger::kHistory);
+    JsonDocument doc;
+    doc["type"] = "history";
+    putLogs(doc, entries, n);
+    return toString(doc);
 }
 
 std::string logEntryJson(const log::Entry& e) {
