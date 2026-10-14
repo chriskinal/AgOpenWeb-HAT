@@ -1,0 +1,164 @@
+# Plan: virtual terminal service
+
+> A terminal on the ISOBUS that has no screen of its own: it shows the implement's screens in
+> AgOpenWeb's web client. Written 2026-10-13. **Nothing here is built.**
+> The daemon plan is `docs/PLAN.md`; its section 8 covers the ISOBUS work that is built.
+
+## 1. What it is
+
+An ISOBUS implement (sprayer, seeder, baler) carries its own operating screens and uploads them
+to whatever terminal it finds on the bus. Today that is the tractor's cab terminal. This service
+is a terminal on the bus that draws nothing itself. It keeps the implement's screens and current
+values, and a browser draws them in a card in AgOpenWeb and sends touches back.
+
+It is the opposite of what `daemon/isobus_vt.cpp` does. That file is a terminal *client*: it puts
+the daemon's status screen on the tractor's terminal. This service is the terminal *server*.
+
+The terminal lives on the bus whether or not a browser is looking. The service answers the
+implement on time; a slow or dropped Wi-Fi link only delays the picture.
+
+## 2. Decisions
+
+| Decision | Choice | Why |
+|---|---|---|
+| Where it runs | Its own executable, `aow-vtd`, in this repo. Not inside `aow-hatd` | A terminal parses whatever pool any implement sends. A crash in that must not stop steering. SocketCAN lets both processes use one interface |
+| Stack | AgIsoStack++'s `VirtualTerminalServer`, the commit `CMakeLists.txt` already pins | Already fetched and built. It claims the address, takes and parses the pool, answers the implement's commands |
+| CAN side | A SocketCAN interface name on the command line | `hatcan2` on the HAT, any adapter on another Linux box, or a `vcan` fed by a CAN-over-IP bridge |
+| HAT needed | No | It needs Linux and a CAN interface. It never assumes `aow-hatd` is running |
+| Who interprets the screens | The service. It flattens the object tree into a plain draw list | The browser needs no knowledge of ISOBUS, and the renderer can never be out of step with the stack |
+| Link to the browser | One WebSocket, straight from the browser to the service | No change to the app's host code. Moving it behind the app's socket later keeps the same messages |
+| Web server | The repo's `aow_web` library (`web/server.cpp`) | Plain POSIX sockets, HTTP and WebSocket, no daemon headers in `web/server.h`. Check it links without the daemon before relying on it |
+| Default | Off. Enabled per unit by the installer | A tractor with its own terminal would otherwise see two |
+| Scheduling | Normal priority, every thread | It must never compete with the control loop |
+
+## 3. What exists already
+
+| Piece | Where | State |
+|---|---|---|
+| Terminal server: address claim, pool upload and parsing, responses to the implement, macros | AgIsoStack++ `isobus_virtual_terminal_server.cpp` (about 2,800 lines) and `isobus_virtual_terminal_objects.cpp` (about 8,600) | upstream, built by our CMake |
+| A headless terminal on that class | `tests/isobus_vt.cpp` (191 lines) | works; the stand-in for `tests/isobus_vt_probe.py`. Prints strings and numbers, presses soft keys, enters values. Keeps no pools, draws nothing |
+| A client that uploads a real pool | `aow-hatd`'s status screen (`daemon/isobus_vt.cpp`) | works against the stand-in on `vcan1` |
+| Test pools | the stack's `examples/virtual_terminal/` (`VT3TestPool.iop`, aux functions, aux inputs) and `examples/seeder_example/BasePool.iop` | in the fetched source |
+| A reference renderer | AgIsoVirtualTerminal (Open-Agriculture, GPL-3, desktop app on the same server class) | not in this repo. The drawing rules can be ported; the licence matches ours |
+
+What the server class gives the service to work with:
+
+- **The object tree** of each connected implement (`get_object_tree()`), kept current as the
+  implement changes values.
+- **Events**: repaint, active mask changed, soft key mask changed, object focused. The repaint
+  event is per implement, not per object, so the service finds what changed by comparing draw
+  lists, as the stand-in already does for strings and numbers.
+- **Input going back**: button and soft key press and release, numeric value, string value,
+  input object selected.
+- **Hooks the service must fill in**: screen and soft key sizes, the list of supported object
+  types, and saving, loading and deleting stored pools.
+
+## 4. Structure
+
+```
+implement ── CAN ── aow-vtd ── WebSocket ── browser (card in AgOpenWeb's web client)
+                      │
+                      ├─ stack thread: AgIsoStack++, answers the bus
+                      ├─ flatten: object tree -> draw list, diff against the last one sent
+                      ├─ web thread: page, WebSocket, status
+                      └─ /var/lib/aow-vt/: stored pools, by implement NAME and version label
+```
+
+**Draw list.** For the active screen: rectangles, lines, ellipses, polygons, text, images and
+tappable regions, each with the id of the object it came from. Positions are already resolved
+(containers, pointers, hidden objects, enabled state), so the browser paints in order and
+nothing else.
+
+**Messages out.**
+
+| Message | When |
+|---|---|
+| `screen` | a browser connects; the implement changes screen; another implement becomes active |
+| `patch` | items changed, by id |
+| `softkeys` | the soft key set changed |
+| `image` | an image the browser has not had yet, by id. Sent once, then referred to by id |
+| `alarm` | an alarm screen is raised or cleared, with its priority and sound |
+| `implements` | the list of connected implements changed |
+
+**Messages back.** `press` and `release` by id, `softkey`, `value` (a number or text for an
+input field), `select` (focus an input), `activate` (choose which implement is shown),
+`alarmAck`.
+
+**Format.** JSON for everything but image pixels. Settle the image encoding in phase 1, after
+measuring a real pool.
+
+**Screen size.** The terminal tells each implement its screen size at connect, and the implement
+scales its pool to fit. It is fixed for the session, so the service reports one size (480 x 480
+to start) and the browser scales the canvas.
+
+## 5. Rules
+
+- **A press is always followed by a release.** If the WebSocket drops while a button is held,
+  the service sends the release itself. An implement must never see a button stuck down because
+  a tablet lost Wi-Fi.
+- **One operator.** Any number of browsers may watch; one at a time may press. The service
+  enforces it: the first to press holds control until idle for a set time or until it lets go.
+- **The service never raises its own priority** and takes no lock that `aow-hatd`'s control
+  thread uses. The two share only the CAN interface.
+- **An unsupported object is drawn as a labelled box**, never dropped silently and never a
+  reason to refuse the pool.
+- **A bad pool is refused, not survived.** The stack reports the faulting object; the service
+  logs it and tells the browser.
+- **Alarms reach the operator with the card closed.** The status the app hears carries an
+  "alarm active" flag (section 7).
+- **Off means absent.** When disabled the service is not running and claims no address.
+- **`third_party/` stays unmodified**, and the stack is not patched in place. If the server
+  class lacks something, subclass it or send the change upstream.
+
+## 6. Build order
+
+Each phase leaves something that runs and can be checked on `vcan1`.
+
+| Phase | What | Done when |
+|---|---|---|
+| 0 | **Bus trial, no code.** AgIsoVirtualTerminal on a Linux box against a real implement, on a direct CAN interface and then through the CAN-over-IP bridge | the implement's screens load and stay up for an hour on each link. If they do not load through the bridge, that route is closed before any code is written |
+| 1 | **Dump.** Extend the stand-in to print the active screen as a draw list in JSON. Measure pool, screen and image sizes for the status screen, `VT3TestPool.iop` and the seeder pool | the dump for each pool matches what AgIsoVirtualTerminal shows; section 4's format is settled from the numbers |
+| 2 | **`aow-vtd`, read-only.** Own executable and CMake target. Page and WebSocket; `screen`, `patch`, `softkeys`, `image`. Text, numbers, rectangles, lines, ellipses, polygons, containers, pictures. A plain test page that draws it | `tests/vt_probe.py` on `vcan1`: connects as a browser, gets the daemon's status screen, sees a value change arrive as a patch, reconnects and gets the full screen again |
+| 3 | **Input.** Buttons, soft keys, number, text, boolean and list inputs. The release-on-drop rule and the one-operator rule | the probe presses a soft key and the client sees it; enters a value and the client receives it; kills its socket mid-press and the release is on the bus |
+| 4 | **Stored pools.** Save, load and delete by version label under `/var/lib/aow-vt/`. Several implements at once, with `activate` | restart the service: the client reconnects without uploading its pool again. Two clients on `vcan1`: either can be shown |
+| 5 | **Alarms and the rest of the drawing.** Alarm masks with priority and sound; meters and bar graphs; whatever phase 0's implements used that is still a labelled box | an alarm raised by a test client reaches the browser and the status flag; no labelled boxes on the phase 0 implements |
+| 6 | **Packaging.** `aow-vtd.service`, installer option, in the `.aowpkg`, settings and a status line on the daemon's ISOBUS page | a fresh install with the option off has no terminal on the bus; with it on, the service starts at boot and survives an update |
+| 7 | **AgOpenWeb card** (app repo, section 7) | a real implement is operated from a tablet for a working session |
+
+Left out until someone needs them: auxiliary functions and inputs (joystick button assignment),
+window masks and key groups (user-layout screens), graphics contexts, animations, external
+object references, colour maps.
+
+## 7. What AgOpenWeb needs
+
+App code goes in the AgOpenWeb repo, not here. Its `Plans/ISOBUS_VT_FRONTEND.md` covers the
+opposite role (the app's run screen on a tractor's terminal).
+
+- **Knowing the terminal exists.** A small status message from the service to the app: terminal
+  running, implement connected, alarm active. The task controller already reports through
+  PGN 240; pick this one's number with the app.
+- **The card.** Created by the web client while that status is heard. It opens the WebSocket to
+  the service, paints the draw list on a canvas, and puts real input elements over fields that
+  take typing.
+- **Alarm with the card closed.** The app raises its own prompt and sound from the status flag.
+
+Until phase 7 the service's own test page is the user interface, so phases 0 to 6 need no app
+change.
+
+## 8. Open items
+
+1. **Identity on the bus.** A terminal claims an address with a manufacturer code. The stand-in
+   uses 1407, as the stack's examples do. The same question is open for the task controller.
+2. **Two terminals on one bus.** Allowed by the standard, but which one an implement picks
+   varies by implement. Find out in phase 0 on a tractor that has its own terminal.
+3. **Fonts.** The standard's fonts are fixed-size bitmap cells. A browser font scaled to the
+   cell will not match exactly; decide in phase 2 whether that is good enough or the service
+   ships a bitmap font.
+4. **The one-operator rule against the app's own.** Enforced in the service to start with. If
+   the WebSocket later goes through the app, the app's rule replaces it.
+5. **The WebSocket port.** `aow-hatd` holds 80, 8082, 8083, 23 and 2233. Proposed: 8084.
+6. **The iOS and Android shells.** Whether they allow a second local WebSocket address as they
+   stand has not been checked.
+7. **Timing over the bridge.** Listening is forgiving; a pool upload is not. Phase 0 answers it.
+8. **Who builds it.** Proposed as an outside contributors' project; the phases are sized so each
+   is one reviewable change.

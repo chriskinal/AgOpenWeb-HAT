@@ -296,8 +296,8 @@ channel does.
 3. **Curvature steering** as one more steering output, off by default. Tractors that take the
    ISOBUS guidance command want either a bought unlock or an authenticated (TIM) session. Nobody
    has the certificates, so this covers unlocked tractors and open valves only: uncommon.
-4. Virtual terminal server (the implement's screen in AgOpenWeb): not planned. It is mostly app
-   UI work; AgOpenWeb's `Plans/ISOBUS_VT_FRONTEND.md` discusses it.
+4. Virtual terminal server (the implement's screen in AgOpenWeb): not part of this phase.
+   Planned separately in `docs/PLAN_VT.md` (2026-10-13), as its own service; nothing built.
 
 **Source.** AOG-TaskController (AgOpenGPS-Official, GPL-3, `/Users/chris/Code/AOG-TaskController`)
 on AgIsoStack++ (MIT). It already runs headless on SocketCAN and does section control only.
