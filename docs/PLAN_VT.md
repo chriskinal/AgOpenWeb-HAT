@@ -162,3 +162,38 @@ change.
 7. **Timing over the bridge.** Listening is forgiving; a pool upload is not. Phase 0 answers it.
 8. **Who builds it.** Proposed as an outside contributors' project; the phases are sized so each
    is one reviewable change.
+
+## 9. Prior art: SolSteer View-T
+
+From the product page, <https://www.solsteer.com/view-t>, read 2026-10-13. Nothing here has been
+tested by us.
+
+**What it is.** A commercial tablet-as-terminal: an iOS or Android app, sold with a licence key,
+that acts as a Universal Terminal, as the primary or a secondary one. The kit is a "CAN wireless
+module", a replacement 9-way in-cab ISOBUS socket and a harness. The module is a Wi-Fi access
+point that the tablet joins. The app also assigns AUX-N functions, records CAN traces and
+updates SolSteer devices.
+
+**Not stated on the page:** who makes the module, its protocol, or its transport. That it
+carries CAN frames over TCP comes from the contributors who have one; a link to Proemion's
+gateways is a guess from the protocol's name.
+
+**How it differs from this plan.**
+
+| | View-T | This plan |
+|---|---|---|
+| Where the terminal runs | in the tablet app | in `aow-vtd`, wired to the bus |
+| What crosses Wi-Fi | every CAN frame, with the bus's timing | the picture and the touches |
+| If Wi-Fi drops | the terminal leaves the bus | the terminal stays; the picture waits |
+| Client | its own app, licensed | any browser, in AgOpenWeb's web client |
+
+**What it tells us.**
+
+- A pool upload and a terminal's timing survive one in-cab Wi-Fi hop to the module's own access
+  point: a product ships that way. It says nothing about a longer or busier link, so phase 0
+  still has to be run.
+- The module is one way to reach an implement bus without a HAT: bridge it to a `vcan` and give
+  `aow-vtd` that interface. The box running `aow-vtd` must then join the module's network, and
+  the browser has to reach that box too. On a HAT none of this arises: `hatcan2` is wired.
+- AUX-N assignment is a headline feature there. Section 6 leaves auxiliary functions out; if
+  joystick assignment turns out to be why people want a tablet terminal, it earns its own phase.
