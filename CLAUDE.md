@@ -210,7 +210,9 @@ on D2/D5/D15-D17/TV1/TV2 `.A`/`.K` and "J8 not in schematic" are pin-naming only
 ### What the app expects (from the AgOpenWeb code)
 - Sends PGN 254 and 239 at 100 Hz to UDP 8888; listens on 9999.
 - Steer module is "lost" after 100 ms of silence: answer each PGN 254 with a PGN 253.
-- GPS is stale after 300 ms. Only `$PANDA` and `$PAOGI` are accepted.
+- GPS is stale after 300 ms. It reads `$PANDA` and `$PAOGI`, and also builds a fix from a
+  receiver's own sentences (GGA/GNS, VTG, HPR/HDT/THS) for passthrough; an external IMU reaches it
+  only in PANDA/PAOGI.
 - One daemon answers as steer (126), GPS (120) and IMU (121) on port 8888.
 
 ## Licence

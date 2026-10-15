@@ -133,9 +133,10 @@ show which position is going out.
 - GNS differential age is read from field 11; the firmware reads field 12, the station ID.
 - HPR age stays in seconds; the firmware multiplies it by 100.
 - Sentences with no checksum are dropped; the firmware parsed them unchecked.
-- GPS passthrough (raw NMEA to the app, a Device page option) is kept for AgIO users, but AgOpenWeb
-  accepts only PANDA and PAOGI, so with it on AgOpenWeb loses GPS. The page says so. Only
-  checksum-valid sentences are passed on (the firmware passed everything).
+- GPS passthrough (raw NMEA to the app, a Device page option) is kept. AgOpenWeb builds a fix
+  from the receiver's own sentences too (GGA/GNS, VTG, HPR/HDT/THS), but an external IMU's roll,
+  pitch and turn rate ride only in PANDA/PAOGI, so with it on they do not reach the app. The
+  page says so. Only checksum-valid sentences are passed on (the firmware passed everything).
 - UM98x setup no longer freezes steering: the firmware blocked its whole loop for the seconds it
   talks to the receiver; here the web thread does it while the control loop runs on, with the
   GNSS stream (and RTCM into the receiver) paused.

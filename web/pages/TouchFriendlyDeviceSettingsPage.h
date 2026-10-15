@@ -299,7 +299,7 @@ const char TOUCH_FRIENDLY_DEVICE_SETTINGS_PAGE[] PROGMEM = R"rawliteral(
                     <div class="toggle-info">
                         <label for="udpPassthrough" class="toggle-label">GPS-UDP Passthrough</label>
                         <div class="help-text">
-                            Send the receiver's NMEA straight to AgIO instead of PANDA/PAOGI. AgOpenWeb reads only PANDA/PAOGI, so leave this off when using AgOpenWeb.
+                            Send the receiver's NMEA straight to the app instead of PANDA/PAOGI. AgOpenWeb reads both, but an external IMU's roll and turn rate go only in PANDA/PAOGI, so leave this off when an IMU is connected.
                         </div>
                     </div>
                     <label class="toggle-switch">
