@@ -61,7 +61,7 @@ The Teensy firmware is not being rewritten and nothing is ported back to it.
   TCP 23: done and tested on vcan. The firmware's CAN files live in `core/src/can` near-verbatim.
   UM98x (GPS) page, radio RTCM (`--radio`) and GPS passthrough: done. External IMU (`--imu`,
   `core/imu`): a BNO085 (RVC) on an RS-232 port or a TM171 on USB (`/dev/ttyACMx`), reopened
-  after an unplug: done on ptys, no real IMU yet. LED and buzzer logic
+  after an unplug: done on ptys, and a real TM171 on the dev CM4 (signs checked on the bench). LED and buzzer logic
   (`core/indicators`; `/api/status` shows the LED colours), `aow-hatctl`: done.
   PGNs are accepted only from the `--app` host (loopback); `--any-app` lifts that.
 - **ISOBUS (docs/PLAN.md section 8):** AgIsoStack++ is built into the daemon

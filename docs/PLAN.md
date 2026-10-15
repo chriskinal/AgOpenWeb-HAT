@@ -113,7 +113,10 @@ second GPS UART. Sections stay on an external machine module or go over ISOBUS (
   handled (the firmware sums yaw steps over 20 packets and resets with `prevYaw = 0`, so the
   first step after each reset is the whole yaw angle; for the TM171 it is always 0). Pitch goes
   out in degrees in PANDA and PAOGI, as AgOpenWeb reads it (the firmware sent an IMU's pitch x10).
-  The TM171's heading is kept in 0..360. Detection does not block and works at any time, and
+  The TM171's heading is kept in 0..360. The TM171's roll is not negated: with the firmware's
+  "inverted roll axis" a real TM171, arrow forward, read -37 right side down and +38 left side
+  down (dev CM4, 2026-10-15), and AgOpenGPS and AgOpenWeb take right side down as positive.
+  Pitch read +40 nose up and -38 nose down, as sent. Detection does not block and works at any time, and
   needs three valid packets (the BNO's 8-bit checksum passes a stray "AA AA" in a TM171 stream
   one time in 256). PGN 211, which the firmware builds with roll x10 twice, is not sent: the
   firmware never calls it either.

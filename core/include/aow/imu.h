@@ -6,6 +6,8 @@
 //     each reset is the whole yaw angle; for the TM171 it is always 0.
 //   - Roll and pitch are kept in degrees; the x10 for PANDA is applied once, in nav.cpp.
 //   - Heading is kept in 0..360 for both IMUs (the TM171's yaw is passed on as sent in the firmware).
+//   - The TM171's roll is passed on as sent. The firmware negates it ("inverted roll axis"), which
+//     gives right side down negative; the app wants it positive (bench, 2026-10-15, arrow forward).
 //   - Detection does not block: bytes go to both parsers until one has three valid packets, at
 //     any time after start, not only in the first 600 ms. Three, because the BNO's 8-bit checksum
 //     would otherwise pass on one stray "AA AA" in a TM171 stream in 256.
@@ -44,7 +46,7 @@ public:
     bool feed(uint8_t b);
     float yaw() const { return yaw_; }
     float pitch() const { return pitch_; }
-    float roll() const { return -roll_; }  // negated, as the firmware ("inverted roll axis")
+    float roll() const { return roll_; }    // as sent: right side down is positive
     uint32_t crcErrors() const { return crcErrors_; }
 
 private:

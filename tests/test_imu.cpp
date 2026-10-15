@@ -134,12 +134,12 @@ int main() {
         CHECK(near(n.data().yawRate, 0.0, 1e-6));
     }
 
-    // --- TM171: roll negated (as the firmware), other objects skipped, bad CRC counted
+    // --- TM171: roll as sent (the firmware negates it), other objects skipped, bad CRC counted
     {
         imu::Imu m;
         for (int i = 0; i < 3; ++i) feed(m, tmRpy(1.5f, -0.5f, -30.0f), static_cast<uint64_t>(i) * 10'000);
         CHECK(m.type() == imu::Type::Tm171);
-        CHECK(near(m.data().roll, -1.5, 1e-5) && near(m.data().pitch, -0.5, 1e-5));
+        CHECK(near(m.data().roll, 1.5, 1e-5) && near(m.data().pitch, -0.5, 1e-5));
         CHECK(near(m.data().heading, 330.0, 1e-4));
         const uint32_t before = m.packets();
         feed(m, tm171(0x10, Bytes(12, 0)), 30'000);  // another object: no sample
