@@ -6,7 +6,7 @@ Writes a settings file that puts NMEA out (GGA only, 5 Hz) on RS-232 #1 and RTCM
 starts aow-hatd with --gnss and --rs232 on the ptys, then:
   - streams GGA and VTG at 10 Hz into the receiver and checks #1 gets every other GGA, no VTG;
   - sends RTCM to the corrections port and checks #2 gets it byte for byte, as the receiver does;
-  - checks /api/status names the receiver's port.
+  - checks /api/status names the receiver's port, and shows lines coming in on #1.
 Own ports (8889, 2234, web 8090), so it can run beside the service.
 
     python3 tests/ports_probe.py build/aow-hatd
@@ -87,7 +87,13 @@ def main():
     print("RTCM out: %d bytes, receiver %d bytes" % (len(out), len(to_rx)))
     ok &= out == rtcm and to_rx == rtcm
 
+    # Something talking back on the NMEA out port: the page sees the first 20 characters of each line.
+    os.write(p1_m, b"HELLO FROM A RATE CONTROLLER 123\r\nSECOND LINE\r\n")
+    time.sleep(0.3)
     st = json.load(urllib.request.urlopen("http://127.0.0.1:8090/api/status", timeout=2))
+    p1 = st.get("serial", {}).get("rs232", [{}])[0]
+    print("port 1 in: %s" % p1)
+    ok &= p1.get("use") == "nmeaOut" and p1.get("lines") == ["HELLO FROM A RATE CO", "SECOND LINE"]
     print("status serial: %s" % st.get("serial"))
     ok &= st.get("serial", {}).get("gnssPort") == os.ttyname(gps_s) and st["serial"]["nmeaOutSent"] >= 8
     ok &= st["serial"]["rtcmOutBytes"] == len(rtcm)

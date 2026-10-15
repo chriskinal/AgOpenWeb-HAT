@@ -147,7 +147,7 @@ int main() {
     // radio rate on /api/device/settings is the radio's port's.
     using P = Settings::Ports;
     d = parse(request(s, port, "GET /api/serial HTTP/1.1\r\n\r\n"));
-    CHECK(d["gnss"] == "onboard" && d["radio"] == "port1" && d["keya"] == "port2");
+    CHECK(d["gnss"] == "onboard" && d["radio"] == "port1" && d["keya"] == "none");
     CHECK(d["imu"] == "none" && d["baud"][0] == 38400 && d["nmeaRateHz"] == 0);
     CHECK(parse(request(s, port, "GET /api/device/settings HTTP/1.1\r\n\r\n"))["serialRadioBaud"] == 38400);
     r = post(s, port, "/api/serial", R"({"baud":[38400,9600]})");
@@ -166,7 +166,7 @@ int main() {
     CHECK(parse(r)["restartRequired"] == true);
     post(s, port, "/api/device/settings", R"({"serialRadioBaud":57600})");
     CHECK(b.s.ports.baud[1] == 57600 && b.s.ports.baud[0] == 38400);
-    r = post(s, port, "/api/serial", R"({"radio":"port1","imu":"none","nmeaOut":"none","keya":"port2"})");
+    r = post(s, port, "/api/serial", R"({"radio":"port1","imu":"none","nmeaOut":"none"})");
     CHECK(parse(r)["status"] == "saved");
     CHECK(request(s, port, "GET /serial HTTP/1.1\r\n\r\n").find("/api/serial") != std::string::npos);
 

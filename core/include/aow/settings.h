@@ -67,7 +67,10 @@ struct Settings {
         enum Where : uint8_t { kNone, kPort1, kPort2, kUsb, kOnboard };
         enum Device : uint8_t { kGnss, kRadio, kImu, kKeya, kNmeaOut, kRtcmOut, kDevices };
         enum Sentence : uint8_t { kGga = 1, kVtg = 2, kRmc = 4, kZda = 8, kHdt = 16 };
-        uint8_t where[kDevices] = {kOnboard, kPort1, kNone, kPort2, kNone, kNone};  // the firmware's layout
+        // The receiver onboard and the radio on #1, as the firmware. Not Keya on #2 (the firmware
+        // probed for one there): the page does not offer it; the settings file and
+        // --keya-serial still do.
+        uint8_t where[kDevices] = {kOnboard, kPort1, kNone, kNone, kNone, kNone};
         uint32_t baud[2] = {115200, 115200};  // RS-232 #1, #2; an IMU or Keya there runs at 115200
         uint8_t nmeaSentences = kGga | kVtg;  // NMEA out: which of the receiver's sentences
         uint8_t nmeaRateHz = 0;               // 0: each as the receiver sends it; else 1, 2, 5, 10

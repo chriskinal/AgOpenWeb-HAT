@@ -4,6 +4,8 @@
 
 #include <cstdint>
 
+#include "aow/port_monitor.h"
+
 namespace aow {
 
 struct Status {
@@ -30,6 +32,19 @@ struct Status {
     char imuPort[96] = {};         // the device it is read from; empty: no IMU port open
     char gnssPort[96] = {};        // the receiver's device; empty: none (or not found on USB yet)
     uint32_t radioBytes = 0, nmeaOutSent = 0, rtcmOutBytes = 0;  // serial devices at work
+
+    // What is coming in on each RS-232 port (the Serial Communications page), whatever it is
+    // set to; a port set to nothing is listened to as well.
+    struct Rs232 {
+        const char* use = "none";  // Settings::Ports::deviceName, or "none"
+        bool open = false;
+        uint32_t bytesIn = 0;
+        uint32_t msSinceIn = UINT32_MAX;  // UINT32_MAX: nothing yet
+        int lineCount = 0;
+        char lines[PortMonitor::kLines][PortMonitor::kLineChars + 1] = {};
+        int rtcmCount = 0;
+        uint16_t rtcm[PortMonitor::kRtcmTypes] = {};
+    } rs232[2];
     bool imuValid = false;
     float imuHeading = 0, imuRoll = 0, imuPitch = 0, imuYawRate = 0;  // deg, deg/s
 

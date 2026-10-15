@@ -61,7 +61,7 @@ int main() {
     // Ports: the firmware's layout by default; round trip; bad places and rates ignored.
     using P = Settings::Ports;
     CHECK(d.ports.where[P::kGnss] == P::kOnboard && d.ports.where[P::kRadio] == P::kPort1);
-    CHECK(d.ports.where[P::kKeya] == P::kPort2 && d.ports.where[P::kImu] == P::kNone);
+    CHECK(d.ports.where[P::kKeya] == P::kNone && d.ports.where[P::kImu] == P::kNone);
     CHECK(d.ports.where[P::kNmeaOut] == P::kNone && d.ports.where[P::kRtcmOut] == P::kNone);
     CHECK(d.ports.baud[0] == 115200 && d.ports.baud[1] == 115200 && d.ports.nmeaRateHz == 0);
     Settings ps;
@@ -75,7 +75,7 @@ int main() {
     CHECK(fromJson(toJson(ps), pr));
     CHECK(toJson(pr) == toJson(ps));
     CHECK(fromJson(R"({"ports":{"keya":"usb","radio":"moon","imu":"port2","baud":[14400,9600],"nmeaRateHz":3}})", pr));
-    CHECK(pr.ports.where[P::kKeya] == P::kPort2 && pr.ports.where[P::kRadio] == P::kNone);  // not changed
+    CHECK(pr.ports.where[P::kKeya] == P::kNone && pr.ports.where[P::kRadio] == P::kNone);  // not changed
     CHECK(pr.ports.where[P::kImu] == P::kPort2 && pr.ports.baud[0] == 38400 && pr.ports.baud[1] == 9600);
     CHECK(pr.ports.nmeaRateHz == 0);
     Settings old;  // a file from before the ports settings: its radio baud is RS-232 #1's
@@ -86,7 +86,7 @@ int main() {
     PortPlan plan = planPorts(d.ports, dev, "/dev/ttyAMA5", 460800);
     CHECK(plan.dev[P::kGnss].path == "/dev/ttyAMA5" && plan.dev[P::kGnss].baud == 460800);
     CHECK(plan.dev[P::kRadio].path == dev[0] && plan.dev[P::kRadio].port == 0 && plan.dev[P::kRadio].baud == 115200);
-    CHECK(plan.dev[P::kKeya].path == dev[1] && plan.dev[P::kImu].path.empty() && !plan.dev[P::kImu].usb);
+    CHECK(plan.dev[P::kKeya].path.empty() && plan.dev[P::kImu].path.empty() && !plan.dev[P::kImu].usb);
     plan = planPorts(ps.ports, dev, "/dev/ttyAMA5", 460800);
     CHECK(plan.dev[P::kImu].usb && plan.dev[P::kImu].path.empty() && plan.dev[P::kRadio].path.empty());
     CHECK(plan.dev[P::kNmeaOut].path == dev[0] && plan.dev[P::kNmeaOut].baud == 38400);

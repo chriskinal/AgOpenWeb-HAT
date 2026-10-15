@@ -62,7 +62,7 @@ The Teensy firmware is not being rewritten and nothing is ported back to it.
   UM98x (GPS) page, radio RTCM and GPS passthrough: done. External IMU (`core/imu`): a BNO085
   (RVC) on an RS-232 port or a TM171 on USB (`/dev/ttyACMx`), reopened after an unplug: done on
   ptys, and a real TM171 on the dev CM4 (signs checked on the bench). Where each serial
-  device is (GNSS receiver, radio, IMU, Keya, and the new NMEA out and RTCM out) is a setting,
+  device is (GNSS receiver, radio, IMU, and the new NMEA out and RTCM out) is a setting,
   the Serial Communications page's port matrix (`ports`; the service passes `--gnss` and `--rs232`); USB
   devices are found by listening (`daemon/usb_scout`). `--radio`, `--keya-serial` and `--imu`
   override the settings. LED and buzzer logic
@@ -141,7 +141,7 @@ scan, then PGN 254 at a set rate, checking every reply and timing the 253.
 `tests/can_probe.py build/aow-hatd` runs Valtra/MF CAN steering and GVRET on vcan0-2.
 `tests/um98x_probe.py build/aow-hatd` runs the GPS page and radio with ptys as the devices.
 `tests/imu_probe.py build/aow-hatd` runs an external IMU (BNO085 RVC) on a pty: hello as 121, IMU fields in PANDA.
-`tests/ports_probe.py build/aow-hatd` runs the port settings on ptys: NMEA out (GGA at 5 Hz) and RTCM out.
+`tests/ports_probe.py build/aow-hatd` runs the port settings on ptys: NMEA out (GGA at 5 Hz), RTCM out, and what the page shows coming in.
 `tests/isobus_probe.py build/aow-hatd` checks the ISOBUS address claim and the tractor ECU role on
 vcan1 (stop the service first).
 `tests/isobus_tc_probe.py build/aow-hatd build/isobus_implement` runs section control against a

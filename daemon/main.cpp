@@ -31,6 +31,7 @@
 #include "aow/indicators.h"
 #include "aow/log.h"
 #include "aow/motor.h"
+#include "aow/port_monitor.h"
 #include "aow/settings.h"
 #include "aow/steer.h"
 #include "board.h"
@@ -353,6 +354,27 @@ int main(int argc, char** argv) {
     variable(Ports::kNmeaOut, nmeaOutPort);
     variable(Ports::kRtcmOut, rtcmOutPort);
 
+    // What is coming in on each RS-232 port, for the Serial Communications page. A port set to
+    // nothing is opened to listen (never written to), and so are NMEA and RTCM out; the radio
+    // and an IMU there are fed from where they are read.
+    aow::PortMonitor portMon[2];
+    const char* portUse[2] = {"none", "none"};
+    for (int d = 0; d < Ports::kDevices; ++d)
+        if (plan.dev[d].port >= 0) portUse[plan.dev[d].port] = Ports::deviceName(static_cast<Ports::Device>(d));
+    aow::linux_io::SerialPort sparePort[2];
+    aow::linux_io::SerialPort* listenOn[2] = {nullptr, nullptr};
+    for (int i = 0; i < 2; ++i) {
+        if (!std::strcmp(portUse[i], "nmeaOut")) listenOn[i] = &nmeaOutPort;
+        else if (!std::strcmp(portUse[i], "rtcmOut")) listenOn[i] = &rtcmOutPort;
+        else if (!std::strcmp(portUse[i], "none") && !rs232[i].empty() && rs232[i] != radioDev && rs232[i] != keyaDev &&
+                 rs232[i] != imuDev && sparePort[i].open(rs232[i].c_str(), portSettings.baud[i])) {
+            listenOn[i] = &sparePort[i];
+            onPort[i] = &sparePort[i];
+        }
+    }
+    const int radioMon = opt.radio ? -1 : plan.dev[Ports::kRadio].port;
+    const int imuMon = opt.imu ? -1 : plan.dev[Ports::kImu].port;
+
     // The daemon answers from loopback, so the module IP it reports is loopback too.
     const uint8_t moduleIp[4] = {127, 0, 0, 1};
     aow::AppLink app(udp, clock, moduleIp);
@@ -490,10 +512,12 @@ int main(int argc, char** argv) {
     aow::log::global().setStartupDone();
 
     // Without GNSS the last two entries hold fd -1, which poll() skips.
-    enum { kApp, kTick, kSignal, kGnss, kRtcm, kRadio, kImu, kFds };
+    enum { kApp, kTick, kSignal, kGnss, kRtcm, kRadio, kImu, kListen0, kListen1, kFds };
     pollfd fds[kFds] = {{udp.fd(), POLLIN, 0},       {tickFd, POLLIN, 0},      {sigFd, POLLIN, 0},
                         {gnssPort.fd(), POLLIN, 0},  {rtcm.fd(), POLLIN, 0},   {radioPort.fd(), POLLIN, 0},
-                        {imuPort.fd(), POLLIN, 0}};
+                        {imuPort.fd(), POLLIN, 0},
+                        {listenOn[0] ? listenOn[0]->fd() : -1, POLLIN, 0},
+                        {listenOn[1] ? listenOn[1]->fd() : -1, POLLIN, 0}};
     const uint64_t startUs = clock.nowUs();
     aow::indicators::Leds leds(startUs / 1000);
     uint32_t lastRtcmPackets = 0, lastRadioBytes = 0, lastButtonPresses = 0;
@@ -543,8 +567,10 @@ int main(int argc, char** argv) {
         } else if (fds[kRadio].revents) {
             uint8_t buf[1024];
             int n;
-            while ((n = radioPort.read(buf, sizeof buf)) > 0)
+            while ((n = radioPort.read(buf, sizeof buf)) > 0) {
+                if (radioMon >= 0) portMon[radioMon].feed(buf, static_cast<size_t>(n), clock.nowUs());
                 if (gnssWanted && !gnssLent) gnss.forwardRadio(buf, static_cast<size_t>(n));
+            }
         }
         if (fds[kImu].revents & (POLLERR | POLLHUP | POLLNVAL)) {
             LOG_WARNING(Imu, "IMU port %s went away: reopened when it is back", imuDev.c_str());
@@ -558,10 +584,23 @@ int main(int argc, char** argv) {
             uint8_t buf[512];
             int n;
             const aow::imu::Type before = imu.type();
-            while ((n = imuPort.read(buf, sizeof buf)) > 0) imu.feed(buf, static_cast<size_t>(n), clock.nowUs());
+            while ((n = imuPort.read(buf, sizeof buf)) > 0) {
+                imu.feed(buf, static_cast<size_t>(n), clock.nowUs());
+                if (imuMon >= 0) portMon[imuMon].feed(buf, static_cast<size_t>(n), clock.nowUs());
+            }
             if (imu.type() != before) {
                 LOG_INFO(Imu, "%s detected on %s", aow::imu::typeName(imu.type()), imuDev.c_str());
                 app.setImuPresent(true);
+            }
+        }
+        for (int i = 0; i < 2; ++i) {  // ports listened to only for the page
+            const int k = kListen0 + i;
+            if (fds[k].revents & (POLLERR | POLLHUP | POLLNVAL)) {
+                fds[k].fd = -1;
+            } else if (fds[k].revents) {
+                uint8_t buf[512];
+                int n;
+                while ((n = listenOn[i]->read(buf, sizeof buf)) > 0) portMon[i].feed(buf, static_cast<size_t>(n), clock.nowUs());
             }
         }
         if (fds[kTick].revents) {
@@ -674,6 +713,18 @@ int main(int argc, char** argv) {
             st.radioBytes = gnss.counters().radioBytes;
             st.nmeaOutSent = gnss.counters().nmeaOutSent;
             st.rtcmOutBytes = gnss.counters().rtcmOutBytes;
+            for (int i = 0; i < 2; ++i) {
+                aow::Status::Rs232& v = st.rs232[i];
+                const aow::PortMonitor& m = portMon[i];
+                v.use = portUse[i];
+                v.open = !rs232[i].empty() && (fds[kListen0 + i].fd >= 0 || i == radioMon || i == imuMon ||
+                                               plan.dev[Ports::kGnss].port == i || plan.dev[Ports::kKeya].port == i);
+                v.bytesIn = m.bytes();
+                if (m.lastUs()) v.msSinceIn = static_cast<uint32_t>((clock.nowUs() - m.lastUs()) / 1000);
+                v.lineCount = m.lineCount();
+                for (int l = 0; l < m.lineCount(); ++l) std::memcpy(v.lines[l], m.line(l), sizeof v.lines[l]);
+                v.rtcmCount = m.rtcmTypes(clock.nowUs(), v.rtcm, aow::PortMonitor::kRtcmTypes);
+            }
             st.imuHeading = imu.data().heading;
             st.imuRoll = imu.data().roll;
             st.imuPitch = imu.data().pitch;

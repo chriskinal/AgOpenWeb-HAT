@@ -122,6 +122,18 @@ Response status(Backend& b, const char* version) {
     serial["radioBytes"] = st.radioBytes;
     serial["nmeaOutSent"] = st.nmeaOutSent;
     serial["rtcmOutBytes"] = st.rtcmOutBytes;
+    JsonArray rs232 = serial["rs232"].to<JsonArray>();
+    for (const auto& v : st.rs232) {
+        JsonObject o = rs232.add<JsonObject>();
+        o["use"] = v.use;
+        o["open"] = v.open;
+        o["bytesIn"] = v.bytesIn;
+        if (v.msSinceIn != UINT32_MAX) o["msSinceIn"] = v.msSinceIn;
+        JsonArray lines = o["lines"].to<JsonArray>();
+        for (int l = 0; l < v.lineCount; ++l) lines.add(std::string(v.lines[l]));  // copied: the document outlives st
+        JsonArray types = o["rtcm"].to<JsonArray>();
+        for (int t = 0; t < v.rtcmCount; ++t) types.add(v.rtcm[t]);
+    }
     JsonArray canRestarts = doc["canRestarts"].to<JsonArray>();  // AOW HAT: see daemon/can_watch.h
     for (uint32_t n : st.canRestarts) canRestarts.add(n);
     isobusStatusJson(b.isobusStatus(), doc["isobus"].to<JsonObject>());  // AOW HAT: not in the firmware's status

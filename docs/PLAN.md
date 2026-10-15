@@ -90,7 +90,7 @@ are the firmware's layout: the receiver onboard, the radio on #1, Keya on #2.
 | GNSS receiver | onboard (J7), #1, #2, USB | on a port at the port's rate; on USB, found by its NMEA |
 | RTK radio | #1, #2 | its RTCM goes to the receiver |
 | IMU | #1, #2, USB | BNO085 (RVC) or TM171, at 115200; on USB, found by its packets |
-| Keya motor | #1, #2 | probed at startup, 115200 |
+| Keya motor | #1, #2 | probed at startup, 115200. Not on the page and off by default (the firmware probed #2): the settings file or `--keya-serial` only |
 | NMEA out (new) | #1, #2 | the receiver's GGA, VTG, RMC, ZDA, HDT as chosen, as received or at 1-10 Hz |
 | RTCM out (new) | #1, #2 | a copy of every correction byte sent to the receiver |
 
@@ -98,8 +98,11 @@ Each port has a baud rate (the firmware's radio rate became the radio's port's; 
 `gps.radioBaud` is read as #1's). Rates apply live; where things are, and NMEA out's choices,
 at startup, and the page offers the restart. On USB, `daemon/usb_scout` listens to each
 `/dev/serial/by-id` device not otherwise in use for up to 3 s (a ttyUSB adapter at 115200, then
-460800) and never writes to it. The page shows what each device is doing and the IMU's live
-roll, pitch, heading and turn rate, with the sign checks to do after mounting it.
+460800) and never writes to it. The page shows what is coming in on each port, whatever it is set to (`core/port_monitor`; a
+port set to nothing is opened to listen, never written to): parsed for a receiver (fix,
+satellites), an IMU (roll, pitch, heading, turn rate, with the sign checks to do after
+mounting) or RTCM (the message numbers, by CRC-24Q), else the first 20 characters of the last
+four lines, so an unknown device's baud rate can be found by trying rates until it reads.
 `--radio`, `--keya-serial` and `--imu` still override the settings (bench and `--board sim`);
 an IMU named on the radio's or Keya's port takes it.
 

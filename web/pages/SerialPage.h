@@ -1,9 +1,10 @@
 // AgOpenWeb HAT. GPL-3.0-or-later.
 //
 // AOW HAT: a new page, not from the firmware (the Teensy's serial ports were fixed). Where each
-// serial device is (GNSS receiver, RTK radio, IMU, Keya, NMEA out, RTCM out) as a matrix, each
-// RS-232 port's baud rate (the firmware's RTK radio rate became its port's), NMEA out's
-// sentences and rate, and what each device is doing, with the IMU's live readings. Uses the
+// serial device is (GNSS receiver, RTK radio, IMU, NMEA out, RTCM out) as a matrix, each RS-232
+// port's baud rate (the firmware's RTK radio rate became its port's), NMEA out's sentences and
+// rate, and what is coming in on each port: parsed for a receiver, IMU or RTCM, else the first
+// 20 characters of the last lines. A Keya serial motor is not offered (settings file only). Uses the
 // firmware pages' stylesheet and layout. Settings from /api/serial, live state from /api/status.
 
 #ifndef SERIAL_PAGE_H
@@ -22,16 +23,21 @@ const char SERIAL_PAGE[] PROGMEM = R"rawliteral(
         .help-text { font-size: 14px; color: #7f8c8d; margin-top: 5px; line-height: 1.3; }
         .nav-buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px; }
         /* AOW HAT: the serial port matrix */
-        .port-matrix { width: 100%; border-collapse: collapse; font-size: 15px; }
-        .port-matrix th { font-weight: 600; font-size: 13px; color: #7f8c8d; padding: 4px 2px; }
-        .port-matrix td { text-align: center; padding: 8px 2px; border-top: 1px solid #ecf0f1; }
+        .port-matrix { width: 100%; border-collapse: collapse; font-size: 15px; table-layout: fixed; }
+        .port-matrix th { font-weight: 600; font-size: 13px; color: #7f8c8d; padding: 4px 0; text-align: center; }
+        .port-matrix td { text-align: center; vertical-align: middle; padding: 8px 0; border-top: 1px solid #ecf0f1; }
+        .port-matrix th:first-child { width: 30%; }
         .port-matrix td:first-child { text-align: left; font-weight: 600; }
-        .port-matrix input[type=radio] { width: 22px; height: 22px; }
+        .port-matrix input[type=radio] { width: 22px; height: 22px; margin: 0; vertical-align: middle; }
         .port-matrix th.clash { color: #c0392b; }
         .nmea-boxes { display: flex; flex-wrap: wrap; gap: 14px; }
         .nmea-boxes label { display: flex; align-items: center; gap: 6px; font-weight: normal; }
         .nmea-boxes input { width: 20px; height: 20px; }
-        .port-live { font-size: 15px; padding: 10px; background: #f8f9fa; border-radius: 8px; line-height: 1.6; }
+        .port-live { font-size: 15px; padding: 10px; background: #f8f9fa; border-radius: 8px; line-height: 1.6; margin-bottom: 10px; }
+        .port-live .head { font-weight: 600; }
+        .port-live .head span { font-weight: normal; color: #7f8c8d; font-size: 13px; }
+        .port-live pre { margin: 4px 0 0; font-family: Menlo, Consolas, monospace; font-size: 14px; white-space: pre; overflow-x: auto; }
+        .port-live .quiet { color: #7f8c8d; }
 
     </style>
     <script>
@@ -85,7 +91,6 @@ const char SERIAL_PAGE[] PROGMEM = R"rawliteral(
             ['gnss', 'GNSS Receiver', ['none', 'onboard', 'port1', 'port2', 'usb']],
             ['radio', 'RTK Radio', ['none', 'port1', 'port2']],
             ['imu', 'IMU', ['none', 'port1', 'port2', 'usb']],
-            ['keya', 'Keya Motor', ['none', 'port1', 'port2']],
             ['nmeaOut', 'NMEA Out', ['none', 'port1', 'port2']],
             ['rtcmOut', 'RTCM Out', ['none', 'port1', 'port2']]
         ];
@@ -111,6 +116,7 @@ const char SERIAL_PAGE[] PROGMEM = R"rawliteral(
         function portsFromPage() {
             const ports = { baud: [parseInt(document.getElementById('baud0').value), parseInt(document.getElementById('baud1').value)] };
             DEVICES.forEach(d => ports[d[0]] = whereOf(d[0]));
+            ports.keya = 'none';  // not on this page: a Keya serial motor is set only in the settings file
             let mask = 0;
             [1, 2, 4, 8, 16].forEach(b => { if (document.getElementById('nmea' + b).checked) mask |= b; });
             ports.nmeaSentences = mask;
@@ -148,11 +154,12 @@ const char SERIAL_PAGE[] PROGMEM = R"rawliteral(
             for (let i = 0; i < 2; ++i) {
                 const on = onPort(i);
                 heads[3 + i].classList.toggle('clash', on.length > 1);
-                const fixed = on.length === 1 && (on[0] === 'imu' || on[0] === 'keya');
+                const fixed = on.length === 1 && on[0] === 'imu';
                 const sel = document.getElementById('baud' + i);
-                sel.disabled = fixed || on.length === 0;
+                sel.disabled = fixed;
+                if (fixed) sel.value = 115200;
                 document.getElementById('baudUse' + i).textContent =
-                    on.length === 0 ? '(nothing on it)' : fixed ? '(' + NAMES[on[0]] + ': 115200)' : '(' + on.map(dev => NAMES[dev]).join(', ') + ')';
+                    on.length === 0 ? '(nothing set: listening)' : fixed ? '(IMU: always 115200)' : '(' + on.map(dev => NAMES[dev]).join(', ') + ')';
             }
             document.getElementById('nmeaGroup').style.display = whereOf('nmeaOut') === 'none' ? 'none' : '';
             const problem = portsProblem();
@@ -165,51 +172,71 @@ const char SERIAL_PAGE[] PROGMEM = R"rawliteral(
 
         function deg(v) { return (v >= 0 ? '+' : '') + v.toFixed(1) + '&deg;'; }
 
-        function place(w) {
-            return { onboard: 'onboard', port1: 'port 1', port2: 'port 2', usb: 'USB' }[w] || w;
+        const FIX = { 0: 'no fix', 1: 'GPS', 2: 'DGPS', 3: 'PPS', 4: 'RTK fixed', 5: 'RTK float', 6: 'dead reckoning' };
+        const usbName = (p) => p ? esc(p.replace('/dev/serial/by-id/', '')) : '';  // USB names come from the device
+
+        function gnssView(data) {
+            const g = data.gnss || {};
+            return (FIX[g.fixQuality] || 'fix ' + g.fixQuality) + ', ' + g.satellites + ' satellites';
         }
 
-        let lastCounts = null;
+        function imuView(imu) {
+            if (imu.valid)
+                return '<b>' + esc(imu.type) + '</b> &nbsp; Roll ' + deg(imu.roll) + ' &nbsp; Pitch ' + deg(imu.pitch) +
+                    ' &nbsp; Heading ' + imu.heading.toFixed(1) + '&deg; &nbsp; Turn ' + deg(imu.yawRate) + '/s';
+            if (imu.type && imu.type !== 'None') return esc(imu.type) + ' has stopped sending.';
+            return '';
+        }
+
+        function rate(bytes) {
+            return bytes >= 1000 ? (bytes / 1000).toFixed(1) + ' kB/s' : bytes + ' B/s';
+        }
+
+        // What is coming in on a port: parsed when it is something the HAT reads, else the first
+        // 20 characters of the last lines.
+        function rawView(v, perSec) {
+            if (!v.open) return '<span class="quiet">Port not available.</span>';
+            if (v.msSinceIn === undefined || v.msSinceIn > 3000) return '<span class="quiet">Nothing coming in.</span>';
+            if (v.rtcm && v.rtcm.length)
+                return 'RTCM ' + v.rtcm.join(', ') + ' &nbsp; <span class="quiet">' + rate(perSec) + '</span>';
+            return '<span class="quiet">' + rate(perSec) + '</span><pre>' + (v.lines || []).map(esc).join('\n') + '</pre>';
+        }
+
+        let lastIn = [null, null], lastPoll = 0;
         function pollStatus() {
             fetch('/api/status')
                 .then(response => response.json())
                 .then(data => {
-                    // Live state, from the settings in force (the saved ones) and the counters.
                     const ser = data.serial || {};
-                    const lines = [];
                     const saved = window.savedPorts || {};
-                    const dev = (p) => p ? esc(p.replace('/dev/serial/by-id/', 'USB ')) : '';  // USB names come from the device
-                    if (saved.gnss && saved.gnss !== 'none') {
-                        const fix = data.gnss ? data.gnss.fixQuality : 0;
-                        lines.push('<b>GNSS:</b> ' + (ser.gnssPort ? dev(ser.gnssPort) + ', fix ' + fix
-                            : saved.gnss === 'usb' ? 'looking for it on USB...' : 'not open'));
-                    }
-                    const moving = (k) => lastCounts && ser[k] > lastCounts[k];
-                    if (saved.radio && saved.radio !== 'none')
-                        lines.push('<b>RTK radio:</b> ' + (moving('radioBytes') ? 'corrections coming in' : 'nothing coming in'));
-                    if (saved.nmeaOut && saved.nmeaOut !== 'none')
-                        lines.push('<b>NMEA out:</b> ' + (moving('nmeaOutSent') ? 'sending' : 'nothing to send') + ' (' + ser.nmeaOutSent + ' sent)');
-                    if (saved.rtcmOut && saved.rtcmOut !== 'none')
-                        lines.push('<b>RTCM out:</b> ' + (moving('rtcmOutBytes') ? 'sending' : 'nothing to send'));
-                    document.getElementById('portLive').innerHTML = lines.length ? lines.join('<br>') : 'No serial devices set.';
-                    lastCounts = ser;
-
                     const imu = data.imu || {};
-                    const el = document.getElementById('imuLive');
-                    const where = dev(imu.port);
-                    if (imu.valid) {
-                        el.innerHTML = '<b>' + esc(imu.type) + '</b> <span style="color: #7f8c8d; font-size: 13px;">' + where + '</span><br>' +
-                            'Roll ' + deg(imu.roll) + ' &nbsp; Pitch ' + deg(imu.pitch) +
-                            ' &nbsp; Heading ' + imu.heading.toFixed(1) + '&deg; &nbsp; Turn ' + deg(imu.yawRate) + '/s';
-                    } else if (imu.type && imu.type !== 'None') {
-                        el.innerHTML = '<b>' + esc(imu.type) + '</b> has stopped sending.';
-                    } else if (imu.port) {
-                        el.innerHTML = 'Listening on ' + where + ' for an IMU...';
-                    } else if (saved.imu === 'usb') {
-                        el.textContent = 'Looking for a TM171 on USB...';
-                    } else {
-                        el.textContent = saved.imu && saved.imu !== 'none' ? 'Not open.' : 'No IMU set.';
-                    }
+                    const now = Date.now();
+                    const secs = lastPoll ? (now - lastPoll) / 1000 : 1;
+                    lastPoll = now;
+                    const blocks = [];
+                    const block = (head, use, body) => blocks.push('<div class="port-live"><div class="head">' + head +
+                        (use ? ' <span>' + use + '</span>' : '') + '</div>' + body + '</div>');
+
+                    (ser.rs232 || []).forEach((v, i) => {
+                        const perSec = lastIn[i] === null ? 0 : Math.max(0, Math.round((v.bytesIn - lastIn[i]) / secs));
+                        lastIn[i] = v.bytesIn;
+                        const use = v.use;
+                        let body;
+                        if (use === 'gnss') body = ser.gnssPort ? gnssView(data) : '<span class="quiet">Not open.</span>';
+                        else if (use === 'imu') body = imuView(imu) || rawView(v, perSec);
+                        else if (use === 'nmeaOut' || use === 'rtcmOut') {
+                            const sent = use === 'nmeaOut' ? ser.nmeaOutSent + ' sentences sent' : ser.rtcmOutBytes + ' bytes sent';
+                            body = sent + (v.bytesIn ? '<br>' + rawView(v, perSec) : '');
+                        } else body = rawView(v, perSec);
+                        block('Port ' + (i + 1), use === 'none' ? 'nothing set' : NAMES[use] || use, body);
+                    });
+                    if (saved.gnss === 'onboard') block('Onboard', 'GNSS Receiver', ser.gnssPort ? gnssView(data) : '<span class="quiet">Not open.</span>');
+                    if (saved.gnss === 'usb')
+                        block('USB', 'GNSS Receiver', ser.gnssPort ? usbName(ser.gnssPort) + '<br>' + gnssView(data) : '<span class="quiet">Looking for it...</span>');
+                    if (saved.imu === 'usb')
+                        block('USB', 'IMU', imu.port ? usbName(imu.port) + '<br>' + (imuView(imu) || '<span class="quiet">Listening...</span>')
+                                                    : '<span class="quiet">Looking for a TM171...</span>');
+                    document.getElementById('portLive').innerHTML = blocks.join('');
                 })
                 .catch(() => {})
                 .finally(() => setTimeout(pollStatus, 1000));
@@ -254,7 +281,7 @@ const char SERIAL_PAGE[] PROGMEM = R"rawliteral(
                     <label for="baud1">Port 2 Baud Rate: <span id="baudUse1" class="help-text"></span></label>
                     <select id="baud1" class="baud-select"></select>
                     <div class="help-text" style="margin-top: 5px;">
-                        Match the device's own rate. An IMU or Keya motor always runs at 115200. Rates apply as soon as they are saved.
+                        Match the device's own rate; below, what comes in should then be readable. An IMU always runs at 115200. Rates apply as soon as they are saved.
                     </div>
                 </div>
 
@@ -285,13 +312,8 @@ const char SERIAL_PAGE[] PROGMEM = R"rawliteral(
 
             <div class="card">
                 <div class="form-group" style="margin-top: 0;">
-                    <label>Now:</label>
-                    <div id="portLive" class="port-live">-</div>
-                </div>
-
-                <div class="form-group" style="margin-top: 15px;">
-                    <label>IMU:</label>
-                    <div id="imuLive" class="port-live">-</div>
+                    <label>Coming In Now:</label>
+                    <div id="portLive">-</div>
                     <div class="help-text" style="margin-top: 5px;">
                         Mount the IMU with its arrow pointing to the front of the tractor. To check it: right side down (or tilt the IMU to the right) and roll goes positive; nose up and pitch goes positive; turn right and the heading goes up. If the IMU is turned 90 degrees, set "Use Y axis" in AgOpenWeb's steer settings.
                     </div>
