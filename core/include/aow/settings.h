@@ -60,9 +60,9 @@ struct Settings {
         bool terminal = true;
     } isobus;
 
-    // Where each serial device is (AOW HAT; the firmware's ports are fixed): the Device page's
-    // matrix. Applied at startup, except the baud rates, which apply live. Each RS-232 port
-    // holds one device at most; allowed() says which places suit which device.
+    // Where each serial device is (AOW HAT; the firmware's ports are fixed): the Serial
+    // Communications page's matrix. Applied at startup, except the baud rates, which apply
+    // live. Each RS-232 port holds one device at most; allowed() says which places suit which.
     struct Ports {
         enum Where : uint8_t { kNone, kPort1, kPort2, kUsb, kOnboard };
         enum Device : uint8_t { kGnss, kRadio, kImu, kKeya, kNmeaOut, kRtcmOut, kDevices };

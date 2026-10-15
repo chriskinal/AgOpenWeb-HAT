@@ -32,7 +32,7 @@ and rates. Line counts are the firmware's (.h + .cpp).
 |---|---|---|---|
 | `PGNProcessor`, `PGNUtils` | 350 | `core/pgn`, `core/app_link` (done) | hello, scan, 253 per 254 |
 | `GNSSProcessor`, `NAVProcessor`, `NMEAMessageBuilder`, `calc_crc32` | 2,800 | `core/nmea`, `core/gnss`, `core/nav` (done) | one GNSS UART; the u-blox GPS2/UBX path drops (the UM982 gives heading) |
-| `RTCMProcessor` | 210 | `core/gnss_link` (done) | UDP 2233 and the radio (RS-232 #1 by default, Device page) to the receiver; RTCM out (new) |
+| `RTCMProcessor` | 210 | `core/gnss_link` (done) | UDP 2233 and the radio (RS-232 #1 by default, Serial Communications page) to the receiver; RTCM out (new) |
 | `EventLogger` | 600 | `core/log` + `daemon/web_thread` (done) | same levels, sources and rate limits; console → journald, UDP syslog, ring buffer, WebSocket 8083 |
 | `ConfigManager`, `EEPROMLayout` | 1,040 | `core/settings`, `daemon/shared` (done) | `/etc/aow-hat/settings.json`, written atomically; same fields and defaults |
 | `SimpleHTTPServer`, `SimpleWebSocket`, `SimpleWebManager`, `LogWebSocket`, `TelemetryWebSocket` | 3,000 | `web/server`, `web/api` (done for Home, Device, Event logger, Logs, Network) | same routes; ports 80, 8082, 8083 so the pages work unchanged |
@@ -79,8 +79,8 @@ second GPS UART. Sections stay on an external machine module or go over ISOBUS (
 | Serial7 `SerialRS232`, 115200 | Keya serial motor | RS-232 #2 (UART3) by default |
 | Serial4 `SerialIMU`, 115200 (TTL) | IMU: BNO085 in RVC mode or TM171 (`IMUProcessor`) | Either RS-232 port, through a TTL to RS-232 converter, or a TM171 on USB (a USB serial device, `/dev/ttyACMx`), reopened when it is unplugged and plugged back in (done 2026-10-14; a real TM171 on USB 2026-10-15) |
 
-Where each serial device is, is a setting (`ports` in the settings file), set on the Device
-page's Serial Ports matrix: one row per device, one column per place (none, onboard, RS-232 #1,
+Where each serial device is, is a setting (`ports` in the settings file), set on the Serial
+Communications page (`/serial`, its own page beside Device Settings), a matrix: one row per device, one column per place (none, onboard, RS-232 #1,
 #2, USB), each RS-232 port holding one device. The service passes the onboard receiver
 (`--gnss /dev/ttyAMA5`) and the two ports (`--rs232 /dev/ttyAMA2,/dev/ttyAMA3`). The defaults
 are the firmware's layout: the receiver onboard, the radio on #1, Keya on #2.

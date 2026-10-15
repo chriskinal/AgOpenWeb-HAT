@@ -102,7 +102,7 @@ void usage() {
         "  --gvret-port N    SavvyCAN (GVRET) over TCP (default 23; 0 = off)\n"
         "  --rs232 DEV1,DEV2 the RS-232 ports #1 and #2. Where each serial device is (GNSS\n"
         "                    receiver, RTK radio, IMU, Keya, NMEA out, RTCM out) is a setting,\n"
-        "                    on the Device page\n"
+        "                    on the Serial Communications page\n"
         "  --keya-serial DEV probe for a Keya motor on this serial port at startup\n"
         "  --radio DEV       RTK radio serial port; its RTCM goes to the receiver\n"
         "  --imu DEV         external IMU: a BNO085 (RVC) on an RS-232 port at 115200, or a TM171\n"
@@ -266,9 +266,9 @@ int main(int argc, char** argv) {
     if (!opt.anyApp && !udp.setAcceptFrom(opt.appHost)) return fail(1);
     udp.setOwnAddresses(shared.ownAddresses, aow::Shared::kOwnAddresses);
 
-    // Serial devices: where each is comes from the settings (the Device page's matrix). --gnss
-    // names the onboard receiver and --rs232 the two RS-232 ports; --radio, --keya-serial and
-    // --imu override the settings.
+    // Serial devices: where each is comes from the settings (the Serial Communications page).
+    // --gnss names the onboard receiver and --rs232 the two RS-232 ports; --radio,
+    // --keya-serial and --imu override the settings.
     using Ports = aow::Settings::Ports;
     const Ports portSettings = shared.settings().ports;
     std::string rs232[2];
@@ -340,7 +340,8 @@ int main(int argc, char** argv) {
         else LOG_ERROR(Gnss, "RTCM out port %s not opened", rtcmOutDev.c_str());
     }
     // The open port on each RS-232 port whose baud rate is the port's setting (the IMU and Keya
-    // run at 115200): a new rate on the Device page applies live, as the firmware's radio rate.
+    // run at 115200): a new rate on the Serial Communications page applies live, as the
+    // firmware's radio rate did.
     aow::linux_io::SerialPort* onPort[2] = {nullptr, nullptr};
     unsigned portBaud[2] = {portSettings.baud[0], portSettings.baud[1]};
     auto variable = [&](Ports::Device d, aow::linux_io::SerialPort& sp) {

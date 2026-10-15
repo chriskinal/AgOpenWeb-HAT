@@ -142,30 +142,33 @@ int main() {
     post(s, port, "/api/device/settings", R"({"serialRadioBaud":38400})");
     CHECK(b.s.ports.baud[0] == 38400 && b.s.misc.buzzerVolume == 2);
 
-    // Ports: where each device is, as names; a move needs a restart, a baud rate does not; a
-    // clash is refused with a reason and nothing saved.
+    // Serial ports (/api/serial): where each device is, as names; a move needs a restart, a
+    // baud rate does not; a clash is refused with a reason and nothing saved. The firmware's
+    // radio rate on /api/device/settings is the radio's port's.
     using P = Settings::Ports;
-    d = parse(request(s, port, "GET /api/device/settings HTTP/1.1\r\n\r\n"));
-    CHECK(d["ports"]["gnss"] == "onboard" && d["ports"]["radio"] == "port1" && d["ports"]["keya"] == "port2");
-    CHECK(d["ports"]["imu"] == "none" && d["ports"]["baud"][0] == 38400 && d["serialRadioBaud"] == 38400);
-    r = post(s, port, "/api/device/settings", R"({"ports":{"baud":[38400,9600]}})");
+    d = parse(request(s, port, "GET /api/serial HTTP/1.1\r\n\r\n"));
+    CHECK(d["gnss"] == "onboard" && d["radio"] == "port1" && d["keya"] == "port2");
+    CHECK(d["imu"] == "none" && d["baud"][0] == 38400 && d["nmeaRateHz"] == 0);
+    CHECK(parse(request(s, port, "GET /api/device/settings HTTP/1.1\r\n\r\n"))["serialRadioBaud"] == 38400);
+    r = post(s, port, "/api/serial", R"({"baud":[38400,9600]})");
     CHECK(parse(r)["restartRequired"] == false && b.s.ports.baud[1] == 9600);
-    r = post(s, port, "/api/device/settings", R"({"ports":{"keya":"none","imu":"usb","nmeaOut":"port2","nmeaRateHz":5}})");
+    r = post(s, port, "/api/serial", R"({"keya":"none","imu":"usb","nmeaOut":"port2","nmeaRateHz":5})");
     CHECK(parse(r)["restartRequired"] == true && b.s.ports.where[P::kImu] == P::kUsb);
     CHECK(b.s.ports.where[P::kNmeaOut] == P::kPort2 && b.s.ports.nmeaRateHz == 5 && b.s.ports.where[P::kKeya] == P::kNone);
     const int beforeClash = b.applied;
-    r = post(s, port, "/api/device/settings", R"({"ports":{"rtcmOut":"port2"},"buzzerVolume":0})");  // #2 twice
+    r = post(s, port, "/api/serial", R"({"rtcmOut":"port2"})");  // #2 twice
     CHECK(r.rfind("HTTP/1.1 400", 0) == 0 && !parse(r)["message"].as<std::string>().empty());
-    CHECK(b.applied == beforeClash && b.s.ports.where[P::kRtcmOut] == P::kNone && b.s.misc.buzzerVolume == 2);
-    r = post(s, port, "/api/device/settings", R"({"ports":{"keya":"usb"}})");  // no USB Keya
-    CHECK(r.rfind("HTTP/1.1 400", 0) == 0);
-    r = post(s, port, "/api/device/settings", R"({"ports":{"radio":"somewhere"}})");
+    CHECK(b.applied == beforeClash && b.s.ports.where[P::kRtcmOut] == P::kNone);
+    CHECK(post(s, port, "/api/serial", R"({"keya":"usb"})").rfind("HTTP/1.1 400", 0) == 0);  // no USB Keya
+    r = post(s, port, "/api/serial", R"({"radio":"somewhere"})");
     CHECK(r.rfind("HTTP/1.1 400", 0) == 0 && b.s.ports.where[P::kRadio] == P::kPort1);
-    // The firmware's radio rate is the radio's port's.
-    r = post(s, port, "/api/device/settings", R"({"ports":{"radio":"port2","nmeaOut":"port1"},"serialRadioBaud":57600})");
-    CHECK(parse(r)["restartRequired"] == true && b.s.ports.baud[1] == 57600 && b.s.ports.baud[0] == 38400);
-    r = post(s, port, "/api/device/settings", R"({"ports":{"radio":"port1","imu":"none","nmeaOut":"none","keya":"port2"}})");
+    r = post(s, port, "/api/serial", R"({"radio":"port2","nmeaOut":"port1"})");
+    CHECK(parse(r)["restartRequired"] == true);
+    post(s, port, "/api/device/settings", R"({"serialRadioBaud":57600})");
+    CHECK(b.s.ports.baud[1] == 57600 && b.s.ports.baud[0] == 38400);
+    r = post(s, port, "/api/serial", R"({"radio":"port1","imu":"none","nmeaOut":"none","keya":"port2"})");
     CHECK(parse(r)["status"] == "saved");
+    CHECK(request(s, port, "GET /serial HTTP/1.1\r\n\r\n").find("/api/serial") != std::string::npos);
 
     // Broken JSON and a failed save are reported, not applied.
     CHECK(post(s, port, "/api/device/settings", "{nope").rfind("HTTP/1.1 400", 0) == 0);

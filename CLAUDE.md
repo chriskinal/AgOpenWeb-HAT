@@ -63,7 +63,7 @@ The Teensy firmware is not being rewritten and nothing is ported back to it.
   (RVC) on an RS-232 port or a TM171 on USB (`/dev/ttyACMx`), reopened after an unplug: done on
   ptys, and a real TM171 on the dev CM4 (signs checked on the bench). Where each serial
   device is (GNSS receiver, radio, IMU, Keya, and the new NMEA out and RTCM out) is a setting,
-  the Device page's port matrix (`ports`; the service passes `--gnss` and `--rs232`); USB
+  the Serial Communications page's port matrix (`ports`; the service passes `--gnss` and `--rs232`); USB
   devices are found by listening (`daemon/usb_scout`). `--radio`, `--keya-serial` and `--imu`
   override the settings. LED and buzzer logic
   (`core/indicators`; `/api/status` shows the LED colours), `aow-hatctl`: done.
