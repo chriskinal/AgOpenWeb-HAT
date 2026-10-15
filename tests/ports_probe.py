@@ -146,6 +146,15 @@ def main():
     print("status serial: %s" % {k: v for k, v in st["serial"].items() if k != "ports"})
     ok &= st["serial"]["gnssPort"] == os.ttyname(gps_s) and st["serial"]["nmeaOutSent"] >= 8
     ok &= st["serial"]["rtcmOutBytes"] == len(rtcm)
+    # Going Out Now names RTCM message numbers: real frames through (the first may be taken as
+    # the rest of the cut-off test frame above, as after a dropped byte in a real stream).
+    for _ in range(3):
+        s.sendto(rtcm_frame(1005), ("127.0.0.1", 2234))
+        time.sleep(0.1)
+    time.sleep(0.2)
+    types = status()["serial"]["rtcmOutTypes"]
+    print("RTCM out types: %s" % types)
+    ok &= types == [1005]
     proc.terminate()
     proc.wait(timeout=5)
 
@@ -185,6 +194,10 @@ def main():
           (len(lines), good, vtg_heading, {k: st[k] for k in ("nmeaSource", "correctedFixes", "correctedSent")}))
     ok &= len(lines) >= 36 and good >= 18 and all(checksum_ok(l) for l in lines)
     ok &= vtg_heading == "%05.1f" % last and st["nmeaSource"] == "corrected" and st["correctedFixes"] == 20
+    # Going Out Now: the last GGA and VTG written, as written.
+    shown = st.get("nmeaOutLast", [])
+    print("going out now: %s" % shown)
+    ok &= len(shown) == 2 and shown[0].startswith("$GNGGA,") and ",W,4," in shown[0] and shown[1].startswith("$GNVTG,%05.1f" % last)
 
     # PGN 100 stops: the receiver's own position again within about a second.
     stopped = time.time()

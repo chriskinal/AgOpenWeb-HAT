@@ -584,6 +584,10 @@ int main(int argc, char** argv) {
             st.correctedFixes = gnss.counters().correctedFixes;
             st.correctedSent = gnss.counters().correctedSent;
             st.nmeaOutDropped = gnss.counters().nmeaOutDropped;
+            for (int t = 0; t < 5; ++t)
+                if (gnss.nmeaOutLastUs(t) && clock.nowUs() - gnss.nmeaOutLastUs(t) < 3'000'000)
+                    std::memcpy(st.nmeaOutLast[t], gnss.nmeaOutLast(t), sizeof st.nmeaOutLast[t]);
+            st.rtcmOutCount = gnss.rtcmOutMonitor().rtcmTypes(clock.nowUs(), st.rtcmOutTypes, aow::PortMonitor::kRtcmTypes);
             hub.status(st);
             st.imuHeading = imu.data().heading;
             st.imuRoll = imu.data().roll;

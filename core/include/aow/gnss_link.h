@@ -11,6 +11,7 @@
 #include "aow/imu.h"
 #include "aow/nmea.h"
 #include "aow/pgn.h"
+#include "aow/port_monitor.h"
 
 namespace aow {
 
@@ -73,6 +74,14 @@ public:
         uint32_t nmeaOutDropped = 0;    // sentences NMEA out had no room for
     };
     const Counters& counters() const { return counters_; }
+
+    // What went out, for the Serial Communications page's Going Out Now: the last sentence NMEA
+    // out wrote of each type (Settings::Ports::Sentence bit order: GGA, VTG, RMC, ZDA, HDT),
+    // without its CRLF, and when (0: never); and RTCM out's bytes, as a port monitor sees them.
+    static constexpr size_t kOutChars = 120;
+    const char* nmeaOutLast(int type) const { return lastOut_[type]; }
+    uint64_t nmeaOutLastUs(int type) const { return lastOutUs_[type]; }
+    const PortMonitor& rtcmOutMonitor() const { return rtcmOutMon_; }
     const nmea::SentenceReader& reader() const { return reader_; }
 
 private:
@@ -82,7 +91,7 @@ private:
     void nmeaOut(uint64_t nowUs);
     bool correctedActive(uint64_t nowUs) const { return haveFix_ && nowUs - fixAtUs_ < kCorrectedTimeoutUs; }
     bool nmeaDue(int type, uint64_t nowUs);
-    bool writeNmea(const char* data, size_t len);
+    bool writeNmea(int type, const char* data, size_t len);
     void toReceiver(const uint8_t* data, size_t len);
 
     hal::SerialPort* receiver_;
@@ -112,6 +121,9 @@ private:
     bool haveFix_ = false;
     uint64_t fixAtUs_ = 0;
     hal::SerialPort* rtcmOut_ = nullptr;
+    char lastOut_[5][kOutChars + 1] = {};
+    uint64_t lastOutUs_[5] = {};
+    PortMonitor rtcmOutMon_;
 };
 
 }  // namespace aow

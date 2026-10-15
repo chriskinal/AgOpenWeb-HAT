@@ -120,7 +120,7 @@ bool GnssLink::nmeaDue(int type, uint64_t nowUs) {
     return true;
 }
 
-bool GnssLink::writeNmea(const char* data, size_t len) {
+bool GnssLink::writeNmea(int type, const char* data, size_t len) {
     // The rest of a sentence the port took only part of goes first; until it has gone, new
     // ones are dropped whole rather than cut into it.
     if (nmeaPendingLen_) {
@@ -146,6 +146,12 @@ bool GnssLink::writeNmea(const char* data, size_t len) {
         nmeaPendingLen_ = len - done;
     }
     ++counters_.nmeaOutSent;
+    size_t text = len;
+    while (text && (data[text - 1] == '\r' || data[text - 1] == '\n')) --text;
+    if (text > kOutChars) text = kOutChars;
+    std::memcpy(lastOut_[type], data, text);
+    lastOut_[type][text] = '\0';
+    lastOutUs_[type] = clock_.nowUs();
     return true;
 }
 
@@ -164,7 +170,7 @@ void GnssLink::nmeaOut(uint64_t nowUs) {
     if (!nmeaDue(type, nowUs)) return;
     char out[nmea::SentenceReader::kMax + 16];
     const size_t len = rawSentence(out, sizeof out);
-    if (len) writeNmea(out, len);
+    if (len) writeNmea(type, out, len);
 }
 
 void GnssLink::onCorrectedFix(const pgn::CorrectedFix& f) {
@@ -196,7 +202,7 @@ void GnssLink::onCorrectedFix(const pgn::CorrectedFix& f) {
         if (!nmeaDue(type, now)) continue;
         char out[nmea::SentenceReader::kMax + 64];
         const size_t len = rewrite(h.body, h.len, kRepl[type].repl, kRepl[type].n, out, sizeof out);
-        if (len && writeNmea(out, len)) ++counters_.correctedSent;
+        if (len && writeNmea(type, out, len)) ++counters_.correctedSent;
     }
 }
 
@@ -206,6 +212,7 @@ void GnssLink::toReceiver(const uint8_t* data, size_t len) {
         counters_.rtcmBytesDropped += static_cast<uint32_t>(len - (written > 0 ? written : 0));
     if (!rtcmOut_) return;
     const int out = rtcmOut_->write(data, len);
+    if (out > 0) rtcmOutMon_.feed(data, static_cast<size_t>(out), clock_.nowUs());
     counters_.rtcmOutBytes += static_cast<uint32_t>(out > 0 ? out : 0);
     if (out < static_cast<int>(len)) counters_.outBytesDropped += static_cast<uint32_t>(len - (out > 0 ? out : 0));
 }

@@ -36,6 +36,11 @@ struct Status {
     // with its position, sentences dropped for want of room on the port.
     bool nmeaCorrected = false;
     uint32_t correctedFixes = 0, correctedSent = 0, nmeaOutDropped = 0;
+    // Going Out Now: the last sentence NMEA out wrote of each type in the last 3 s (GGA, VTG,
+    // RMC, ZDA, HDT; empty: none), and the RTCM message numbers RTCM out sent lately.
+    char nmeaOutLast[5][121] = {};
+    int rtcmOutCount = 0;
+    uint16_t rtcmOutTypes[PortMonitor::kRtcmTypes] = {};
 
     // Every serial port and USB serial device, and what is coming in on it (serial_hub.h, the
     // Serial Communications page).

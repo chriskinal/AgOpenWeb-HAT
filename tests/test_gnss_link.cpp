@@ -166,6 +166,9 @@ int main() {
         zda;
     CHECK(std::string(nmeaOut.tx.begin(), nmeaOut.tx.end()) == want);
     CHECK(link.counters().correctedFixes == 2 && link.counters().correctedSent == 4);
+    // Going Out Now: the last of each type as written, no CRLF.
+    CHECK(link.nmeaOutLast(0) + std::string("\r\n") == withSum("$GPGGA,123519,4807.4074073,N,01130.0000000,W,1,08,0.9,545.4,M,46.9,M,,"));
+    CHECK(link.nmeaOutLastUs(0) == clock.us && !link.nmeaOutLastUs(4) && !link.nmeaOutLast(4)[0]);
 
     // Each sentence once: another PGN 100 with no new receiver data sends nothing (ZDA at 1 Hz
     // is not repeated at 10 Hz).

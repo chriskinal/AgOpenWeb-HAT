@@ -4,7 +4,8 @@
 // plugged in is found from what it sends (a GNSS receiver, RTK radio or IMU), so only the
 // outputs are set here: NMEA out and RTCM out, each on an RS-232 port or a USB serial device,
 // with NMEA out's sentences and rate, whether it carries the app's corrected position (PGN 100,
-// as AgOpenGPS's GPS_Out), and each RS-232 port's rate (auto, or pinned). Below, what
+// as AgOpenGPS's GPS_Out), and each RS-232 port's rate (auto, or pinned). Below, what is going
+// out (each output's port, position source, sentences or RTCM messages, rate and drops) and what
 // is coming in on each port and USB device: parsed for what the HAT reads, else the first 20
 // characters of the last lines. Uses the firmware pages' stylesheet and layout. Settings from
 // /api/serial, live state from /api/status.
@@ -34,7 +35,8 @@ const char SERIAL_PAGE[] PROGMEM = R"rawliteral(
         .port-live .head span { font-weight: normal; color: #7f8c8d; font-size: 13px; }
         .port-live pre { margin: 4px 0 0; font-family: Menlo, Consolas, monospace; font-size: 14px; white-space: pre; overflow-x: auto; }
         .quiet { color: #7f8c8d; }
-        .port-live .head .found { color: #27ae60; font-weight: 600; }
+        .port-live .head .found, .port-live .found { color: #27ae60; font-weight: 600; }
+        .warn { color: #c0392b; }
     </style>
     <script>
         const RATES = [4800, 9600, 19200, 38400, 57600, 115200, 230400, 460800, 921600];
@@ -137,8 +139,41 @@ const char SERIAL_PAGE[] PROGMEM = R"rawliteral(
             return '<span class="quiet">' + rate(perSec) + '</span><pre>' + (p.lines || []).map(esc).join('\n') + '</pre>';
         }
 
+        // Going Out Now: each output, where it goes and what it last wrote.
+        function outView(ser, ports, perSec) {
+            const where = key => {
+                const p = ports.find(q => q[key] && q.open);
+                return p ? (p.place === 'usb' ? 'USB <span>' + esc(p.name) + '</span>' : esc(p.name)) + ' &nbsp;<span>at ' + p.baud + '</span>' : '';
+            };
+            const blocks = [];
+            const nmeaAt = where('nmeaOut');
+            let nmea;
+            if (saved.nmeaOut === undefined || saved.nmeaOut === 'none') nmea = '<span class="quiet">Off.</span>';
+            else if (!nmeaAt) nmea = '<span class="quiet">Its port is not available.</span>';
+            else {
+                const src = ser.nmeaSource === 'corrected'
+                    ? '<span class="found">Corrected position from AgOpenWeb</span>'
+                    : 'Receiver position' + (saved.nmeaCorrected !== false
+                        ? ' <span class="quiet">(no corrected position coming: tick Send corrected position in AgOpenWeb\'s Network IO)</span>' : '');
+                const lines = ser.nmeaOutLast || [];
+                nmea = src + '<br>' + perSec.nmea + ' sentences/s' +
+                    (ser.nmeaOutDropped ? ', <span class="warn">' + ser.nmeaOutDropped + ' dropped: the port is too slow, lower the rate or raise the baud</span>' : '') +
+                    (lines.length ? '<pre>' + lines.map(esc).join('\n') + '</pre>' : '<div class="quiet">Nothing sent lately.</div>');
+            }
+            blocks.push('<div class="port-live"><div class="head">NMEA Out' + (nmeaAt ? ' &nbsp;<span>&rarr;</span> ' + nmeaAt : '') + '</div>' + nmea + '</div>');
+            const rtcmAt = where('rtcmOut');
+            let rtcm;
+            if (saved.rtcmOut === undefined || saved.rtcmOut === 'none') rtcm = '<span class="quiet">Off.</span>';
+            else if (!rtcmAt) rtcm = '<span class="quiet">Its port is not available.</span>';
+            else if (!(ser.rtcmOutTypes || []).length) rtcm = '<span class="quiet">No corrections going out.</span>';
+            else rtcm = 'RTCM ' + ser.rtcmOutTypes.join(', ') + ' &nbsp; <span class="quiet">' + rate(perSec.rtcm) + '</span>';
+            blocks.push('<div class="port-live"><div class="head">RTCM Out' + (rtcmAt ? ' &nbsp;<span>&rarr;</span> ' + rtcmAt : '') + '</div>' + rtcm + '</div>');
+            return blocks.join('');
+        }
+
         const lastIn = {};
         let lastPoll = 0;
+        let lastOut = null;
         function pollStatus() {
             fetch('/api/status')
                 .then(response => response.json())
@@ -148,25 +183,23 @@ const char SERIAL_PAGE[] PROGMEM = R"rawliteral(
                     const now = Date.now();
                     const secs = lastPoll ? (now - lastPoll) / 1000 : 1;
                     lastPoll = now;
+                    const out = { nmea: ser.nmeaOutSent || 0, rtcm: ser.rtcmOutBytes || 0 };
+                    const outPerSec = lastOut ? { nmea: Math.max(0, Math.round((out.nmea - lastOut.nmea) / secs)),
+                                                  rtcm: Math.max(0, Math.round((out.rtcm - lastOut.rtcm) / secs)) } : { nmea: 0, rtcm: 0 };
+                    lastOut = out;
+                    document.getElementById('portOut').innerHTML = outView(ser, ser.ports || [], outPerSec);
                     const blocks = [];
                     const names = [];
                     (ser.ports || []).forEach(p => {
                         const perSec = lastIn[p.name] === undefined ? 0 : Math.max(0, Math.round((p.bytesIn - lastIn[p.name]) / secs));
                         lastIn[p.name] = p.bytesIn;
                         if (p.place === 'usb' && (p.kind === 'unknown' || p.nmeaOut || p.rtcmOut)) names.push(p.name);
+                        if (p.open && (p.nmeaOut || p.rtcmOut)) return;  // an output: Going Out Now shows it
                         const head = p.place === 'usb' ? 'USB <span>' + esc(p.name) + '</span>' : esc(p.name);
                         let what, body;
                         if (!p.open) {
                             what = '';
                             body = '<span class="quiet">Not available.</span>';
-                        } else if (p.nmeaOut || p.rtcmOut) {
-                            what = [p.nmeaOut ? 'NMEA out' : '', p.rtcmOut ? 'RTCM out' : ''].filter(x => x).join(' and ') + ' at ' + p.baud;
-                            const src = ser.nmeaSource === 'corrected' ? 'corrected position from AgOpenWeb' : 'receiver position';
-                            body = [p.nmeaOut ? ser.nmeaOutSent + ' sentences sent, ' + src : '',
-                                    p.nmeaOut && ser.nmeaOutDropped ? ser.nmeaOutDropped + ' dropped (port too slow: lower the rate or raise the baud)' : '',
-                                    p.rtcmOut ? ser.rtcmOutBytes + ' bytes of RTCM sent' : '']
-                                .filter(x => x).join(', ');
-                            if (p.nmeaOut) body += '<div class="quiet">' + ser.correctedFixes + ' corrected positions received</div>';
                         } else if (p.kind === 'unknown') {
                             what = p.autoBaud ? 'listening, trying ' + p.baud : 'listening at ' + p.baud;
                             body = linesView(p, perSec);
@@ -252,6 +285,13 @@ const char SERIAL_PAGE[] PROGMEM = R"rawliteral(
                 <div class="help-text">Auto tries rates until what comes in makes sense. Set one for a device the HAT cannot recognise, or for an output (on Auto an output runs at 115200).</div>
             </div>
         </form>
+
+        <div class="card">
+            <div class="form-group" style="margin-top: 0;">
+                <label>Going Out Now:</label>
+                <div id="portOut">-</div>
+            </div>
+        </div>
 
         <div class="card">
             <div class="form-group" style="margin-top: 0;">

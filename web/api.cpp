@@ -125,6 +125,11 @@ Response status(Backend& b, const char* version) {
     serial["correctedFixes"] = st.correctedFixes;
     serial["correctedSent"] = st.correctedSent;
     serial["nmeaOutDropped"] = st.nmeaOutDropped;
+    JsonArray nmeaLast = serial["nmeaOutLast"].to<JsonArray>();  // Going Out Now
+    for (const auto& line : st.nmeaOutLast)
+        if (line[0]) nmeaLast.add(std::string(line));
+    JsonArray rtcmTypes = serial["rtcmOutTypes"].to<JsonArray>();
+    for (int t = 0; t < st.rtcmOutCount; ++t) rtcmTypes.add(st.rtcmOutTypes[t]);
     serial["rtcmOutBytes"] = st.rtcmOutBytes;
     JsonArray ports = serial["ports"].to<JsonArray>();
     for (int i = 0; i < st.serialCount; ++i) {

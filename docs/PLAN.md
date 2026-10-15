@@ -103,8 +103,10 @@ Communications page (`/serial`, beside Device Settings). Both outputs may share 
 with an output is written to and not listened to. A USB output is the device of that
 `/dev/serial/by-id` name, picked from those plugged in that are not identified. Each RS-232 port
 has a rate, auto or pinned (an output on auto runs at 115200); the firmware's `serialRadioBaud`
-pins #1. All of it applies live. The page shows each port and USB device: what it was found to
-be, at what rate, and what is coming in, parsed for a receiver (fix, satellites), an IMU (roll,
+pins #1. All of it applies live. Going Out Now shows each output: its port and rate, NMEA out's
+position source, sentences a second, drops and the last sentence of each type as written, and
+the RTCM message numbers going out. Coming In Now shows each port and USB device without an
+output: what it was found to be, at what rate, and what is coming in, parsed for a receiver (fix, satellites), an IMU (roll,
 pitch, heading, turn rate, with the sign checks to do after mounting) or RTCM (message numbers),
 else the first 20 characters of the last four lines (`core/port_monitor`). `--radio` and
 `--imu` name a device taken as such without detection (bench, `--board sim`); `--usb` looks at
