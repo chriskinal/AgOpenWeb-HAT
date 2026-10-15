@@ -79,32 +79,36 @@ second GPS UART. Sections stay on an external machine module or go over ISOBUS (
 | Serial7 `SerialRS232`, 115200 | Keya serial motor | RS-232 #2 (UART3) by default |
 | Serial4 `SerialIMU`, 115200 (TTL) | IMU: BNO085 in RVC mode or TM171 (`IMUProcessor`) | Either RS-232 port, through a TTL to RS-232 converter, or a TM171 on USB (a USB serial device, `/dev/ttyACMx`), reopened when it is unplugged and plugged back in (done 2026-10-14; a real TM171 on USB 2026-10-15) |
 
-Where each serial device is, is a setting (`ports` in the settings file), set on the Serial
-Communications page (`/serial`, its own page beside Device Settings), a matrix: one row per device, one column per place (none, onboard, RS-232 #1,
-#2, USB), each RS-232 port holding one device. The service passes the onboard receiver
-(`--gnss /dev/ttyAMA5`) and the two ports (`--rs232 /dev/ttyAMA2,/dev/ttyAMA3`). The defaults
-are the firmware's layout: the receiver onboard, the radio on #1, Keya on #2.
+What is plugged in is found, not set (`daemon/serial_hub`, `core/serial_detect`). The service
+passes the onboard receiver (`--gnss /dev/ttyAMA5`) and the two RS-232 ports (`--rs232
+/dev/ttyAMA2,/dev/ttyAMA3`); with `--board hat` each USB serial device (`/dev/serial/by-id`,
+ttyACM and ttyUSB) is looked at too. Every port and USB device without an output is listened to
+and never written to until identified: NMEA (or Unicore ASCII) with good checksums is a GNSS
+receiver (a base sends RTCM too, and a port first taken for a radio becomes one), BNO085 or TM171
+packets an IMU, RTCM 3 frames with a good CRC-24Q an RTK radio. On auto rate a port tries
+115200, 460800, 38400, 57600, 9600, 230400, 19200 for 2.5 s each until one parses; a USB CDC
+device (ttyACM) has no rate. After 5 s without its kind of data a device is listened for afresh.
 
-| Device | Places | Notes |
+| Device | Where | Notes |
 |---|---|---|
-| GNSS receiver | onboard (J7), #1, #2, USB | on a port at the port's rate; on USB, found by its NMEA |
-| RTK radio | #1, #2 | its RTCM goes to the receiver |
-| IMU | #1, #2, USB | BNO085 (RVC) or TM171, at 115200; on USB, found by its packets |
-| Keya motor | #1, #2 | probed at startup, 115200. Not on the page and off by default (the firmware probed #2): the settings file or `--keya-serial` only |
-| NMEA out (new) | #1, #2 | the receiver's GGA, VTG, RMC, ZDA, HDT as chosen, as received or at 1-10 Hz |
-| RTCM out (new) | #1, #2 | a copy of every correction byte sent to the receiver |
+| GNSS receiver | onboard (J7), #1, #2, USB | the onboard one is used while it sends, else the first other one sending; corrections go to the one in use |
+| RTK radio | #1, #2, USB | its RTCM goes to the receiver in use |
+| IMU | #1, #2, USB | BNO085 (RVC) or TM171; the first one sending feeds PANDA/PAOGI |
+| Keya motor | #1, #2 | probed at startup, 115200. Off by default (the firmware probed #2): the settings file (`ports.keya`) or `--keya-serial`; that port is not listened to |
+| NMEA out (new) | #1, #2, a USB device | set on the page; the receiver's GGA, VTG, RMC, ZDA, HDT as chosen, as received or at 1-10 Hz |
+| RTCM out (new) | #1, #2, a USB device | set on the page; a copy of every correction byte sent to the receiver |
 
-Each port has a baud rate (the firmware's radio rate became the radio's port's; older files'
-`gps.radioBaud` is read as #1's). Rates apply live; where things are, and NMEA out's choices,
-at startup, and the page offers the restart. On USB, `daemon/usb_scout` listens to each
-`/dev/serial/by-id` device not otherwise in use for up to 3 s (a ttyUSB adapter at 115200, then
-460800) and never writes to it. The page shows what is coming in on each port, whatever it is set to (`core/port_monitor`; a
-port set to nothing is opened to listen, never written to): parsed for a receiver (fix,
-satellites), an IMU (roll, pitch, heading, turn rate, with the sign checks to do after
-mounting) or RTCM (the message numbers, by CRC-24Q), else the first 20 characters of the last
-four lines, so an unknown device's baud rate can be found by trying rates until it reads.
-`--radio`, `--keya-serial` and `--imu` still override the settings (bench and `--board sim`);
-an IMU named on the radio's or Keya's port takes it.
+Only the outputs and the rates are settings (`ports` in the settings file), on the Serial
+Communications page (`/serial`, beside Device Settings). Both outputs may share a port; a port
+with an output is written to and not listened to. A USB output is the device of that
+`/dev/serial/by-id` name, picked from those plugged in that are not identified. Each RS-232 port
+has a rate, auto or pinned (an output on auto runs at 115200); the firmware's `serialRadioBaud`
+pins #1. All of it applies live. The page shows each port and USB device: what it was found to
+be, at what rate, and what is coming in, parsed for a receiver (fix, satellites), an IMU (roll,
+pitch, heading, turn rate, with the sign checks to do after mounting) or RTCM (message numbers),
+else the first 20 characters of the last four lines (`core/port_monitor`). `--radio` and
+`--imu` name a device taken as such without detection (bench, `--board sim`); `--usb` looks at
+USB with `--board sim` (off by default, so a test daemon does not share the service's devices).
 
 ### 2.5 Where the port differs from the firmware, on purpose
 

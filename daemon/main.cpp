@@ -31,7 +31,6 @@
 #include "aow/indicators.h"
 #include "aow/log.h"
 #include "aow/motor.h"
-#include "aow/port_monitor.h"
 #include "aow/settings.h"
 #include "aow/steer.h"
 #include "board.h"
@@ -40,7 +39,7 @@
 #include "isobus.h"
 #include "linux_io.h"
 #include "shared.h"
-#include "usb_scout.h"
+#include "serial_hub.h"
 #include "web_thread.h"
 
 namespace {
@@ -70,7 +69,8 @@ struct Options {
     const char* imu = nullptr;
     unsigned pwmHz = 20000;                    // --board hat: motor PWM frequency
     float adcRef = 5.0f;                       // --board hat: the measured 5V_MAIN
-    bool noWatchdog = false;                   // --board hat: leave the STWD100 off (debugging)
+    bool noWatchdog = false;
+    bool usb = false;                          // look for USB serial devices (on with --board hat)                   // --board hat: leave the STWD100 off (debugging)
     bool anyApp = false;                       // accept PGNs from any host, not only --app
     bool indicatorTest = false;                // light each LED in turn, play the chime, exit
     unsigned testHangAfterS = 0;               // watchdog test: the control loop stops after this
@@ -84,8 +84,7 @@ void usage() {
         "  --app-port N      app's port (default 9999)\n"
         "  --any-app         accept PGNs from any host, not only the --app one (bench use)\n"
         "  --listen-port N   port the app sends to (default 8888)\n"
-        "  --gnss DEVICE     the onboard GNSS receiver's serial port (default: none). The\n"
-        "                    receiver is used there unless the settings put it elsewhere\n"
+        "  --gnss DEVICE     the onboard GNSS receiver's serial port (default: none)\n"
         "  --gnss-baud N     (default 460800)\n"
         "  --rtcm-port N     RTCM corrections from the app (default 2233)\n"
         "  --config FILE     settings (default /etc/aow-hat/settings.json)\n"
@@ -101,16 +100,15 @@ void usage() {
         "                    on the HAT it resets the CM4\n"
         "  --can A,B,C       SocketCAN interfaces for CAN1-3 (default can0,can1,can2)\n"
         "  --gvret-port N    SavvyCAN (GVRET) over TCP (default 23; 0 = off)\n"
-        "  --rs232 DEV1,DEV2 the RS-232 ports #1 and #2. Where each serial device is (GNSS\n"
-        "                    receiver, RTK radio, IMU, Keya, NMEA out, RTCM out) is a setting,\n"
-        "                    on the Serial Communications page\n"
+        "  --rs232 DEV1,DEV2 the RS-232 ports #1 and #2. What is plugged in there, or into USB, is\n"
+        "                    found from what it sends (a receiver, RTK radio or IMU); the outputs\n"
+        "                    and rates are set on the Serial Communications page\n"
         "  --keya-serial DEV probe for a Keya motor on this serial port at startup\n"
-        "  --radio DEV       RTK radio serial port; its RTCM goes to the receiver\n"
-        "  --imu DEV         external IMU: a BNO085 (RVC) on an RS-232 port at 115200, or a TM171\n"
-        "                    on USB (/dev/ttyACMx; better its /dev/serial/by-id name). Takes the\n"
-        "                    port from the radio or the Keya probe if they have the same one;\n"
-        "                    reopened when a USB IMU is unplugged and plugged back in.\n"
-        "                    These three override the settings' port uses (bench and sim)\n"
+        "  --radio DEV       an RTK radio on this serial port, taken as such (bench)\n"
+        "  --imu DEV         an IMU on this serial port, taken as such (bench): a BNO085 (RVC)\n"
+        "                    at 115200 or a TM171; reopened when it is unplugged and plugged back in\n"
+        "  --usb             look for USB serial devices (a receiver, radio or IMU) with\n"
+        "                    --board sim too; with --board hat always\n"
         "  -v, --verbose     status summary every 5 s instead of every 60 s\n"
         "  --version");
 }
@@ -137,6 +135,7 @@ bool parseArgs(int argc, char** argv, Options& o) {
         else if (!std::strcmp(a, "--pwm-hz") && hasValue) o.pwmHz = static_cast<unsigned>(std::atoi(argv[++i]));
         else if (!std::strcmp(a, "--adc-ref") && hasValue) o.adcRef = static_cast<float>(std::atof(argv[++i]));
         else if (!std::strcmp(a, "--no-watchdog")) o.noWatchdog = true;
+        else if (!std::strcmp(a, "--usb")) o.usb = true;
         else if (!std::strcmp(a, "--any-app")) o.anyApp = true;
         else if (!std::strcmp(a, "--indicator-test")) o.indicatorTest = true;
         else if (!std::strcmp(a, "--test-hang-after") && hasValue) o.testHangAfterS = static_cast<unsigned>(std::atoi(argv[++i]));
@@ -267,9 +266,9 @@ int main(int argc, char** argv) {
     if (!opt.anyApp && !udp.setAcceptFrom(opt.appHost)) return fail(1);
     udp.setOwnAddresses(shared.ownAddresses, aow::Shared::kOwnAddresses);
 
-    // Serial devices: where each is comes from the settings (the Serial Communications page).
-    // --gnss names the onboard receiver and --rs232 the two RS-232 ports; --radio,
-    // --keya-serial and --imu override the settings.
+    // Serial devices (serial_hub.h): the onboard receiver (--gnss), the RS-232 ports (--rs232)
+    // and USB serial devices, what is on them found by listening. --radio and --imu name devices
+    // taken as such; a Keya motor's port (settings file, or --keya-serial) is left to it.
     using Ports = aow::Settings::Ports;
     const Ports portSettings = shared.settings().ports;
     std::string rs232[2];
@@ -279,106 +278,33 @@ int main(int argc, char** argv) {
         rs232[0] = list.substr(0, comma);
         if (comma != std::string::npos) rs232[1] = list.substr(comma + 1);
     }
-    const aow::PortPlan plan = aow::planPorts(portSettings, rs232, opt.gnssDevice ? opt.gnssDevice : "", opt.gnssBaud);
-    const aow::PortPlan::Dev& gnssPlan = plan.dev[Ports::kGnss];
-    std::string gnssDev = gnssPlan.path;
-    const bool usbGnss = gnssPlan.usb;
-    std::string radioDev = opt.radio ? opt.radio : plan.dev[Ports::kRadio].path;
-    unsigned radioBaud = plan.dev[Ports::kRadio].baud ? plan.dev[Ports::kRadio].baud : portSettings.baud[0];
-    std::string keyaDev = opt.keyaSerial ? opt.keyaSerial : plan.dev[Ports::kKeya].path;
-    std::string imuDev = opt.imu ? opt.imu : plan.dev[Ports::kImu].path;
-    const bool usbImu = !opt.imu && plan.dev[Ports::kImu].usb;
-    const std::string nmeaOutDev = plan.dev[Ports::kNmeaOut].path, rtcmOutDev = plan.dev[Ports::kRtcmOut].path;
-    // An IMU on a port also named for the radio or the Keya probe (by the options): the IMU has it.
-    if (!imuDev.empty() && imuDev == radioDev) {
-        LOG_INFO(Imu, "%s is the IMU's: no radio", imuDev.c_str());
-        radioDev.clear();
-    }
-    if (!imuDev.empty() && imuDev == keyaDev) {
-        LOG_INFO(Imu, "%s is the IMU's: no Keya serial probe", imuDev.c_str());
-        keyaDev.clear();
-    }
-
-    aow::linux_io::SerialPort gnssPort;
+    const std::string keyaDev = opt.keyaSerial                         ? opt.keyaSerial
+                              : portSettings.keya == Ports::kPort1 ? rs232[0]
+                              : portSettings.keya == Ports::kPort2 ? rs232[1]
+                                                                   : std::string();
     aow::linux_io::UdpLink rtcm;
-    const bool gnssWanted = !gnssDev.empty() || usbGnss;
-    if (!gnssDev.empty() && !gnssPort.open(gnssDev.c_str(), gnssPlan.baud)) return fail(1);
-    if (gnssWanted && !rtcm.open(opt.rtcmPort)) return fail(1);
-
-    // USB devices are found by listening to them (usb_scout.h); nothing else in use is tried.
-    aow::UsbScout scout;
-    for (const std::string& d : {gnssDev, radioDev, keyaDev, imuDev, nmeaOutDev, rtcmOutDev, rs232[0], rs232[1]})
-        if (!d.empty()) scout.exclude(d);
-    scout.want(aow::UsbScout::Kind::Gnss, usbGnss);
-    scout.want(aow::UsbScout::Kind::Imu, usbImu);
-    if (usbGnss) LOG_INFO(Gnss, "GNSS receiver on USB: looking for it");
-    if (usbImu) LOG_INFO(Imu, "IMU on USB: looking for a TM171");
-
-    aow::linux_io::SerialPort imuPort;
+    if (!rtcm.open(opt.rtcmPort)) return fail(1);
     aow::imu::Imu imu;
-    // An IMU on a named port (a USB one named by the --imu option) may appear late or come and
-    // go: it is reopened once a second while its device node is there.
-    auto openImu = [&]() {
-        if (access(imuDev.c_str(), F_OK) != 0 || !imuPort.open(imuDev.c_str(), 115200)) return false;
-        LOG_INFO(Imu, "IMU port %s open, waiting for a BNO085 or TM171", imuDev.c_str());
-        return true;
-    };
-    if (!imuDev.empty() && !openImu()) LOG_WARNING(Imu, "IMU port %s not there yet: opened when it appears", imuDev.c_str());
-
-    aow::linux_io::SerialPort radioPort;
-    if (!radioDev.empty()) {
-        if (radioPort.open(radioDev.c_str(), radioBaud)) LOG_INFO(Gnss, "Radio RTCM on %s at %u baud", radioDev.c_str(), radioBaud);
-        else LOG_ERROR(Gnss, "Radio port %s not opened", radioDev.c_str());
-    }
-    aow::linux_io::SerialPort nmeaOutPort, rtcmOutPort;
-    const unsigned nmeaOutBaud = plan.dev[Ports::kNmeaOut].baud, rtcmOutBaud = plan.dev[Ports::kRtcmOut].baud;
-    if (!nmeaOutDev.empty()) {
-        if (nmeaOutPort.open(nmeaOutDev.c_str(), nmeaOutBaud)) LOG_INFO(Gnss, "NMEA out on %s at %u baud", nmeaOutDev.c_str(), nmeaOutBaud);
-        else LOG_ERROR(Gnss, "NMEA out port %s not opened", nmeaOutDev.c_str());
-    }
-    if (!rtcmOutDev.empty()) {
-        if (rtcmOutPort.open(rtcmOutDev.c_str(), rtcmOutBaud)) LOG_INFO(Gnss, "RTCM out on %s at %u baud", rtcmOutDev.c_str(), rtcmOutBaud);
-        else LOG_ERROR(Gnss, "RTCM out port %s not opened", rtcmOutDev.c_str());
-    }
-    // The open port on each RS-232 port whose baud rate is the port's setting (the IMU and Keya
-    // run at 115200): a new rate on the Serial Communications page applies live, as the
-    // firmware's radio rate did.
-    aow::linux_io::SerialPort* onPort[2] = {nullptr, nullptr};
-    unsigned portBaud[2] = {portSettings.baud[0], portSettings.baud[1]};
-    auto variable = [&](Ports::Device d, aow::linux_io::SerialPort& sp) {
-        const int i = plan.dev[d].port;
-        if (i >= 0 && sp.fd() >= 0) onPort[i] = &sp;
-    };
-    if (!opt.radio) variable(Ports::kRadio, radioPort);
-    variable(Ports::kGnss, gnssPort);
-    variable(Ports::kNmeaOut, nmeaOutPort);
-    variable(Ports::kRtcmOut, rtcmOutPort);
-
-    // What is coming in on each RS-232 port, for the Serial Communications page. A port set to
-    // nothing is opened to listen (never written to), and so are NMEA and RTCM out; the radio
-    // and an IMU there are fed from where they are read.
-    aow::PortMonitor portMon[2];
-    const char* portUse[2] = {"none", "none"};
-    for (int d = 0; d < Ports::kDevices; ++d)
-        if (plan.dev[d].port >= 0) portUse[plan.dev[d].port] = Ports::deviceName(static_cast<Ports::Device>(d));
-    aow::linux_io::SerialPort sparePort[2];
-    aow::linux_io::SerialPort* listenOn[2] = {nullptr, nullptr};
-    for (int i = 0; i < 2; ++i) {
-        if (!std::strcmp(portUse[i], "nmeaOut")) listenOn[i] = &nmeaOutPort;
-        else if (!std::strcmp(portUse[i], "rtcmOut")) listenOn[i] = &rtcmOutPort;
-        else if (!std::strcmp(portUse[i], "none") && !rs232[i].empty() && rs232[i] != radioDev && rs232[i] != keyaDev &&
-                 rs232[i] != imuDev && sparePort[i].open(rs232[i].c_str(), portSettings.baud[i])) {
-            listenOn[i] = &sparePort[i];
-            onPort[i] = &sparePort[i];
-        }
-    }
-    const int radioMon = opt.radio ? -1 : plan.dev[Ports::kRadio].port;
-    const int imuMon = opt.imu ? -1 : plan.dev[Ports::kImu].port;
 
     // The daemon answers from loopback, so the module IP it reports is loopback too.
     const uint8_t moduleIp[4] = {127, 0, 0, 1};
     aow::AppLink app(udp, clock, moduleIp);
-    aow::GnssLink gnss(gnssPort, udp, clock);
+    aow::linux_io::SerialPort noReceiver;  // GnssLink's until the hub names the receiver in use
+    aow::GnssLink gnss(noReceiver, udp, clock);
+    aow::SerialHub::Config hubConfig;
+    if (opt.gnssDevice) hubConfig.onboard = opt.gnssDevice;
+    hubConfig.onboardBaud = opt.gnssBaud;
+    hubConfig.rs232[0] = rs232[0];
+    hubConfig.rs232[1] = rs232[1];
+    if (opt.radio) hubConfig.radio = opt.radio;
+    hubConfig.radioBaud = portSettings.rate[0] ? portSettings.rate[0] : 115200;
+    if (opt.imu) hubConfig.imu = opt.imu;
+    hubConfig.keya = keyaDev;
+    // Not with --board sim unless asked: a test daemon beside the service would read the
+    // service's USB devices too, and the two would share their bytes.
+    hubConfig.usb = opt.usb || !std::strcmp(opt.board, "hat");
+    aow::SerialHub hub(hubConfig, gnss, imu, clock);
+    hub.apply(portSettings);
 
     aow::SimBoard simBoard;
     aow::hat::HatBoard hatBoard;
@@ -503,32 +429,34 @@ int main(int argc, char** argv) {
     gnss.setPassThrough(startSettings.gps.passThrough);
     gnss.setImu(&imu);
     imu.setSwapXY(startSettings.steer.useYAxis);
-    if (gnssWanted) shared.gnssPort = &gnssPort;  // for the UM98x page
-    if (nmeaOutPort.fd() >= 0) gnss.setNmeaOut(&nmeaOutPort, portSettings.nmeaSentences, portSettings.nmeaRateHz);
-    if (rtcmOutPort.fd() >= 0) gnss.setRtcmOut(&rtcmOutPort);
+    shared.gnssPort = hub.onboardPort();  // for the UM98x page
 
     LOG_INFO(Network, "Listening on :%u, replying to %s:%u", opt.listenPort, opt.appHost, opt.appPort);
-    if (!gnssDev.empty()) LOG_INFO(Gnss, "GNSS on %s at %u baud, RTCM on :%u", gnssDev.c_str(), gnssPlan.baud, opt.rtcmPort);
+    if (opt.gnssDevice) LOG_INFO(Gnss, "GNSS on %s at %u baud, RTCM on :%u", opt.gnssDevice, opt.gnssBaud, opt.rtcmPort);
     aow::log::global().setStartupDone();
 
-    // Without GNSS the last two entries hold fd -1, which poll() skips.
-    enum { kApp, kTick, kSignal, kGnss, kRtcm, kRadio, kImu, kListen0, kListen1, kFds };
-    pollfd fds[kFds] = {{udp.fd(), POLLIN, 0},       {tickFd, POLLIN, 0},      {sigFd, POLLIN, 0},
-                        {gnssPort.fd(), POLLIN, 0},  {rtcm.fd(), POLLIN, 0},   {radioPort.fd(), POLLIN, 0},
-                        {imuPort.fd(), POLLIN, 0},
-                        {listenOn[0] ? listenOn[0]->fd() : -1, POLLIN, 0},
-                        {listenOn[1] ? listenOn[1]->fd() : -1, POLLIN, 0}};
+    // The fixed entries, then the serial hub's, which come and go (USB devices); rebuilt each
+    // turn into reserved space, so no allocation.
+    enum { kApp, kTick, kSignal, kRtcm, kFixed };
+    std::vector<pollfd> fds;
+    fds.reserve(64);
     const uint64_t startUs = clock.nowUs();
     aow::indicators::Leds leds(startUs / 1000);
     uint32_t lastRtcmPackets = 0, lastRadioBytes = 0, lastButtonPresses = 0;
     uint64_t lastRadioPulseMs = 0, nextLeds = 0;
     uint8_t ledColors[4] = {};
     const uint64_t summaryTicks = opt.verbose ? 500 : 6000;
-    uint64_t ticks = 0, nextSummary = summaryTicks, nextTurnSensor = 0, nextMotorProcess = 0, nextKick = 0, nextImuOpen = 0;
+    uint64_t ticks = 0, nextSummary = summaryTicks, nextTurnSensor = 0, nextMotorProcess = 0, nextKick = 0;
     bool watchdogOn = false, isoAppLink = false;
     int code = 0;
     for (;;) {
-        if (poll(fds, kFds, -1) < 0) {
+        fds.clear();
+        fds.push_back({udp.fd(), POLLIN, 0});
+        fds.push_back({tickFd, POLLIN, 0});
+        fds.push_back({sigFd, POLLIN, 0});
+        fds.push_back({rtcm.fd(), POLLIN, 0});
+        hub.fds(fds);
+        if (poll(fds.data(), fds.size(), -1) < 0) {
             if (errno == EINTR) continue;
             LOG_ERROR(System, "poll: %s", std::strerror(errno));
             code = 1;
@@ -545,13 +473,6 @@ int main(int argc, char** argv) {
             // still does it too: that is what clears them when the app goes away.
             if (isoAppLink) shared.setIsoSections(app.sectionControl(), app.sections());
         }
-        if (fds[kGnss].revents & (POLLERR | POLLHUP | POLLNVAL)) {
-            // A USB receiver unplugged. Exit; systemd restarts us and we find it again.
-            LOG_ERROR(Gnss, "%s went away", gnssDev.c_str());
-            code = 1;
-            break;
-        }
-        if (fds[kGnss].revents) gnss.pollReceiver();
         // While the UM98x page has the receiver, RTCM and radio bytes are dropped: they would
         // land in the middle of its commands.
         const bool gnssLent = shared.gnssPaused.load();
@@ -561,46 +482,12 @@ int main(int argc, char** argv) {
             while ((n = rtcm.receive(buf, sizeof buf)) > 0)
                 if (!gnssLent) gnss.forwardRtcm(buf, static_cast<size_t>(n));
         }
-        if (fds[kRadio].revents & (POLLERR | POLLHUP | POLLNVAL)) {
-            LOG_ERROR(Gnss, "Radio port %s went away", radioDev.c_str());
-            fds[kRadio].fd = -1;
-        } else if (fds[kRadio].revents) {
-            uint8_t buf[1024];
-            int n;
-            while ((n = radioPort.read(buf, sizeof buf)) > 0) {
-                if (radioMon >= 0) portMon[radioMon].feed(buf, static_cast<size_t>(n), clock.nowUs());
-                if (gnssWanted && !gnssLent) gnss.forwardRadio(buf, static_cast<size_t>(n));
-            }
-        }
-        if (fds[kImu].revents & (POLLERR | POLLHUP | POLLNVAL)) {
-            LOG_WARNING(Imu, "IMU port %s went away: reopened when it is back", imuDev.c_str());
-            imuPort.close();
-            fds[kImu].fd = -1;
-            if (usbImu) {  // look again: it may come back under another name
-                scout.release(imuDev);
-                scout.want(aow::UsbScout::Kind::Imu, true);
-            }
-        } else if (fds[kImu].revents) {
-            uint8_t buf[512];
-            int n;
+        {
             const aow::imu::Type before = imu.type();
-            while ((n = imuPort.read(buf, sizeof buf)) > 0) {
-                imu.feed(buf, static_cast<size_t>(n), clock.nowUs());
-                if (imuMon >= 0) portMon[imuMon].feed(buf, static_cast<size_t>(n), clock.nowUs());
-            }
+            hub.handle(fds.data() + kFixed, fds.size() - kFixed);
             if (imu.type() != before) {
-                LOG_INFO(Imu, "%s detected on %s", aow::imu::typeName(imu.type()), imuDev.c_str());
+                LOG_INFO(Imu, "%s detected on %s", aow::imu::typeName(imu.type()), hub.imuName().c_str());
                 app.setImuPresent(true);
-            }
-        }
-        for (int i = 0; i < 2; ++i) {  // ports listened to only for the page
-            const int k = kListen0 + i;
-            if (fds[k].revents & (POLLERR | POLLHUP | POLLNVAL)) {
-                fds[k].fd = -1;
-            } else if (fds[k].revents) {
-                uint8_t buf[512];
-                int n;
-                while ((n = listenOn[i]->read(buf, sizeof buf)) > 0) portMon[i].feed(buf, static_cast<size_t>(n), clock.nowUs());
             }
         }
         if (fds[kTick].revents) {
@@ -616,34 +503,7 @@ int main(int argc, char** argv) {
                     board.kickWatchdog();
                 }
             }
-            if (!usbImu && !imuDev.empty() && fds[kImu].fd < 0 && ticks >= nextImuOpen) {  // a named IMU coming back
-                nextImuOpen = ticks + 100;
-                if (openImu()) fds[kImu].fd = imuPort.fd();
-            }
-            // USB devices being looked for.
-            if (scout.wants(aow::UsbScout::Kind::Imu) || scout.wants(aow::UsbScout::Kind::Gnss)) {
-                const aow::UsbScout::Kind k = scout.tick(clock.nowUs());
-                if (k == aow::UsbScout::Kind::Imu) {
-                    scout.want(k, false);
-                    imuDev = scout.found();
-                    if (openImu()) {
-                        fds[kImu].fd = imuPort.fd();
-                    } else {
-                        scout.release(imuDev);
-                        scout.want(k, true);
-                    }
-                } else if (k == aow::UsbScout::Kind::Gnss) {
-                    scout.want(k, false);
-                    gnssDev = scout.found();
-                    if (gnssPort.open(gnssDev.c_str(), scout.foundBaud())) {
-                        LOG_INFO(Gnss, "GNSS receiver found on %s", gnssDev.c_str());
-                        if (!shared.gnssPaused.load()) fds[kGnss].fd = gnssPort.fd();
-                    } else {
-                        scout.release(gnssDev);
-                        scout.want(k, true);
-                    }
-                }
-            }
+            hub.tick();
             // --test-hang-after: a hung control loop, for the hardware watchdog to catch. After
             // the kick, so the timeout runs from here; the outputs stay as they are.
             if (opt.testHangAfterS && ticks >= opt.testHangAfterS * 100ULL) {
@@ -652,10 +512,10 @@ int main(int argc, char** argv) {
             }
             // The UM98x page borrowing the GNSS port, or giving it back.
             if (shared.gnssPauseRequested.load() && !shared.gnssPaused.load()) {
-                fds[kGnss].fd = -1;  // not polled, so its bytes cannot spin the loop
+                hub.setLent(true);  // not polled, so its bytes cannot spin the loop
                 shared.gnssPaused = true;
             } else if (!shared.gnssPauseRequested.load() && shared.gnssPaused.load()) {
-                fds[kGnss].fd = gnssPort.fd();
+                hub.setLent(false);
                 shared.gnssPaused = false;
             }
 
@@ -666,12 +526,7 @@ int main(int argc, char** argv) {
                 autosteer.setSettings(s);
                 imu.setSwapXY(s.steer.useYAxis);
                 gnss.setPassThrough(s.gps.passThrough);
-                for (int i = 0; i < 2; ++i) {  // RS-232 rates: live, as the firmware's radio rate
-                    if (!onPort[i] || s.ports.baud[i] == portBaud[i]) continue;
-                    portBaud[i] = s.ports.baud[i];
-                    if (onPort[i]->setBaud(portBaud[i])) LOG_INFO(Gnss, "RS-232 port %d now %u baud", i + 1, portBaud[i]);
-                    else LOG_ERROR(Gnss, "RS-232 port %d: %u baud not supported", i + 1, portBaud[i]);
-                }
+                hub.apply(s.ports);  // outputs and rates, live
             }
             const aow::Settings& settings = autosteer.settings();
             const aow::steer::Output out = autosteer.tick(board.read(settings));
@@ -708,23 +563,10 @@ int main(int argc, char** argv) {
             st.navSent = gnss.counters().navSent;
             st.imuType = aow::imu::typeName(imu.type());
             st.imuValid = imu.valid(clock.nowUs());
-            if (fds[kImu].fd >= 0) std::snprintf(st.imuPort, sizeof st.imuPort, "%s", imuDev.c_str());
-            if (gnssPort.fd() >= 0) std::snprintf(st.gnssPort, sizeof st.gnssPort, "%s", gnssDev.c_str());
             st.radioBytes = gnss.counters().radioBytes;
             st.nmeaOutSent = gnss.counters().nmeaOutSent;
             st.rtcmOutBytes = gnss.counters().rtcmOutBytes;
-            for (int i = 0; i < 2; ++i) {
-                aow::Status::Rs232& v = st.rs232[i];
-                const aow::PortMonitor& m = portMon[i];
-                v.use = portUse[i];
-                v.open = !rs232[i].empty() && (fds[kListen0 + i].fd >= 0 || i == radioMon || i == imuMon ||
-                                               plan.dev[Ports::kGnss].port == i || plan.dev[Ports::kKeya].port == i);
-                v.bytesIn = m.bytes();
-                if (m.lastUs()) v.msSinceIn = static_cast<uint32_t>((clock.nowUs() - m.lastUs()) / 1000);
-                v.lineCount = m.lineCount();
-                for (int l = 0; l < m.lineCount(); ++l) std::memcpy(v.lines[l], m.line(l), sizeof v.lines[l]);
-                v.rtcmCount = m.rtcmTypes(clock.nowUs(), v.rtcm, aow::PortMonitor::kRtcmTypes);
-            }
+            hub.status(st);
             st.imuHeading = imu.data().heading;
             st.imuRoll = imu.data().roll;
             st.imuPitch = imu.data().pitch;
@@ -777,7 +619,7 @@ int main(int argc, char** argv) {
 
             if (ticks >= nextSummary) {
                 nextSummary = ticks + summaryTicks;
-                logSummary(app, gnssWanted ? &gnss : nullptr, autosteer, &udp);
+                logSummary(app, &gnss, autosteer, &udp);
             }
         }
     }

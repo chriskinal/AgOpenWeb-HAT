@@ -25,6 +25,8 @@ public:
     int lineCount() const { return lineCount_; }
     const char* line(int i) const;
 
+    // RTCM 3 frames with a good CRC, all time.
+    uint32_t rtcmFrames() const { return rtcmFrames_; }
     // RTCM 3 message numbers with a good CRC seen in the last kRtcmAgeUs, ascending.
     int rtcmTypes(uint64_t nowUs, uint16_t* out, int cap) const;
 
@@ -44,6 +46,7 @@ private:
     size_t frameLen_ = 0, frameWant_ = 0;
     struct Seen { uint16_t type; uint64_t us; };
     Seen rtcm_[kRtcmTypes] = {};
+    uint32_t rtcmFrames_ = 0;
 };
 
 }  // namespace aow

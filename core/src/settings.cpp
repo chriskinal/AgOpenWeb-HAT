@@ -2,6 +2,7 @@
 
 #include <ArduinoJson.h>
 
+#include <cstdio>
 #include <cstring>
 
 namespace aow {
@@ -73,12 +74,15 @@ std::string toJson(const Settings& s) {
 
     using P = Settings::Ports;
     JsonObject ports = doc["ports"].to<JsonObject>();
-    for (int d = 0; d < P::kDevices; ++d)
-        ports[P::deviceName(static_cast<P::Device>(d))] = P::whereName(static_cast<P::Where>(s.ports.where[d]));
-    JsonArray baud = ports["baud"].to<JsonArray>();
-    for (uint32_t b : s.ports.baud) baud.add(b);
+    ports["nmeaOut"] = P::outName(s.ports.nmeaOut);
+    ports["nmeaOutUsb"] = s.ports.nmeaOutUsb;
+    ports["rtcmOut"] = P::outName(s.ports.rtcmOut);
+    ports["rtcmOutUsb"] = s.ports.rtcmOutUsb;
+    JsonArray rate = ports["rate"].to<JsonArray>();
+    for (uint32_t r : s.ports.rate) rate.add(r);
     ports["nmeaSentences"] = s.ports.nmeaSentences;
     ports["nmeaRateHz"] = s.ports.nmeaRateHz;
+    ports["keya"] = P::outName(s.ports.keya);
 
     JsonObject m = doc["misc"].to<JsonObject>();
     m["invertWorkSwitch"] = s.misc.invertWorkSwitch;
@@ -133,8 +137,6 @@ bool fromJson(const std::string& json, Settings& s, std::string* error) {
 
     JsonVariantConst gps = doc["gps"];
     get(gps, "passThrough", n.gps.passThrough);
-    uint32_t oldRadioBaud = 0;  // before the ports settings: RS-232 #1's
-    get(gps, "radioBaud", oldRadioBaud);
 
     JsonVariantConst can = doc["can"];
     get(can, "brand", n.can.brand);
@@ -153,18 +155,23 @@ bool fromJson(const std::string& json, Settings& s, std::string* error) {
     get(iso, "terminal", n.isobus.terminal);
     if (n.isobus.channel < 1 || n.isobus.channel > 3) n.isobus.channel = 2;
 
+    // Older files' gnss, radio, imu and baud keys (when the ports were set by hand) are left
+    // to detection: auto rates.
     using P = Settings::Ports;
     JsonVariantConst ports = doc["ports"];
-    for (int d = 0; d < P::kDevices; ++d) {
-        const char* w = ports[P::deviceName(static_cast<P::Device>(d))] | "";
-        for (int i = P::kNone; i <= P::kOnboard; ++i)
-            if (!std::strcmp(w, P::whereName(static_cast<P::Where>(i))) && P::allowed(static_cast<P::Device>(d), static_cast<P::Where>(i)))
-                n.ports.where[d] = static_cast<uint8_t>(i);
-    }
-    JsonArrayConst baud = ports["baud"];
-    for (size_t i = 0; i < 2 && i < baud.size(); ++i)
-        if (baud[i].is<uint32_t>() && validBaud(baud[i].as<uint32_t>())) n.ports.baud[i] = baud[i];
-    if (baud.isNull() && validBaud(oldRadioBaud)) n.ports.baud[0] = oldRadioBaud;
+    P::parseOut(ports["nmeaOut"] | "", n.ports.nmeaOut);
+    P::parseOut(ports["rtcmOut"] | "", n.ports.rtcmOut);
+    uint8_t keya = n.ports.keya;
+    if (P::parseOut(ports["keya"] | "", keya) && keya != P::kUsb) n.ports.keya = keya;
+    auto name = [&](const char* key, char* out) {
+        JsonVariantConst v = ports[key];
+        if (v.is<const char*>()) std::snprintf(out, P::kUsbName, "%s", v.as<const char*>());
+    };
+    name("nmeaOutUsb", n.ports.nmeaOutUsb);
+    name("rtcmOutUsb", n.ports.rtcmOutUsb);
+    JsonArrayConst rate = ports["rate"];
+    for (size_t i = 0; i < 2 && i < rate.size(); ++i)
+        if (rate[i].is<uint32_t>() && (rate[i].as<uint32_t>() == 0 || validBaud(rate[i].as<uint32_t>()))) n.ports.rate[i] = rate[i];
     get(ports, "nmeaSentences", n.ports.nmeaSentences);
     get(ports, "nmeaRateHz", n.ports.nmeaRateHz);
     if (n.ports.nmeaRateHz != 1 && n.ports.nmeaRateHz != 2 && n.ports.nmeaRateHz != 5 && n.ports.nmeaRateHz != 10)
@@ -190,23 +197,18 @@ bool fromJson(const std::string& json, Settings& s, std::string* error) {
     return true;
 }
 
-bool Settings::Ports::allowed(Device d, Where w) {
-    switch (w) {
-    case kNone: case kPort1: case kPort2: return true;
-    case kUsb: return d == kGnss || d == kImu;  // the USB devices it can find: TM171, a receiver
-    case kOnboard: return d == kGnss;            // the receiver on J7
-    }
+const char* Settings::Ports::outName(uint8_t o) {
+    static const char* const kNames[] = {"none", "port1", "port2", "usb"};
+    return o <= kUsb ? kNames[o] : "none";
+}
+
+bool Settings::Ports::parseOut(const char* name, uint8_t& o) {
+    for (uint8_t i = kNone; i <= kUsb; ++i)
+        if (!std::strcmp(name, outName(i))) {
+            o = i;
+            return true;
+        }
     return false;
-}
-
-const char* Settings::Ports::deviceName(Device d) {
-    static const char* const kNames[kDevices] = {"gnss", "radio", "imu", "keya", "nmeaOut", "rtcmOut"};
-    return d < kDevices ? kNames[d] : "";
-}
-
-const char* Settings::Ports::whereName(Where w) {
-    static const char* const kNames[] = {"none", "port1", "port2", "usb", "onboard"};
-    return w <= kOnboard ? kNames[w] : "none";
 }
 
 bool validBaud(uint32_t baud) {
@@ -216,47 +218,15 @@ bool validBaud(uint32_t baud) {
     return false;
 }
 
-PortPlan planPorts(const Settings::Ports& p, const std::string rs232[2], const std::string& onboardGnss,
-                   unsigned onboardBaud) {
-    using P = Settings::Ports;
-    PortPlan plan;
-    bool taken[2] = {false, false};
-    for (int d = 0; d < P::kDevices; ++d) {
-        const auto dev = static_cast<P::Device>(d);
-        const auto w = static_cast<P::Where>(p.where[d]);
-        if (!P::allowed(dev, w)) continue;
-        PortPlan::Dev& out = plan.dev[d];
-        if (w == P::kPort1 || w == P::kPort2) {
-            const int i = w == P::kPort1 ? 0 : 1;
-            if (rs232[i].empty() || taken[i]) continue;
-            taken[i] = true;
-            out.path = rs232[i];
-            out.port = i;
-            out.baud = dev == P::kImu || dev == P::kKeya ? 115200 : p.baud[i];
-        } else if (w == P::kUsb) {
-            out.usb = true;
-            out.baud = dev == P::kImu ? 115200 : 460800;  // ignored by USB serial (CDC) devices
-        } else if (w == P::kOnboard && !onboardGnss.empty()) {
-            out.path = onboardGnss;
-            out.baud = onboardBaud;
-        }
-    }
-    return plan;
-}
-
 std::string portsError(const Settings::Ports& p) {
     using P = Settings::Ports;
-    int on[2] = {0, 0};
-    for (int d = 0; d < P::kDevices; ++d) {
-        if (!P::allowed(static_cast<P::Device>(d), static_cast<P::Where>(p.where[d])))
-            return std::string("That place does not suit the ") + P::deviceName(static_cast<P::Device>(d)) + ".";
-        if (p.where[d] == P::kPort1) ++on[0];
-        if (p.where[d] == P::kPort2) ++on[1];
-    }
-    for (int i = 0; i < 2; ++i)
-        if (on[i] > 1) return "RS-232 port " + std::to_string(i + 1) + " has more than one device.";
-    for (uint32_t b : p.baud)
-        if (!validBaud(b)) return "Unsupported baud rate.";
+    if (p.nmeaOut > P::kUsb || p.rtcmOut > P::kUsb) return "Unknown output place.";
+    if (p.nmeaOut == P::kUsb && !p.nmeaOutUsb[0]) return "Choose the USB device for NMEA out.";
+    if (p.rtcmOut == P::kUsb && !p.rtcmOutUsb[0]) return "Choose the USB device for RTCM out.";
+    for (uint32_t r : p.rate)
+        if (r != 0 && !validBaud(r)) return "Unsupported baud rate.";
+    if (p.keya != P::kNone && (p.keya == p.nmeaOut || p.keya == p.rtcmOut))
+        return "That port has the Keya motor (set in the settings file).";
     return {};
 }
 

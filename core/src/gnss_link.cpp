@@ -8,33 +8,35 @@
 namespace aow {
 
 GnssLink::GnssLink(hal::SerialPort& receiver, hal::UdpLink& app, hal::Clock& clock)
-    : receiver_(receiver), app_(app), clock_(clock) {}
+    : receiver_(&receiver), app_(app), clock_(clock) {}
 
 void GnssLink::pollReceiver() {
     uint8_t buf[1024];
     int n;
-    while ((n = receiver_.read(buf, sizeof buf)) > 0) {
-        for (int i = 0; i < n; ++i) {
-            if (!reader_.feed(static_cast<char>(buf[i]))) continue;
-            const uint64_t now = clock_.nowUs();
-            if (nmeaOut_) nmeaOut(now);
-            if (passThrough_) {
-                sendRaw();
-                parser_.parse(reader_.sentence(), now);  // keep the state current for the status page
-                continue;
-            }
-            const gnss::Message m = parser_.parse(reader_.sentence(), now);
-            if (m == gnss::Message::None) continue;
-            ++counters_.sentences;
-            if (!gnss::carriesPosition(m)) continue;
+    while (receiver_ && (n = receiver_->read(buf, sizeof buf)) > 0) feedReceiver(buf, static_cast<size_t>(n));
+}
 
-            char out[256];
-            const imu::Data* imu = imu_ && imu_->valid(now) ? &imu_->data() : nullptr;
-            const size_t len = nav::build(parser_.state(), imu, now, out, sizeof out);
-            if (!len) continue;
-            if (app_.send(reinterpret_cast<const uint8_t*>(out), len)) ++counters_.navSent;
-            else ++counters_.navSendErrors;
+void GnssLink::feedReceiver(const uint8_t* buf, size_t n) {
+    for (size_t i = 0; i < n; ++i) {
+        if (!reader_.feed(static_cast<char>(buf[i]))) continue;
+        const uint64_t now = clock_.nowUs();
+        if (nmeaOut_) nmeaOut(now);
+        if (passThrough_) {
+            sendRaw();
+            parser_.parse(reader_.sentence(), now);  // keep the state current for the status page
+            continue;
         }
+        const gnss::Message m = parser_.parse(reader_.sentence(), now);
+        if (m == gnss::Message::None) continue;
+        ++counters_.sentences;
+        if (!gnss::carriesPosition(m)) continue;
+
+        char out[256];
+        const imu::Data* imu = imu_ && imu_->valid(now) ? &imu_->data() : nullptr;
+        const size_t len = nav::build(parser_.state(), imu, now, out, sizeof out);
+        if (!len) continue;
+        if (app_.send(reinterpret_cast<const uint8_t*>(out), len)) ++counters_.navSent;
+        else ++counters_.navSendErrors;
     }
 }
 
@@ -81,7 +83,7 @@ void GnssLink::nmeaOut(uint64_t nowUs) {
 }
 
 void GnssLink::toReceiver(const uint8_t* data, size_t len) {
-    const int written = receiver_.write(data, len);
+    const int written = receiver_ ? receiver_->write(data, len) : 0;
     if (written < static_cast<int>(len))
         counters_.rtcmBytesDropped += static_cast<uint32_t>(len - (written > 0 ? written : 0));
     if (!rtcmOut_) return;

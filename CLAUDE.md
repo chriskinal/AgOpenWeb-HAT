@@ -61,11 +61,11 @@ The Teensy firmware is not being rewritten and nothing is ported back to it.
   TCP 23: done and tested on vcan. The firmware's CAN files live in `core/src/can` near-verbatim.
   UM98x (GPS) page, radio RTCM and GPS passthrough: done. External IMU (`core/imu`): a BNO085
   (RVC) on an RS-232 port or a TM171 on USB (`/dev/ttyACMx`), reopened after an unplug: done on
-  ptys, and a real TM171 on the dev CM4 (signs checked on the bench). Where each serial
-  device is (GNSS receiver, radio, IMU, and the new NMEA out and RTCM out) is a setting,
-  the Serial Communications page's port matrix (`ports`; the service passes `--gnss` and `--rs232`); USB
-  devices are found by listening (`daemon/usb_scout`). `--radio`, `--keya-serial` and `--imu`
-  override the settings. LED and buzzer logic
+  ptys, and a real TM171 on the dev CM4 (signs checked on the bench). What is on the
+  RS-232 ports and USB (a receiver, radio or IMU) is found by listening (`daemon/serial_hub`,
+  `core/serial_detect`, auto rate); only the new NMEA out and RTCM out and the port rates are
+  set, on the Serial Communications page (`/serial`). `--radio` and `--imu` take a device as
+  such (bench); USB is looked at only with `--board hat` or `--usb`. LED and buzzer logic
   (`core/indicators`; `/api/status` shows the LED colours), `aow-hatctl`: done.
   PGNs are accepted only from the `--app` host (loopback); `--any-app` lifts that.
 - **ISOBUS (docs/PLAN.md section 8):** AgIsoStack++ is built into the daemon
@@ -141,7 +141,8 @@ scan, then PGN 254 at a set rate, checking every reply and timing the 253.
 `tests/can_probe.py build/aow-hatd` runs Valtra/MF CAN steering and GVRET on vcan0-2.
 `tests/um98x_probe.py build/aow-hatd` runs the GPS page and radio with ptys as the devices.
 `tests/imu_probe.py build/aow-hatd` runs an external IMU (BNO085 RVC) on a pty: hello as 121, IMU fields in PANDA.
-`tests/ports_probe.py build/aow-hatd` runs the port settings on ptys: NMEA out (GGA at 5 Hz), RTCM out, and what the page shows coming in.
+`tests/ports_probe.py build/aow-hatd` runs the serial ports on ptys: NMEA out (GGA at 5 Hz), RTCM out, and
+detection (a radio, unknown text, an IMU, a receiver taking over from a silent onboard one).
 `tests/isobus_probe.py build/aow-hatd` checks the ISOBUS address claim and the tractor ECU role on
 vcan1 (stop the service first).
 `tests/isobus_tc_probe.py build/aow-hatd build/isobus_implement` runs section control against a

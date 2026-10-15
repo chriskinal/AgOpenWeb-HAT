@@ -1,5 +1,8 @@
 #include "aow/settings.h"
 
+#include <cstdio>
+#include <cstring>
+
 #include "check.h"
 
 using namespace aow;
@@ -20,7 +23,7 @@ int main() {
     s.gains.kp = 55.5f;
     s.gains.wasOffset = -123;
     s.gains.ackermanFix = 0.8f;
-    s.ports.baud[0] = 38400;
+    s.ports.rate[0] = 38400;
     s.can.brand = 4;
     s.can.bus[2].function = 16;
     s.can.bus[2].speed = 1;
@@ -35,7 +38,7 @@ int main() {
     CHECK(fromJson(toJson(s), r));
     CHECK(r.steer.invertWas && r.steer.currentThreshold == 77);
     CHECK(r.gains.kp == 55.5f && r.gains.wasOffset == -123 && r.gains.ackermanFix == 0.8f);
-    CHECK(r.ports.baud[0] == 38400 && r.can.brand == 4);
+    CHECK(r.ports.rate[0] == 38400 && r.can.brand == 4);
     CHECK(r.can.bus[2].function == 16 && r.can.bus[2].speed == 1 && r.can.bus[0].function == 0);
     CHECK(r.misc.buzzerVolume == 2 && r.log.udpEnabled && r.log.consoleLevel == log::Severity::Debug);
     CHECK(r.isobus.enabled && r.isobus.channel == 3 && !r.isobus.tractorEcu && !r.isobus.terminal);
@@ -58,69 +61,44 @@ int main() {
     CHECK(p.gains.kp == 55.5f && p.misc.ledBrightness == 5 && p.misc.buzzerVolume == 1);
     CHECK(p.steer.softStartDurationMs == 1000);
 
-    // Ports: the firmware's layout by default; round trip; bad places and rates ignored.
+    // Ports: nothing set by default (detection does the rest); round trip; bad values ignored.
     using P = Settings::Ports;
-    CHECK(d.ports.where[P::kGnss] == P::kOnboard && d.ports.where[P::kRadio] == P::kPort1);
-    CHECK(d.ports.where[P::kKeya] == P::kNone && d.ports.where[P::kImu] == P::kNone);
-    CHECK(d.ports.where[P::kNmeaOut] == P::kNone && d.ports.where[P::kRtcmOut] == P::kNone);
-    CHECK(d.ports.baud[0] == 115200 && d.ports.baud[1] == 115200 && d.ports.nmeaRateHz == 0);
+    CHECK(d.ports.nmeaOut == P::kNone && d.ports.rtcmOut == P::kNone && d.ports.keya == P::kNone);
+    CHECK(d.ports.rate[0] == 0 && d.ports.rate[1] == 0 && d.ports.nmeaRateHz == 0 && !d.ports.nmeaOutUsb[0]);
     Settings ps;
-    ps.ports.where[P::kImu] = P::kUsb;
-    ps.ports.where[P::kRadio] = P::kNone;
-    ps.ports.where[P::kNmeaOut] = P::kPort1;
-    ps.ports.baud[0] = 38400;
+    ps.ports.nmeaOut = P::kUsb;
+    std::snprintf(ps.ports.nmeaOutUsb, P::kUsbName, "usb-FTDI_FT232R_USB_UART_A1B2C3-if00-port0");
+    ps.ports.rtcmOut = P::kPort2;
+    ps.ports.rate[1] = 38400;
     ps.ports.nmeaSentences = P::kGga | P::kRmc;
     ps.ports.nmeaRateHz = 5;
+    ps.ports.keya = P::kPort1;
     Settings pr;
     CHECK(fromJson(toJson(ps), pr));
-    CHECK(toJson(pr) == toJson(ps));
-    CHECK(fromJson(R"({"ports":{"keya":"usb","radio":"moon","imu":"port2","baud":[14400,9600],"nmeaRateHz":3}})", pr));
-    CHECK(pr.ports.where[P::kKeya] == P::kNone && pr.ports.where[P::kRadio] == P::kNone);  // not changed
-    CHECK(pr.ports.where[P::kImu] == P::kPort2 && pr.ports.baud[0] == 38400 && pr.ports.baud[1] == 9600);
-    CHECK(pr.ports.nmeaRateHz == 0);
-    Settings old;  // a file from before the ports settings: its radio baud is RS-232 #1's
-    CHECK(fromJson(R"({"gps":{"radioBaud":57600}})", old) && old.ports.baud[0] == 57600);
-
-    // Which device does what.
-    const std::string dev[2] = {"/dev/ttyAMA2", "/dev/ttyAMA3"};
-    PortPlan plan = planPorts(d.ports, dev, "/dev/ttyAMA5", 460800);
-    CHECK(plan.dev[P::kGnss].path == "/dev/ttyAMA5" && plan.dev[P::kGnss].baud == 460800);
-    CHECK(plan.dev[P::kRadio].path == dev[0] && plan.dev[P::kRadio].port == 0 && plan.dev[P::kRadio].baud == 115200);
-    CHECK(plan.dev[P::kKeya].path.empty() && plan.dev[P::kImu].path.empty() && !plan.dev[P::kImu].usb);
-    plan = planPorts(ps.ports, dev, "/dev/ttyAMA5", 460800);
-    CHECK(plan.dev[P::kImu].usb && plan.dev[P::kImu].path.empty() && plan.dev[P::kRadio].path.empty());
-    CHECK(plan.dev[P::kNmeaOut].path == dev[0] && plan.dev[P::kNmeaOut].baud == 38400);
-    P u;
-    u.where[P::kGnss] = P::kPort1;   // an external receiver on #1, at #1's rate
-    u.where[P::kRadio] = P::kNone;
-    u.where[P::kImu] = P::kPort2;    // an IMU on #2 runs at 115200 whatever #2's rate
-    u.where[P::kKeya] = P::kNone;
-    u.baud[0] = 230400;
-    u.baud[1] = 9600;
-    plan = planPorts(u, dev, "/dev/ttyAMA5", 460800);
-    CHECK(plan.dev[P::kGnss].path == dev[0] && plan.dev[P::kGnss].baud == 230400);
-    CHECK(plan.dev[P::kImu].path == dev[1] && plan.dev[P::kImu].baud == 115200);
-    CHECK(portsError(u).empty());
-    u.where[P::kRtcmOut] = P::kPort2;  // two on #2 (a hand-edited file): the first has it
-    plan = planPorts(u, dev, "/dev/ttyAMA5", 460800);
-    CHECK(plan.dev[P::kImu].path == dev[1] && plan.dev[P::kRtcmOut].path.empty());
-    CHECK(!portsError(u).empty());
-    const std::string none[2] = {"", ""};  // not on the HAT: no RS-232 ports, no onboard receiver
-    plan = planPorts(d.ports, none, "", 460800);
-    CHECK(plan.dev[P::kRadio].path.empty() && plan.dev[P::kKeya].path.empty() && plan.dev[P::kGnss].path.empty());
+    CHECK(toJson(pr) == toJson(ps) && !std::strcmp(pr.ports.nmeaOutUsb, ps.ports.nmeaOutUsb));
+    CHECK(fromJson(R"({"ports":{"nmeaOut":"moon","keya":"usb","rate":[14400,0],"nmeaRateHz":3}})", pr));
+    CHECK(pr.ports.nmeaOut == P::kUsb && pr.ports.keya == P::kPort1);  // not changed
+    CHECK(pr.ports.rate[0] == 0 && pr.ports.rate[1] == 0 && pr.ports.nmeaRateHz == 0);
+    Settings old;  // a file from when the ports were set by hand: left to detection
+    CHECK(fromJson(R"({"gps":{"radioBaud":57600},"ports":{"gnss":"port1","radio":"port2","baud":[9600,9600]}})", old));
+    CHECK(old.ports.rate[0] == 0 && old.ports.nmeaOut == P::kNone);
 
     // What the page may save.
     CHECK(portsError(d.ports).empty() && portsError(ps.ports).empty());
     P bad;
-    bad.where[P::kKeya] = P::kUsb;
+    bad.nmeaOut = P::kUsb;  // no device chosen
     CHECK(!portsError(bad).empty());
     bad = P();
-    bad.where[P::kRadio] = P::kOnboard;
+    bad.rate[0] = 14400;
     CHECK(!portsError(bad).empty());
     bad = P();
-    bad.baud[1] = 14400;
+    bad.keya = P::kPort2;
+    bad.rtcmOut = P::kPort2;
     CHECK(!portsError(bad).empty());
-    CHECK(P::allowed(P::kGnss, P::kUsb) && P::allowed(P::kImu, P::kUsb) && !P::allowed(P::kNmeaOut, P::kUsb));
+    bad = P();
+    bad.nmeaOut = P::kPort1;
+    bad.rtcmOut = P::kPort1;  // both outputs on one port: fine
+    CHECK(portsError(bad).empty());
 
     // Broken JSON: rejected, settings untouched, reason given.
     Settings before = p;

@@ -2,9 +2,8 @@
 
 #include <ArduinoJson.h>
 
-#include <cstring>
-
 #include <cstdio>
+#include <cstring>
 
 #include "check.h"
 #include "http_client.h"
@@ -136,37 +135,32 @@ int main() {
     r = post(s, port, "/api/device/settings",
              R"({"softStartDuration":2500,"serialRadioBaud":12345,"buzzerVolume":2,"invertWorkSwitch":true,"ledBrightness":0})");
     CHECK(parse(r)["status"] == "saved" && b.applied == 1);
-    CHECK(b.s.steer.softStartDurationMs == 1000 && b.s.ports.baud[0] == 115200);
+    CHECK(b.s.steer.softStartDurationMs == 1000 && b.s.ports.rate[0] == 0);
     CHECK(b.s.misc.buzzerVolume == 2 && b.s.misc.invertWorkSwitch && b.s.misc.ledBrightness == 5);
     CHECK(!b.s.gps.passThrough);
     post(s, port, "/api/device/settings", R"({"serialRadioBaud":38400})");
-    CHECK(b.s.ports.baud[0] == 38400 && b.s.misc.buzzerVolume == 2);
+    CHECK(b.s.ports.rate[0] == 38400 && b.s.misc.buzzerVolume == 2);
 
-    // Serial ports (/api/serial): where each device is, as names; a move needs a restart, a
-    // baud rate does not; a clash is refused with a reason and nothing saved. The firmware's
-    // radio rate on /api/device/settings is the radio's port's.
+    // Serial ports (/api/serial): the outputs and rates, live (never a restart); a bad value is
+    // refused with a reason and nothing saved. The firmware's radio rate pins RS-232 #1.
     using P = Settings::Ports;
     d = parse(request(s, port, "GET /api/serial HTTP/1.1\r\n\r\n"));
-    CHECK(d["gnss"] == "onboard" && d["radio"] == "port1" && d["keya"] == "none");
-    CHECK(d["imu"] == "none" && d["baud"][0] == 38400 && d["nmeaRateHz"] == 0);
+    CHECK(d["nmeaOut"] == "none" && d["rtcmOut"] == "none" && d["rate"][0] == 38400 && d["rate"][1] == 0);
     CHECK(parse(request(s, port, "GET /api/device/settings HTTP/1.1\r\n\r\n"))["serialRadioBaud"] == 38400);
-    r = post(s, port, "/api/serial", R"({"baud":[38400,9600]})");
-    CHECK(parse(r)["restartRequired"] == false && b.s.ports.baud[1] == 9600);
-    r = post(s, port, "/api/serial", R"({"keya":"none","imu":"usb","nmeaOut":"port2","nmeaRateHz":5})");
-    CHECK(parse(r)["restartRequired"] == true && b.s.ports.where[P::kImu] == P::kUsb);
-    CHECK(b.s.ports.where[P::kNmeaOut] == P::kPort2 && b.s.ports.nmeaRateHz == 5 && b.s.ports.where[P::kKeya] == P::kNone);
-    const int beforeClash = b.applied;
-    r = post(s, port, "/api/serial", R"({"rtcmOut":"port2"})");  // #2 twice
+    r = post(s, port, "/api/serial", R"({"nmeaOut":"port2","rtcmOut":"port2","rate":[0,9600],"nmeaRateHz":5})");
+    CHECK(parse(r)["restartRequired"] == false && b.s.ports.nmeaOut == P::kPort2 && b.s.ports.rtcmOut == P::kPort2);
+    CHECK(b.s.ports.rate[0] == 0 && b.s.ports.rate[1] == 9600 && b.s.ports.nmeaRateHz == 5);
+    const int beforeBad = b.applied;
+    r = post(s, port, "/api/serial", R"({"nmeaOut":"usb"})");  // no device named
     CHECK(r.rfind("HTTP/1.1 400", 0) == 0 && !parse(r)["message"].as<std::string>().empty());
-    CHECK(b.applied == beforeClash && b.s.ports.where[P::kRtcmOut] == P::kNone);
-    CHECK(post(s, port, "/api/serial", R"({"keya":"usb"})").rfind("HTTP/1.1 400", 0) == 0);  // no USB Keya
-    r = post(s, port, "/api/serial", R"({"radio":"somewhere"})");
-    CHECK(r.rfind("HTTP/1.1 400", 0) == 0 && b.s.ports.where[P::kRadio] == P::kPort1);
-    r = post(s, port, "/api/serial", R"({"radio":"port2","nmeaOut":"port1"})");
-    CHECK(parse(r)["restartRequired"] == true);
+    CHECK(b.applied == beforeBad && b.s.ports.nmeaOut == P::kPort2);
+    CHECK(post(s, port, "/api/serial", R"({"rtcmOut":"somewhere"})").rfind("HTTP/1.1 400", 0) == 0);
+    CHECK(post(s, port, "/api/serial", R"({"rate":[14400,0]})").rfind("HTTP/1.1 400", 0) == 0);
+    r = post(s, port, "/api/serial", R"({"nmeaOut":"usb","nmeaOutUsb":"usb-FTDI_FT232R_USB_UART_A1-if00-port0"})");
+    CHECK(parse(r)["status"] == "saved" && b.s.ports.nmeaOut == P::kUsb && !std::strcmp(b.s.ports.nmeaOutUsb, "usb-FTDI_FT232R_USB_UART_A1-if00-port0"));
     post(s, port, "/api/device/settings", R"({"serialRadioBaud":57600})");
-    CHECK(b.s.ports.baud[1] == 57600 && b.s.ports.baud[0] == 38400);
-    r = post(s, port, "/api/serial", R"({"radio":"port1","imu":"none","nmeaOut":"none"})");
+    CHECK(b.s.ports.rate[0] == 57600);
+    r = post(s, port, "/api/serial", R"({"nmeaOut":"none","rtcmOut":"none","rate":[38400,0]})");
     CHECK(parse(r)["status"] == "saved");
     CHECK(request(s, port, "GET /serial HTTP/1.1\r\n\r\n").find("/api/serial") != std::string::npos);
 

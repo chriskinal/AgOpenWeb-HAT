@@ -61,9 +61,12 @@ def main():
                                   % hhmmss(t)))
             for e in extra:
                 os.write(master, nmea(e % hhmmss(t)))
+            # Until a deadline, not a quiet gap: a daemon already running (the service) sends here
+            # too, and with GPS passthrough on it never goes quiet for long.
+            end = time.time() + 0.05
             try:
-                while True:
-                    app.settimeout(0.05)
+                while time.time() < end:
+                    app.settimeout(max(0.001, end - time.time()))
                     b = app.recv(512)
                     if b.startswith(b"$"):  # NMEA only; PGN 250 etc. are binary
                         got.append(b.decode())

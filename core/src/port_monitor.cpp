@@ -68,6 +68,7 @@ void PortMonitor::feedRtcm(uint8_t b, uint64_t nowUs) {
     frameLen_ = 0;
     const uint32_t crc = (static_cast<uint32_t>(frame_[len - 3]) << 16) | (frame_[len - 2] << 8) | frame_[len - 1];
     if (crc24q(frame_, len - 3) != crc) return;
+    ++rtcmFrames_;
     const uint16_t type = static_cast<uint16_t>((frame_[3] << 4) | (frame_[4] >> 4));
     // Update its entry, else take an empty or the oldest one.
     int slot = 0;

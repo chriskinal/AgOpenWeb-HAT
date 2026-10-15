@@ -19,6 +19,10 @@ public:
 
     // Drains the receiver's serial port. Call when it is readable.
     void pollReceiver();
+    // Bytes from the receiver, read by the caller (the daemon reads every port itself).
+    void feedReceiver(const uint8_t* data, size_t len);
+    // Where corrections go: the receiver in use, which can change (nullptr: none, dropped).
+    void setReceiver(hal::SerialPort* receiver) { receiver_ = receiver; }
 
     // One RTCM datagram from the app. Datagrams under 5 bytes are ignored, as the firmware.
     void forwardRtcm(const uint8_t* data, size_t len);
@@ -63,7 +67,7 @@ private:
     void nmeaOut(uint64_t nowUs);
     void toReceiver(const uint8_t* data, size_t len);
 
-    hal::SerialPort& receiver_;
+    hal::SerialPort* receiver_;
     hal::UdpLink& app_;
     hal::Clock& clock_;
     nmea::SentenceReader reader_;

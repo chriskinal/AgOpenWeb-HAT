@@ -29,22 +29,27 @@ struct Status {
 
     // External IMU (AOW HAT: not in the firmware's status).
     const char* imuType = "None";
-    char imuPort[96] = {};         // the device it is read from; empty: no IMU port open
-    char gnssPort[96] = {};        // the receiver's device; empty: none (or not found on USB yet)
+    char imuPort[96] = {};         // the device the IMU in use is read from; empty: none
+    char gnssPort[96] = {};        // the device of the receiver in use; empty: none
     uint32_t radioBytes = 0, nmeaOutSent = 0, rtcmOutBytes = 0;  // serial devices at work
 
-    // What is coming in on each RS-232 port (the Serial Communications page), whatever it is
-    // set to; a port set to nothing is listened to as well.
-    struct Rs232 {
-        const char* use = "none";  // Settings::Ports::deviceName, or "none"
-        bool open = false;
+    // Every serial port and USB serial device, and what is coming in on it (serial_hub.h, the
+    // Serial Communications page).
+    static constexpr int kSerialChannels = 10;
+    struct Serial {
+        char name[96] = {};          // "Onboard", "Port 1", "Port 2", a USB /dev/serial/by-id name
+        const char* place = "";      // "onboard", "port1", "port2", "usb", "fixed"
+        const char* kind = "unknown";  // what it was found to be: "gnss", "radio", "imu", "unknown"
+        bool open = false, inUse = false, nmeaOut = false, rtcmOut = false, autoBaud = false;
+        unsigned baud = 0;
         uint32_t bytesIn = 0;
         uint32_t msSinceIn = UINT32_MAX;  // UINT32_MAX: nothing yet
         int lineCount = 0;
         char lines[PortMonitor::kLines][PortMonitor::kLineChars + 1] = {};
         int rtcmCount = 0;
         uint16_t rtcm[PortMonitor::kRtcmTypes] = {};
-    } rs232[2];
+    } serial[kSerialChannels];
+    int serialCount = 0;
     bool imuValid = false;
     float imuHeading = 0, imuRoll = 0, imuPitch = 0, imuYawRate = 0;  // deg, deg/s
 

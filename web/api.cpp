@@ -117,20 +117,28 @@ Response status(Backend& b, const char* version) {
         imu["pitch"] = st.imuPitch;
         imu["yawRate"] = st.imuYawRate;
     }
-    JsonObject serial = doc["serial"].to<JsonObject>();  // AOW HAT: the Serial Communications page's port matrix
+    JsonObject serial = doc["serial"].to<JsonObject>();  // AOW HAT: the Serial Communications page
     serial["gnssPort"] = st.gnssPort;
     serial["radioBytes"] = st.radioBytes;
     serial["nmeaOutSent"] = st.nmeaOutSent;
     serial["rtcmOutBytes"] = st.rtcmOutBytes;
-    JsonArray rs232 = serial["rs232"].to<JsonArray>();
-    for (const auto& v : st.rs232) {
-        JsonObject o = rs232.add<JsonObject>();
-        o["use"] = v.use;
+    JsonArray ports = serial["ports"].to<JsonArray>();
+    for (int i = 0; i < st.serialCount; ++i) {
+        const Status::Serial& v = st.serial[i];
+        JsonObject o = ports.add<JsonObject>();
+        o["name"] = std::string(v.name);  // copied: the document outlives st
+        o["place"] = v.place;
+        o["kind"] = v.kind;
         o["open"] = v.open;
+        o["inUse"] = v.inUse;
+        o["nmeaOut"] = v.nmeaOut;
+        o["rtcmOut"] = v.rtcmOut;
+        o["baud"] = v.baud;
+        o["autoBaud"] = v.autoBaud;
         o["bytesIn"] = v.bytesIn;
         if (v.msSinceIn != UINT32_MAX) o["msSinceIn"] = v.msSinceIn;
         JsonArray lines = o["lines"].to<JsonArray>();
-        for (int l = 0; l < v.lineCount; ++l) lines.add(std::string(v.lines[l]));  // copied: the document outlives st
+        for (int l = 0; l < v.lineCount; ++l) lines.add(std::string(v.lines[l]));
         JsonArray types = o["rtcm"].to<JsonArray>();
         for (int t = 0; t < v.rtcmCount; ++t) types.add(v.rtcm[t]);
     }
@@ -193,11 +201,6 @@ Response logData() {
     return Response::json(toString(doc));
 }
 
-// The RS-232 port the radio is on (0 or 1); port 1 when it is on neither.
-int radioPortIndex(const Settings::Ports& p) {
-    return p.where[Settings::Ports::kRadio] == Settings::Ports::kPort2 ? 1 : 0;
-}
-
 Response deviceSettings(Backend& b, const Request& r) {
     Settings s = b.settings();
     if (r.method == "GET") {
@@ -207,7 +210,7 @@ Response deviceSettings(Backend& b, const Request& r) {
         doc["udpPassthrough"] = s.gps.passThrough;
         doc["pwmBrakeMode"] = s.steer.pwmBrakeMode;
         doc["softStartDuration"] = s.steer.softStartDurationMs;
-        doc["serialRadioBaud"] = s.ports.baud[radioPortIndex(s.ports)];  // the radio's port's
+        doc["serialRadioBaud"] = s.ports.rate[0] ? s.ports.rate[0] : 115200;  // RS-232 #1's (0: auto)
         doc["buzzerVolume"] = s.misc.buzzerVolume;
         doc["invertWorkSwitch"] = s.misc.invertWorkSwitch;
         doc["ledBrightness"] = s.misc.ledBrightness;
@@ -232,47 +235,45 @@ Response deviceSettings(Backend& b, const Request& r) {
         const int v = doc["ledBrightness"];
         s.misc.ledBrightness = static_cast<uint8_t>(v < 5 ? 5 : v > 100 ? 100 : v);
     }
-    // The firmware's radio rate, no longer on this page: the radio's port's (/api/serial).
+    // The firmware's radio rate, no longer on this page: pins RS-232 #1 (/api/serial).
     if (doc["serialRadioBaud"].is<uint32_t>() && validBaud(doc["serialRadioBaud"].as<uint32_t>()))
-        s.ports.baud[radioPortIndex(s.ports)] = doc["serialRadioBaud"];
+        s.ports.rate[0] = doc["serialRadioBaud"];
     return saveOr500(b, s, R"({"status":"saved"})");
 }
 
-// AOW HAT: the Serial Communications page: where each serial device is (Settings::Ports), in
-// the settings file's form. Refused whole, with the reason, if it does not fit (two devices on
-// a port). Baud rates apply live; a move or NMEA out's choices at the next start, so a save
-// says whether one changed.
+// AOW HAT: the Serial Communications page: the outputs and the RS-232 rates (what is plugged in
+// is found by listening). In the settings file's form; refused whole, with the reason, if it
+// does not fit. All of it applies live.
 Response serial(Backend& b, const Request& r) {
     using P = Settings::Ports;
     Settings s = b.settings();
     if (r.method == "GET") {
         JsonDocument doc;
-        for (int d = 0; d < P::kDevices; ++d)
-            doc[P::deviceName(static_cast<P::Device>(d))] = P::whereName(static_cast<P::Where>(s.ports.where[d]));
-        JsonArray baud = doc["baud"].to<JsonArray>();
-        for (uint32_t v : s.ports.baud) baud.add(v);
+        doc["nmeaOut"] = P::outName(s.ports.nmeaOut);
+        doc["nmeaOutUsb"] = s.ports.nmeaOutUsb;
+        doc["rtcmOut"] = P::outName(s.ports.rtcmOut);
+        doc["rtcmOutUsb"] = s.ports.rtcmOutUsb;
+        JsonArray rate = doc["rate"].to<JsonArray>();
+        for (uint32_t v : s.ports.rate) rate.add(v);
         doc["nmeaSentences"] = s.ports.nmeaSentences;
         doc["nmeaRateHz"] = s.ports.nmeaRateHz;
+        doc["keya"] = P::outName(s.ports.keya);
         return Response::json(toString(doc));
     }
     if (r.method != "POST") return methodNotAllowed();
     JsonDocument doc;
     if (deserializeJson(doc, r.body) || !doc.is<JsonObject>()) return invalidJson();
-    const P before = s.ports;
-    for (int d = 0; d < P::kDevices; ++d) {
-        JsonVariantConst w = doc[P::deviceName(static_cast<P::Device>(d))];
-        if (!w.is<const char*>()) continue;
-        bool known = false;
-        for (int i = P::kNone; i <= P::kOnboard; ++i)
-            if (!std::strcmp(w.as<const char*>(), P::whereName(static_cast<P::Where>(i)))) {
-                s.ports.where[d] = static_cast<uint8_t>(i);
-                known = true;
-            }
-        if (!known) s.ports.where[d] = 0xFF;  // portsError() names it
+    for (const char* key : {"nmeaOut", "rtcmOut"}) {
+        JsonVariantConst v = doc[key];
+        if (!v.is<const char*>()) continue;
+        uint8_t& out = !std::strcmp(key, "nmeaOut") ? s.ports.nmeaOut : s.ports.rtcmOut;
+        if (!P::parseOut(v.as<const char*>(), out)) out = 0xFF;  // portsError() names it
     }
-    JsonArrayConst baud = doc["baud"];
-    for (size_t i = 0; i < 2 && i < baud.size(); ++i)
-        if (baud[i].is<uint32_t>()) s.ports.baud[i] = baud[i];
+    if (doc["nmeaOutUsb"].is<const char*>()) std::snprintf(s.ports.nmeaOutUsb, P::kUsbName, "%s", doc["nmeaOutUsb"].as<const char*>());
+    if (doc["rtcmOutUsb"].is<const char*>()) std::snprintf(s.ports.rtcmOutUsb, P::kUsbName, "%s", doc["rtcmOutUsb"].as<const char*>());
+    JsonArrayConst rate = doc["rate"];
+    for (size_t i = 0; i < 2 && i < rate.size(); ++i)
+        if (rate[i].is<uint32_t>()) s.ports.rate[i] = rate[i];
     if (doc["nmeaSentences"].is<int>()) s.ports.nmeaSentences = static_cast<uint8_t>(doc["nmeaSentences"].as<int>() & 0x1F);
     if (doc["nmeaRateHz"].is<int>()) {
         const int v = doc["nmeaRateHz"];
@@ -285,10 +286,7 @@ Response serial(Backend& b, const Request& r) {
         e["message"] = err;
         return Response::json(toString(e), 400);
     }
-    bool restart = before.nmeaSentences != s.ports.nmeaSentences || before.nmeaRateHz != s.ports.nmeaRateHz;
-    for (int d = 0; d < P::kDevices; ++d) restart |= before.where[d] != s.ports.where[d];
-    return saveOr500(b, s, restart ? R"({"status":"saved","restartRequired":true})"
-                                   : R"({"status":"saved","restartRequired":false})");
+    return saveOr500(b, s, R"({"status":"saved","restartRequired":false})");
 }
 
 // AOW HAT: the ISOBUS page's settings and live state. The settings apply at the next start of

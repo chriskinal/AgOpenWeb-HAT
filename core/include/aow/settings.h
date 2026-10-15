@@ -2,6 +2,7 @@
 // the firmware's defaults. Stored as JSON; a missing key keeps its default, so old files load.
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <string>
 
@@ -38,7 +39,7 @@ struct Settings {
 
     struct Gps {
         bool passThrough = false;          // raw NMEA to the app instead of PANDA/PAOGI
-    } gps;  // the radio's baud rate is its port's, Ports::baud (older files: gps.radioBaud)
+    } gps;  // the radio's rate: found by listening, or its port's (Ports::rate)
 
     // CAN steering (the firmware's CANSteerConfig).
     struct Can {
@@ -60,24 +61,25 @@ struct Settings {
         bool terminal = true;
     } isobus;
 
-    // Where each serial device is (AOW HAT; the firmware's ports are fixed): the Serial
-    // Communications page's matrix. Applied at startup, except the baud rates, which apply
-    // live. Each RS-232 port holds one device at most; allowed() says which places suit which.
+    // Serial ports (AOW HAT; the firmware's were fixed), the Serial Communications page. What
+    // is plugged in is found from what it sends (serial_detect.h); only the outputs are set:
+    // NMEA out and RTCM out, each on an RS-232 port or a USB serial device, both on one port if
+    // wanted. A port with an output is not listened to. All of it applies live.
     struct Ports {
-        enum Where : uint8_t { kNone, kPort1, kPort2, kUsb, kOnboard };
-        enum Device : uint8_t { kGnss, kRadio, kImu, kKeya, kNmeaOut, kRtcmOut, kDevices };
+        enum Out : uint8_t { kNone, kPort1, kPort2, kUsb };
         enum Sentence : uint8_t { kGga = 1, kVtg = 2, kRmc = 4, kZda = 8, kHdt = 16 };
-        // The receiver onboard and the radio on #1, as the firmware. Not Keya on #2 (the firmware
-        // probed for one there): the page does not offer it; the settings file and
-        // --keya-serial still do.
-        uint8_t where[kDevices] = {kOnboard, kPort1, kNone, kNone, kNone, kNone};
-        uint32_t baud[2] = {115200, 115200};  // RS-232 #1, #2; an IMU or Keya there runs at 115200
+        static constexpr size_t kUsbName = 96;
+        uint8_t nmeaOut = kNone, rtcmOut = kNone;
+        char nmeaOutUsb[kUsbName] = {}, rtcmOutUsb[kUsbName] = {};  // its /dev/serial/by-id name
+        uint32_t rate[2] = {0, 0};            // RS-232 #1, #2: 0 auto (found by listening)
         uint8_t nmeaSentences = kGga | kVtg;  // NMEA out: which of the receiver's sentences
         uint8_t nmeaRateHz = 0;               // 0: each as the receiver sends it; else 1, 2, 5, 10
+        // A Keya serial motor (probed at startup, 115200): kPort1 or kPort2, settings file only.
+        // That port is the Keya's and not listened to.
+        uint8_t keya = kNone;
 
-        static bool allowed(Device d, Where w);
-        static const char* deviceName(Device d);  // as in the settings file: "gnss", "radio", ...
-        static const char* whereName(Where w);    // "none", "port1", "port2", "usb", "onboard"
+        static const char* outName(uint8_t o);  // "none", "port1", "port2", "usb"
+        static bool parseOut(const char* name, uint8_t& o);
     } ports;
 
     struct Misc {
@@ -95,26 +97,10 @@ std::string toJson(const Settings& s);
 // Applies the keys present in json over s. Returns false (s untouched) if json does not parse.
 bool fromJson(const std::string& json, Settings& s, std::string* error = nullptr);
 
-// The device path and baud rate of each serial device, from the ports settings, the RS-232
-// ports' device names (empty: not there) and the onboard receiver's. usb: to be found among
-// the USB serial devices. Nothing for a device whose place is not there or not allowed, or
-// for a second device on a port that already has one (a hand-edited file).
-struct PortPlan {
-    struct Dev {
-        std::string path;  // empty: none (or USB)
-        unsigned baud = 0;
-        bool usb = false;
-        int port = -1;     // 0, 1: on that RS-232 port
-    };
-    Dev dev[Settings::Ports::kDevices];
-};
-PortPlan planPorts(const Settings::Ports& p, const std::string rs232[2], const std::string& onboardGnss,
-                   unsigned onboardBaud);
-
 // Why these ports settings cannot be saved, or empty if they can.
 std::string portsError(const Settings::Ports& p);
 
-// The baud rates an RS-232 port offers (the firmware's radio list).
+// The baud rates an RS-232 port can be pinned to.
 bool validBaud(uint32_t baud);
 
 }  // namespace aow
