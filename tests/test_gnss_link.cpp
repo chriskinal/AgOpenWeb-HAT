@@ -137,5 +137,83 @@ int main() {
     link.pollReceiver();
     CHECK(nmeaOut.tx.size() == 5 * gga.size());
 
+    // Corrected position (PGN 100): written when it arrives, the receiver's latest sentences
+    // with its position and heading in, checksums redone.
+    nmeaOut.tx.clear();
+    link.setNmeaOut(&nmeaOut, 1 | 2 | 4 | 8, 0);  // GGA, VTG, RMC, ZDA
+    link.setNmeaCorrected(true);
+    pgn::CorrectedFix fix;
+    fix.lat = 48.1234567891;   // 48 07.40740735'
+    fix.lon = -11.5;           // 011 30.0000000' W
+    fix.heading = 92.04;
+    fix.hasHeading = true;
+    link.onCorrectedFix(fix);  // nothing held yet: nothing out
+    CHECK(nmeaOut.tx.empty() && link.correctedActive());
+    const std::string zda = "$GPZDA,123519.00,23,03,1994,00,00*6C\r\n";
+    serial.rx = gga + vtg + rmc + zda;
+    link.pollReceiver();
+    CHECK(nmeaOut.tx.empty());  // held for the next PGN 100
+    link.onCorrectedFix(fix);
+    auto withSum = [](std::string body) {
+        char sum[8];
+        std::snprintf(sum, sizeof sum, "*%02X\r\n", nmea::xorChecksum(body.data() + 1, body.size() - 1));
+        return body + sum;
+    };
+    const std::string want =
+        withSum("$GPGGA,123519,4807.4074073,N,01130.0000000,W,1,08,0.9,545.4,M,46.9,M,,") +
+        withSum("$GPVTG,092.0,T,092.0,M,005.5,N,010.2,K") +
+        withSum("$GNRMC,123519,A,4807.4074073,N,01130.0000000,W,022.4,092.0,230394,003.1,W") +
+        zda;
+    CHECK(std::string(nmeaOut.tx.begin(), nmeaOut.tx.end()) == want);
+    CHECK(link.counters().correctedFixes == 2 && link.counters().correctedSent == 4);
+
+    // Each sentence once: another PGN 100 with no new receiver data sends nothing (ZDA at 1 Hz
+    // is not repeated at 10 Hz).
+    nmeaOut.tx.clear();
+    link.onCorrectedFix(fix);
+    CHECK(nmeaOut.tx.empty());
+
+    // 16-byte PGN 100 (no heading): the receiver's course stays; minutes rounding carries into
+    // the degrees.
+    fix.hasHeading = false;
+    fix.lat = -(33 + 59.99999999 / 60);
+    serial.rx = gga + vtg;
+    link.pollReceiver();
+    link.onCorrectedFix(fix);
+    CHECK(std::string(nmeaOut.tx.begin(), nmeaOut.tx.end()) ==
+          withSum("$GPGGA,123519,3400.0000000,S,01130.0000000,W,1,08,0.9,545.4,M,46.9,M,,") + vtg);
+
+    // No PGN 100 for a second: the receiver's sentences as received again.
+    nmeaOut.tx.clear();
+    clock.us += GnssLink::kCorrectedTimeoutUs;
+    CHECK(!link.correctedActive());
+    serial.rx = gga;
+    link.pollReceiver();
+    CHECK(std::string(nmeaOut.tx.begin(), nmeaOut.tx.end()) == gga);
+
+    // Off: PGN 100 is counted but NMEA out is the receiver's.
+    link.setNmeaCorrected(false);
+    nmeaOut.tx.clear();
+    link.onCorrectedFix(fix);
+    serial.rx = gga;
+    link.pollReceiver();
+    CHECK(!link.correctedActive() && std::string(nmeaOut.tx.begin(), nmeaOut.tx.end()) == gga);
+
+    // A full port: the part it took is finished before anything new, and what does not fit
+    // is dropped whole, so the device never sees half a sentence spliced into another.
+    nmeaOut.tx.clear();
+    nmeaOut.writeLimit = 10;
+    serial.rx = gga;
+    link.pollReceiver();  // 10 bytes out, the rest pending
+    nmeaOut.writeLimit = 0;
+    const uint32_t dropped = link.counters().nmeaOutDropped;
+    serial.rx = gga;
+    link.pollReceiver();  // no room: dropped
+    CHECK(link.counters().nmeaOutDropped == dropped + 1);
+    nmeaOut.writeLimit = -1;
+    serial.rx = gga;
+    link.pollReceiver();  // the rest of the first, then this one
+    CHECK(std::string(nmeaOut.tx.begin(), nmeaOut.tx.end()) == gga + gga);
+
     return finish("gnss_link");
 }

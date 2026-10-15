@@ -7,6 +7,7 @@
 #include <cstdint>
 
 #include "aow/hal.h"
+#include "aow/pgn.h"
 #include "aow/steer_pgn.h"
 
 namespace aow {
@@ -20,6 +21,12 @@ struct SteerModule {
     virtual pgn::SteerStatus steerStatus() = 0;
 };
 
+// Whatever writes NMEA out: gets the app's corrected position (PGN 100) as it arrives.
+struct FixSink {
+    virtual ~FixSink() = default;
+    virtual void onCorrectedFix(const pgn::CorrectedFix& f) = 0;
+};
+
 class AppLink {
 public:
     AppLink(hal::UdpLink& udp, hal::Clock& clock, const uint8_t moduleIp[4]);
@@ -30,6 +37,8 @@ public:
     // Steering PGNs go to the module; without one, PGN 253 reports setStatus()'s value.
     void setSteerModule(SteerModule* m) { steer_ = m; }
     void setStatus(const pgn::SteerStatus& s) { status_ = s; }
+    // PGN 100 goes to the sink as each one arrives.
+    void setFixSink(FixSink* s) { fixSink_ = s; }
     // An external IMU has been detected: hello and scan are answered as the IMU module too.
     void setImuPresent(bool on) { imuPresent_ = on; }
 
@@ -59,6 +68,7 @@ public:
         uint32_t received = 0;   // valid frames from the app
         uint32_t rejected = 0;   // datagrams that failed parse or came from a module
         uint32_t commands = 0;   // PGN 254
+        uint32_t fixes = 0;      // PGN 100
         uint32_t sendErrors = 0;
     };
     const Counters& counters() const { return counters_; }
@@ -71,6 +81,7 @@ private:
     hal::Clock& clock_;
     uint8_t ip_[4];
     SteerModule* steer_ = nullptr;
+    FixSink* fixSink_ = nullptr;
     pgn::SteerStatus status_;
     pgn::SteerCommand command_;
     bool haveCommand_ = false;

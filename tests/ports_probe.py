@@ -6,6 +6,11 @@ Outputs: a settings file puts NMEA out (GGA only, 5 Hz) on RS-232 #1 and RTCM ou
 streams GGA and VTG at 10 Hz into the receiver and checks #1 gets every other GGA, no VTG, and
 sends RTCM to the corrections port and checks #2 gets it byte for byte, as the receiver does.
 
+Corrected position: NMEA out (GGA, VTG, RMC) on #1; GGA and VTG at 10 Hz, each followed by a
+PGN 100 from the app on UDP. Every GGA and RMC out carries PGN 100's position to 7 decimals of a
+minute, VTG and RMC its heading, checksums valid; PGN 100 stopped, the receiver's own GGA is
+back within about a second.
+
 Detection: no outputs; then
   - RTCM into #1: found to be a radio, and its RTCM reaches the receiver;
   - text into #2: not recognised, its lines shown;
@@ -22,6 +27,7 @@ import os
 import pty
 import select
 import socket
+import struct
 import subprocess
 import sys
 import time
@@ -32,6 +38,23 @@ import urllib.request
 def nmea(body):
     cs = functools.reduce(lambda a, c: a ^ ord(c), body, 0)
     return ("$%s*%02X\r\n" % (body, cs)).encode()
+
+
+def pgn100(lat, lon, heading):
+    data = struct.pack("<ddd", lon, lat, heading)
+    frame = bytes([0x80, 0x81, 0x7F, 100, len(data)]) + data
+    return frame + bytes([sum(frame[2:]) & 0xFF])
+
+
+def degmin(v, digits):
+    units = round(abs(v) * 60 * 10**7)
+    d, rest = divmod(units, 60 * 10**7)
+    return "%0*d%02d.%07d" % (digits, d, rest // 10**7, rest % 10**7)
+
+
+def checksum_ok(line):
+    body, _, cs = line[1:].partition("*")
+    return cs == "%02X" % functools.reduce(lambda a, c: a ^ ord(c), body, 0)
 
 
 def new_pty():
@@ -123,6 +146,55 @@ def main():
     print("status serial: %s" % {k: v for k, v in st["serial"].items() if k != "ports"})
     ok &= st["serial"]["gnssPort"] == os.ttyname(gps_s) and st["serial"]["nmeaOutSent"] >= 8
     ok &= st["serial"]["rtcmOutBytes"] == len(rtcm)
+    proc.terminate()
+    proc.wait(timeout=5)
+
+    # Corrected position (PGN 100).
+    with open(cfg, "w") as f:
+        json.dump({"ports": {"nmeaOut": "port1", "rate": [38400, 0], "nmeaSentences": 7}}, f)
+    proc = subprocess.Popen(args)
+    time.sleep(0.5)
+    app = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    got = b""
+    sent = {}
+    for i in range(20):
+        stamp = time.strftime("%H%M%S", time.gmtime()) + ".%d0" % (i % 10)
+        os.write(gps_m, nmea("GNVTG,054.7,T,034.4,M,005.5,N,010.2,K,A"))
+        os.write(gps_m, nmea("GNGGA,%s,4807.0380,N,01131.0000,E,4,24,0.6,545.4,M,46.9,M,1.2,0000" % stamp))
+        time.sleep(0.02)
+        lat, lon, hdg = 48.123456789 + i * 1e-7, -96.987654321 - i * 1e-7, 10.0 + i
+        sent[stamp] = (lat, lon, hdg)
+        app.sendto(pgn100(lat, lon, hdg), ("127.0.0.1", 8889))
+        got += read_all(p1_m, 0.08)
+    st = status()["serial"]
+    got += read_all(p1_m, 0.1)
+    lines = [l for l in got.decode(errors="replace").split("\r\n") if l]
+    good = 0
+    vtg_heading = None
+    for l in lines:
+        f = l.split("*")[0].split(",")
+        if not checksum_ok(l):
+            continue
+        if f[0] == "$GNGGA" and f[1] in sent:
+            lat, lon, hdg = sent[f[1]]
+            good += f[2:6] == [degmin(lat, 2), "N", degmin(lon, 3), "W"]
+            last = hdg
+        elif f[0] == "$GNVTG":
+            vtg_heading = f[1]
+    print("corrected: %d lines, %d GGA with PGN 100's position, last VTG course %s, status %s" %
+          (len(lines), good, vtg_heading, {k: st[k] for k in ("nmeaSource", "correctedFixes", "correctedSent")}))
+    ok &= len(lines) >= 36 and good >= 18 and all(checksum_ok(l) for l in lines)
+    ok &= vtg_heading == "%05.1f" % last and st["nmeaSource"] == "corrected" and st["correctedFixes"] == 20
+
+    # PGN 100 stops: the receiver's own position again within about a second.
+    stopped = time.time()
+    back = None
+    while time.time() - stopped < 2.5 and back is None:
+        os.write(gps_m, nmea("GNGGA,%s,4807.0380,N,01131.0000,E,4,24,0.6,545.4,M,46.9,M,1.2,0000" % time.strftime("%H%M%S.00")))
+        if b"4807.0380,N,01131.0000,E" in read_all(p1_m, 0.1):
+            back = time.time() - stopped
+    print("receiver's position back after %s s, source %s" % (back and round(back, 2), status()["serial"]["nmeaSource"]))
+    ok &= back is not None and 0.8 <= back <= 1.4 and status()["serial"]["nmeaSource"] == "receiver"
     proc.terminate()
     proc.wait(timeout=5)
 

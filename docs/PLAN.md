@@ -95,7 +95,7 @@ device (ttyACM) has no rate. After 5 s without its kind of data a device is list
 | RTK radio | #1, #2, USB | its RTCM goes to the receiver in use |
 | IMU | #1, #2, USB | BNO085 (RVC) or TM171; the first one sending feeds PANDA/PAOGI |
 | Keya motor | #1, #2 | probed at startup, 115200. Off by default (the firmware probed #2): the settings file (`ports.keya`) or `--keya-serial`; that port is not listened to |
-| NMEA out (new) | #1, #2, a USB device | set on the page; the receiver's GGA, VTG, RMC, ZDA, HDT as chosen, as received or at 1-10 Hz |
+| NMEA out (new) | #1, #2, a USB device | set on the page; the receiver's GGA, VTG, RMC, ZDA, HDT as chosen, as received or at 1-10 Hz; with the app's corrected position (PGN 100) while it sends one |
 | RTCM out (new) | #1, #2, a USB device | set on the page; a copy of every correction byte sent to the receiver |
 
 Only the outputs and the rates are settings (`ports` in the settings file), on the Serial
@@ -109,6 +109,22 @@ pitch, heading, turn rate, with the sign checks to do after mounting) or RTCM (m
 else the first 20 characters of the last four lines (`core/port_monitor`). `--radio` and
 `--imu` name a device taken as such without detection (bench, `--board sim`); `--usb` looks at
 USB with `--board sim` (off by default, so a test daemon does not share the service's devices).
+
+NMEA out carries the app's corrected position, as AgOpenGPS's GPS_Out does (`ports.nmeaCorrected`,
+on by default, a tick box on the page). AgOpenWeb sends PGN 100 once per fix when "Send corrected
+position" is ticked in its Network IO (off by default), to the subnet and to `127.0.0.1:8888`:
+the antenna with its left/right offset, roll and drift applied, not moved to the pivot
+(AgOpenGPS's `pn.fix`). 24 bytes, little-endian doubles: longitude, latitude, heading (degrees
+true); older AgOpenGPS sends 16, with no heading. It trails the receiver's sentence for the same
+fix by a few ms, so the receiver's latest sentences are held and written when each PGN 100
+arrives, each once: latitude and longitude in GGA and RMC as `ddmm.mmmmmmm`/`dddmm.mmmmmmm` (7
+decimals of a minute, from the double), the heading as the course in VTG (true and magnetic, as
+GPS_Out) and RMC and in HDT (`000.0`), the checksum redone; time, fix, satellites, HDOP,
+altitude, age, speed and date are the receiver's. No PGN 100 for 1 s (GPS_Out: 4 s), and the
+receiver's sentences go out as received. A sentence goes out whole or not at all: one the port
+has no room for (9600 baud cannot carry GGA and VTG at 10 Hz) is dropped and counted. The page
+and `/api/status` (`serial.nmeaSource`, `correctedFixes`, `correctedSent`, `nmeaOutDropped`)
+show which position is going out.
 
 ### 2.5 Where the port differs from the firmware, on purpose
 

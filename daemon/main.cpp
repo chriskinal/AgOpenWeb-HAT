@@ -189,6 +189,16 @@ private:
     aow::Shared& shared_;
 };
 
+// The app's corrected position (PGN 100) to NMEA out.
+class FixAdapter : public aow::FixSink {
+public:
+    explicit FixAdapter(aow::GnssLink& g) : g_(g) {}
+    void onCorrectedFix(const aow::pgn::CorrectedFix& f) override { g_.onCorrectedFix(f); }
+
+private:
+    aow::GnssLink& g_;
+};
+
 std::string readFile(const std::string& path) {
     std::ifstream in(path);
     std::stringstream s;
@@ -426,6 +436,9 @@ int main(int argc, char** argv) {
     unsigned settingsSeen = shared.settingsVersion();
     SteerAdapter steerAdapter(autosteer, shared);
     app.setSteerModule(&steerAdapter);
+    FixAdapter fixAdapter(gnss);
+    app.setFixSink(&fixAdapter);
+    gnss.setNmeaCorrected(portSettings.nmeaCorrected);
     gnss.setPassThrough(startSettings.gps.passThrough);
     gnss.setImu(&imu);
     imu.setSwapXY(startSettings.steer.useYAxis);
@@ -527,6 +540,7 @@ int main(int argc, char** argv) {
                 imu.setSwapXY(s.steer.useYAxis);
                 gnss.setPassThrough(s.gps.passThrough);
                 hub.apply(s.ports);  // outputs and rates, live
+                gnss.setNmeaCorrected(s.ports.nmeaCorrected);
             }
             const aow::Settings& settings = autosteer.settings();
             const aow::steer::Output out = autosteer.tick(board.read(settings));
@@ -566,6 +580,10 @@ int main(int argc, char** argv) {
             st.radioBytes = gnss.counters().radioBytes;
             st.nmeaOutSent = gnss.counters().nmeaOutSent;
             st.rtcmOutBytes = gnss.counters().rtcmOutBytes;
+            st.nmeaCorrected = gnss.correctedActive();
+            st.correctedFixes = gnss.counters().correctedFixes;
+            st.correctedSent = gnss.counters().correctedSent;
+            st.nmeaOutDropped = gnss.counters().nmeaOutDropped;
             hub.status(st);
             st.imuHeading = imu.data().heading;
             st.imuRoll = imu.data().roll;

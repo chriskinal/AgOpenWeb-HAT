@@ -1,5 +1,6 @@
 #include "aow/pgn.h"
 
+#include <cmath>
 #include <cstring>
 
 namespace aow::pgn {
@@ -40,6 +41,32 @@ bool parse(const uint8_t* buf, size_t bufLen, Frame& f) {
     f.pgn = pgn;
     f.len = len;
     f.data = buf + 5;
+    return true;
+}
+
+static double readDouble(const uint8_t* p) {
+    uint64_t bits = 0;
+    for (int i = 7; i >= 0; --i) bits = bits << 8 | p[i];
+    double d;
+    std::memcpy(&d, &bits, sizeof d);
+    return d;
+}
+
+bool decodeCorrectedFix(const uint8_t* data, size_t len, CorrectedFix& f) {
+    if (!data || len < 16) return false;
+    CorrectedFix n;
+    n.lon = readDouble(data);
+    n.lat = readDouble(data + 8);
+    if (!std::isfinite(n.lat) || !std::isfinite(n.lon) || std::fabs(n.lat) > 90 || std::fabs(n.lon) > 180) return false;
+    if (len >= 24) {
+        n.heading = readDouble(data + 16);
+        n.hasHeading = std::isfinite(n.heading);
+        if (n.hasHeading) {
+            n.heading = std::fmod(n.heading, 360.0);
+            if (n.heading < 0) n.heading += 360.0;
+        }
+    }
+    f = n;
     return true;
 }
 

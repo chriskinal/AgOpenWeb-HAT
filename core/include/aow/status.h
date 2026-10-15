@@ -32,6 +32,10 @@ struct Status {
     char imuPort[96] = {};         // the device the IMU in use is read from; empty: none
     char gnssPort[96] = {};        // the device of the receiver in use; empty: none
     uint32_t radioBytes = 0, nmeaOutSent = 0, rtcmOutBytes = 0;  // serial devices at work
+    // NMEA out's position: the app's (PGN 100) or the receiver's; PGN 100s in, sentences sent
+    // with its position, sentences dropped for want of room on the port.
+    bool nmeaCorrected = false;
+    uint32_t correctedFixes = 0, correctedSent = 0, nmeaOutDropped = 0;
 
     // Every serial port and USB serial device, and what is coming in on it (serial_hub.h, the
     // Serial Communications page).

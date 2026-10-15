@@ -17,6 +17,7 @@ inline constexpr size_t kOverhead = 6;  // header(2) + src + pgn + len + crc
 inline constexpr size_t kMaxData = 255;
 
 enum Id : uint8_t {
+    CorrectedPosition = 100,  // the app's corrected position, for NMEA out (AgOpenGPS's GPS_Out)
     Hello = 200,
     SubnetChange = 201,
     Scan = 202,
@@ -59,5 +60,16 @@ size_t build(uint8_t src, uint8_t pgn, const uint8_t* data, uint8_t len,
 
 // Validates header, length and crc. On success fills f and returns true.
 bool parse(const uint8_t* buf, size_t bufLen, Frame& f);
+
+// PGN 100: the position AgOpenGPS calls pn.fix, the antenna with its left/right offset, roll and
+// drift applied (not moved back to the pivot), sent once per fix. Doubles, little-endian:
+// longitude, latitude, then the vehicle's heading (degrees true). Older AgOpenGPS sends 16
+// bytes, with no heading.
+struct CorrectedFix {
+    double lat = 0, lon = 0, heading = 0;
+    bool hasHeading = false;
+};
+// False for a short frame or a position that is not one.
+bool decodeCorrectedFix(const uint8_t* data, size_t len, CorrectedFix& f);
 
 }  // namespace aow::pgn

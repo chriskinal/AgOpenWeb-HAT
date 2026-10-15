@@ -3,7 +3,8 @@
 // AOW HAT: a new page, not from the firmware (the Teensy's serial ports were fixed). What is
 // plugged in is found from what it sends (a GNSS receiver, RTK radio or IMU), so only the
 // outputs are set here: NMEA out and RTCM out, each on an RS-232 port or a USB serial device,
-// with NMEA out's sentences and rate, and each RS-232 port's rate (auto, or pinned). Below, what
+// with NMEA out's sentences and rate, whether it carries the app's corrected position (PGN 100,
+// as AgOpenGPS's GPS_Out), and each RS-232 port's rate (auto, or pinned). Below, what
 // is coming in on each port and USB device: parsed for what the HAT reads, else the first 20
 // characters of the last lines. Uses the firmware pages' stylesheet and layout. Settings from
 // /api/serial, live state from /api/status.
@@ -26,7 +27,8 @@ const char SERIAL_PAGE[] PROGMEM = R"rawliteral(
         .two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
         .nmea-boxes { display: flex; flex-wrap: wrap; gap: 14px; }
         .nmea-boxes label { display: flex; align-items: center; gap: 6px; font-weight: normal; }
-        .nmea-boxes input { width: 20px; height: 20px; }
+        .nmea-boxes input, .check input { width: 20px; height: 20px; }
+        .check { display: flex; align-items: center; gap: 8px; font-weight: normal; margin-top: 10px; }
         .port-live { font-size: 15px; padding: 10px; background: #f8f9fa; border-radius: 8px; line-height: 1.6; margin-bottom: 10px; }
         .port-live .head { font-weight: 600; }
         .port-live .head span { font-weight: normal; color: #7f8c8d; font-size: 13px; }
@@ -74,6 +76,7 @@ const char SERIAL_PAGE[] PROGMEM = R"rawliteral(
             const mask = p.nmeaSentences !== undefined ? p.nmeaSentences : 3;
             [1, 2, 4, 8, 16].forEach(b => document.getElementById('nmea' + b).checked = (mask & b) !== 0);
             document.getElementById('nmeaRate').value = p.nmeaRateHz || 0;
+            document.getElementById('nmeaCorrected').checked = p.nmeaCorrected !== false;
             changed();
         }
 
@@ -84,7 +87,8 @@ const char SERIAL_PAGE[] PROGMEM = R"rawliteral(
             return {
                 nmeaOut: nmea[0], nmeaOutUsb: nmea[1], rtcmOut: rtcm[0], rtcmOutUsb: rtcm[1],
                 rate: [0, 1].map(i => parseInt(document.getElementById('rate' + i).value)),
-                nmeaSentences: mask, nmeaRateHz: parseInt(document.getElementById('nmeaRate').value)
+                nmeaSentences: mask, nmeaRateHz: parseInt(document.getElementById('nmeaRate').value),
+                nmeaCorrected: document.getElementById('nmeaCorrected').checked
             };
         }
 
@@ -157,8 +161,12 @@ const char SERIAL_PAGE[] PROGMEM = R"rawliteral(
                             body = '<span class="quiet">Not available.</span>';
                         } else if (p.nmeaOut || p.rtcmOut) {
                             what = [p.nmeaOut ? 'NMEA out' : '', p.rtcmOut ? 'RTCM out' : ''].filter(x => x).join(' and ') + ' at ' + p.baud;
-                            body = [p.nmeaOut ? ser.nmeaOutSent + ' sentences sent' : '', p.rtcmOut ? ser.rtcmOutBytes + ' bytes of RTCM sent' : '']
+                            const src = ser.nmeaSource === 'corrected' ? 'corrected position from AgOpenWeb' : 'receiver position';
+                            body = [p.nmeaOut ? ser.nmeaOutSent + ' sentences sent, ' + src : '',
+                                    p.nmeaOut && ser.nmeaOutDropped ? ser.nmeaOutDropped + ' dropped (port too slow: lower the rate or raise the baud)' : '',
+                                    p.rtcmOut ? ser.rtcmOutBytes + ' bytes of RTCM sent' : '']
                                 .filter(x => x).join(', ');
+                            if (p.nmeaOut) body += '<div class="quiet">' + ser.correctedFixes + ' corrected positions received</div>';
                         } else if (p.kind === 'unknown') {
                             what = p.autoBaud ? 'listening, trying ' + p.baud : 'listening at ' + p.baud;
                             body = linesView(p, perSec);
@@ -223,7 +231,8 @@ const char SERIAL_PAGE[] PROGMEM = R"rawliteral(
                         <option value="2">2 Hz</option>
                         <option value="1">1 Hz</option>
                     </select>
-                    <div class="help-text">The receiver's own sentences, for a rate controller, sprayer or yield monitor.</div>
+                    <label class="check"><input type="checkbox" id="nmeaCorrected"> Corrected position from AgOpenWeb</label>
+                    <div class="help-text">The receiver's sentences, for a rate controller, sprayer or yield monitor. With the corrected position, the position and heading are AgOpenWeb's, with antenna offset and roll applied (tick "Send corrected position" in AgOpenWeb's Network IO); without it for a second, the receiver's own.</div>
                 </div>
                 <div class="form-group" style="margin-top: 15px;">
                     <label for="rtcmOut">RTCM Out:</label>

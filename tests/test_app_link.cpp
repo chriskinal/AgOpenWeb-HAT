@@ -206,5 +206,42 @@ int main() {
     link.sendSectionStatus(true, 64, 0x8000000000000001ull);
     CHECK(parsed(udp.out[2], f) && f.len == 10 && f.data[1] == 64 && f.data[2] == 0x01 && f.data[9] == 0x80);
 
+    // PGN 100, AgOpenGPS's 24 bytes as the app sends it (bytes 80 81 7F 64 18): to the sink
+    // at once, the doubles little-endian whatever the host.
+    struct Sink : FixSink {
+        std::vector<pgn::CorrectedFix> got;
+        void onCorrectedFix(const pgn::CorrectedFix& c) override { got.push_back(c); }
+    } sink;
+    link.setFixSink(&sink);
+    auto le = [](Bytes& b, double d) {
+        uint64_t bits;
+        std::memcpy(&bits, &d, sizeof bits);
+        for (int i = 0; i < 8; ++i) b.push_back(static_cast<uint8_t>(bits >> (8 * i)));
+    };
+    Bytes fix;
+    le(fix, -96.1234567890123);
+    le(fix, 41.98765432109876);
+    le(fix, -2.5);
+    const Bytes f100 = frame(0x7F, 100, fix);
+    CHECK(f100.size() == 30 && f100[3] == 0x64 && f100[4] == 0x18);
+    udp.in.push_back(f100);
+    link.poll();
+    CHECK(sink.got.size() == 1 && sink.got[0].lon == -96.1234567890123 && sink.got[0].lat == 41.98765432109876);
+    CHECK(sink.got.size() == 1 && sink.got[0].hasHeading && sink.got[0].heading == 357.5);
+    // The older 16 bytes: no heading.
+    udp.in.push_back(frame(0x7F, 100, Bytes(fix.begin(), fix.begin() + 16)));
+    link.poll();
+    CHECK(sink.got.size() == 2 && !sink.got[1].hasHeading && sink.got[1].lat == 41.98765432109876);
+    // Short, not a position, or from a module: rejected.
+    const uint32_t rejected = link.counters().rejected;
+    udp.in.push_back(frame(0x7F, 100, Bytes(fix.begin(), fix.begin() + 12)));
+    Bytes pole;
+    le(pole, 0.0);
+    le(pole, 91.0);
+    udp.in.push_back(frame(0x7F, 100, pole));
+    udp.in.push_back(frame(pgn::SrcGps, 100, fix));
+    link.poll();
+    CHECK(sink.got.size() == 2 && link.counters().rejected == rejected + 3 && link.counters().fixes == 2);
+
     return finish("app_link");
 }

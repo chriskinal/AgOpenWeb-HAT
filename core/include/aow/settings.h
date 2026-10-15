@@ -74,6 +74,9 @@ struct Settings {
         uint32_t rate[2] = {0, 0};            // RS-232 #1, #2: 0 auto (found by listening)
         uint8_t nmeaSentences = kGga | kVtg;  // NMEA out: which of the receiver's sentences
         uint8_t nmeaRateHz = 0;               // 0: each as the receiver sends it; else 1, 2, 5, 10
+        // NMEA out carries the app's corrected position (PGN 100) while it sends one; GPS_Out's
+        // UseRollCorrected. The app sends none unless told to, so on is harmless.
+        bool nmeaCorrected = true;
         // A Keya serial motor (probed at startup, 115200): kPort1 or kPort2, settings file only.
         // That port is the Keya's and not listened to.
         uint8_t keya = kNone;

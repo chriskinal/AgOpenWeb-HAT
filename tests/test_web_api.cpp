@@ -146,10 +146,14 @@ int main() {
     using P = Settings::Ports;
     d = parse(request(s, port, "GET /api/serial HTTP/1.1\r\n\r\n"));
     CHECK(d["nmeaOut"] == "none" && d["rtcmOut"] == "none" && d["rate"][0] == 38400 && d["rate"][1] == 0);
+    CHECK(d["nmeaCorrected"] == true);
     CHECK(parse(request(s, port, "GET /api/device/settings HTTP/1.1\r\n\r\n"))["serialRadioBaud"] == 38400);
     r = post(s, port, "/api/serial", R"({"nmeaOut":"port2","rtcmOut":"port2","rate":[0,9600],"nmeaRateHz":5})");
     CHECK(parse(r)["restartRequired"] == false && b.s.ports.nmeaOut == P::kPort2 && b.s.ports.rtcmOut == P::kPort2);
     CHECK(b.s.ports.rate[0] == 0 && b.s.ports.rate[1] == 9600 && b.s.ports.nmeaRateHz == 5);
+    CHECK(b.s.ports.nmeaCorrected);
+    r = post(s, port, "/api/serial", R"({"nmeaCorrected":false})");
+    CHECK(parse(r)["status"] == "saved" && !b.s.ports.nmeaCorrected && b.s.ports.nmeaOut == P::kPort2);
     const int beforeBad = b.applied;
     r = post(s, port, "/api/serial", R"({"nmeaOut":"usb"})");  // no device named
     CHECK(r.rfind("HTTP/1.1 400", 0) == 0 && !parse(r)["message"].as<std::string>().empty());

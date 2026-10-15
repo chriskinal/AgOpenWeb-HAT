@@ -121,6 +121,10 @@ Response status(Backend& b, const char* version) {
     serial["gnssPort"] = st.gnssPort;
     serial["radioBytes"] = st.radioBytes;
     serial["nmeaOutSent"] = st.nmeaOutSent;
+    serial["nmeaSource"] = st.nmeaCorrected ? "corrected" : "receiver";
+    serial["correctedFixes"] = st.correctedFixes;
+    serial["correctedSent"] = st.correctedSent;
+    serial["nmeaOutDropped"] = st.nmeaOutDropped;
     serial["rtcmOutBytes"] = st.rtcmOutBytes;
     JsonArray ports = serial["ports"].to<JsonArray>();
     for (int i = 0; i < st.serialCount; ++i) {
@@ -257,6 +261,7 @@ Response serial(Backend& b, const Request& r) {
         for (uint32_t v : s.ports.rate) rate.add(v);
         doc["nmeaSentences"] = s.ports.nmeaSentences;
         doc["nmeaRateHz"] = s.ports.nmeaRateHz;
+        doc["nmeaCorrected"] = s.ports.nmeaCorrected;
         doc["keya"] = P::outName(s.ports.keya);
         return Response::json(toString(doc));
     }
@@ -279,6 +284,7 @@ Response serial(Backend& b, const Request& r) {
         const int v = doc["nmeaRateHz"];
         if (v == 0 || v == 1 || v == 2 || v == 5 || v == 10) s.ports.nmeaRateHz = static_cast<uint8_t>(v);
     }
+    if (doc["nmeaCorrected"].is<bool>()) s.ports.nmeaCorrected = doc["nmeaCorrected"];
     const std::string err = portsError(s.ports);
     if (!err.empty()) {
         JsonDocument e;

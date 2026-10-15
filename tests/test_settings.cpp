@@ -65,6 +65,7 @@ int main() {
     using P = Settings::Ports;
     CHECK(d.ports.nmeaOut == P::kNone && d.ports.rtcmOut == P::kNone && d.ports.keya == P::kNone);
     CHECK(d.ports.rate[0] == 0 && d.ports.rate[1] == 0 && d.ports.nmeaRateHz == 0 && !d.ports.nmeaOutUsb[0]);
+    CHECK(d.ports.nmeaCorrected);
     Settings ps;
     ps.ports.nmeaOut = P::kUsb;
     std::snprintf(ps.ports.nmeaOutUsb, P::kUsbName, "usb-FTDI_FT232R_USB_UART_A1B2C3-if00-port0");
@@ -72,6 +73,7 @@ int main() {
     ps.ports.rate[1] = 38400;
     ps.ports.nmeaSentences = P::kGga | P::kRmc;
     ps.ports.nmeaRateHz = 5;
+    ps.ports.nmeaCorrected = false;
     ps.ports.keya = P::kPort1;
     Settings pr;
     CHECK(fromJson(toJson(ps), pr));

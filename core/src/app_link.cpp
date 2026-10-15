@@ -61,6 +61,16 @@ void AppLink::handle(const uint8_t* buf, int len) {
     case pgn::SteerSettings:
         if (steer_) steer_->onSteerSettings(f.data, f.len);
         break;
+    case pgn::CorrectedPosition: {
+        pgn::CorrectedFix fix;
+        if (!pgn::decodeCorrectedFix(f.data, f.len, fix)) {
+            ++counters_.rejected;
+            return;
+        }
+        ++counters_.fixes;
+        if (fixSink_) fixSink_->onCorrectedFix(fix);
+        break;
+    }
     case pgn::Sections64:
         if (f.len >= 8) {
             sections64_ = 0;

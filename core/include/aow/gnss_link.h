@@ -10,6 +10,7 @@
 #include "aow/hal.h"
 #include "aow/imu.h"
 #include "aow/nmea.h"
+#include "aow/pgn.h"
 
 namespace aow {
 
@@ -39,7 +40,18 @@ public:
     // NMEA out (AOW HAT): the receiver's sentences of the chosen types (Settings::Ports::Sentence
     // bits), as received, to a serial port, e.g. for a rate controller. rateHz 0: every one;
     // else at most that many of each type a second. nullptr: off.
+    // Sentences are written whole or not at all: one that does not fit behind what the port
+    // still has to send is dropped and counted.
     void setNmeaOut(hal::SerialPort* port, uint8_t sentences, uint8_t rateHz);
+    // Corrected position for NMEA out (PGN 100, as AgOpenGPS's GPS_Out). On, and while the app
+    // sends it, the receiver's latest sentences go out when each PGN 100 arrives, with its
+    // position in GGA and RMC and its heading as the course in VTG and RMC and in HDT; the rest
+    // is the receiver's. No PGN 100 for kCorrectedTimeoutUs: the receiver's sentences as received.
+    void setNmeaCorrected(bool on) { corrected_ = on; }
+    void onCorrectedFix(const pgn::CorrectedFix& f);
+    // NMEA out is carrying the app's position now (else the receiver's).
+    bool correctedActive() const { return corrected_ && correctedActive(clock_.nowUs()); }
+    static constexpr uint64_t kCorrectedTimeoutUs = 1'000'000;
     // RTCM out (AOW HAT): a copy of every correction byte the receiver is sent, from the app and
     // from the radio, to a serial port. nullptr: off.
     void setRtcmOut(hal::SerialPort* port) { rtcmOut_ = port; }
@@ -56,6 +68,9 @@ public:
         uint32_t nmeaOutSent = 0;       // sentences written to NMEA out
         uint32_t rtcmOutBytes = 0;      // bytes written to RTCM out
         uint32_t outBytesDropped = 0;   // NMEA or RTCM out port would not take them
+        uint32_t correctedFixes = 0;    // PGN 100 received
+        uint32_t correctedSent = 0;     // sentences written to NMEA out with its position in
+        uint32_t nmeaOutDropped = 0;    // sentences NMEA out had no room for
     };
     const Counters& counters() const { return counters_; }
     const nmea::SentenceReader& reader() const { return reader_; }
@@ -65,6 +80,9 @@ private:
     size_t rawSentence(char* out, size_t cap) const;
     void sendRaw();
     void nmeaOut(uint64_t nowUs);
+    bool correctedActive(uint64_t nowUs) const { return haveFix_ && nowUs - fixAtUs_ < kCorrectedTimeoutUs; }
+    bool nmeaDue(int type, uint64_t nowUs);
+    bool writeNmea(const char* data, size_t len);
     void toReceiver(const uint8_t* data, size_t len);
 
     hal::SerialPort* receiver_;
@@ -79,6 +97,20 @@ private:
     uint8_t nmeaSentences_ = 0;
     uint64_t nmeaIntervalUs_ = 0;
     uint64_t nmeaLastUs_[5] = {};  // per sentence type, in Sentence bit order
+    // What NMEA out still has to write of a sentence the port took only part of.
+    char nmeaPending_[nmea::SentenceReader::kMax + 16];
+    size_t nmeaPendingLen_ = 0;
+    // Corrected position: the receiver's latest sentence of each type (body, no checksum), and
+    // whether it has gone out yet.
+    struct Held {
+        char body[nmea::SentenceReader::kMax + 1];
+        size_t len = 0;
+        bool fresh = false;
+    };
+    Held held_[5];
+    bool corrected_ = false;
+    bool haveFix_ = false;
+    uint64_t fixAtUs_ = 0;
     hal::SerialPort* rtcmOut_ = nullptr;
 };
 

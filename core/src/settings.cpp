@@ -82,6 +82,7 @@ std::string toJson(const Settings& s) {
     for (uint32_t r : s.ports.rate) rate.add(r);
     ports["nmeaSentences"] = s.ports.nmeaSentences;
     ports["nmeaRateHz"] = s.ports.nmeaRateHz;
+    ports["nmeaCorrected"] = s.ports.nmeaCorrected;
     ports["keya"] = P::outName(s.ports.keya);
 
     JsonObject m = doc["misc"].to<JsonObject>();
@@ -174,6 +175,7 @@ bool fromJson(const std::string& json, Settings& s, std::string* error) {
         if (rate[i].is<uint32_t>() && (rate[i].as<uint32_t>() == 0 || validBaud(rate[i].as<uint32_t>()))) n.ports.rate[i] = rate[i];
     get(ports, "nmeaSentences", n.ports.nmeaSentences);
     get(ports, "nmeaRateHz", n.ports.nmeaRateHz);
+    get(ports, "nmeaCorrected", n.ports.nmeaCorrected);
     if (n.ports.nmeaRateHz != 1 && n.ports.nmeaRateHz != 2 && n.ports.nmeaRateHz != 5 && n.ports.nmeaRateHz != 10)
         n.ports.nmeaRateHz = 0;
 

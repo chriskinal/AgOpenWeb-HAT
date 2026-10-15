@@ -64,7 +64,8 @@ The Teensy firmware is not being rewritten and nothing is ported back to it.
   ptys, and a real TM171 on the dev CM4 (signs checked on the bench). What is on the
   RS-232 ports and USB (a receiver, radio or IMU) is found by listening (`daemon/serial_hub`,
   `core/serial_detect`, auto rate); only the new NMEA out and RTCM out and the port rates are
-  set, on the Serial Communications page (`/serial`). `--radio` and `--imu` take a device as
+  set, on the Serial Communications page (`/serial`). NMEA out carries the app's corrected
+  position (PGN 100, `core/app_link` to `GnssLink::onCorrectedFix`) while the app sends it. `--radio` and `--imu` take a device as
   such (bench); USB is looked at only with `--board hat` or `--usb`. LED and buzzer logic
   (`core/indicators`; `/api/status` shows the LED colours), `aow-hatctl`: done.
   PGNs are accepted only from the `--app` host (loopback); `--any-app` lifts that.
@@ -141,7 +142,7 @@ scan, then PGN 254 at a set rate, checking every reply and timing the 253.
 `tests/can_probe.py build/aow-hatd` runs Valtra/MF CAN steering and GVRET on vcan0-2.
 `tests/um98x_probe.py build/aow-hatd` runs the GPS page and radio with ptys as the devices.
 `tests/imu_probe.py build/aow-hatd` runs an external IMU (BNO085 RVC) on a pty: hello as 121, IMU fields in PANDA.
-`tests/ports_probe.py build/aow-hatd` runs the serial ports on ptys: NMEA out (GGA at 5 Hz), RTCM out, and
+`tests/ports_probe.py build/aow-hatd` runs the serial ports on ptys: NMEA out (GGA at 5 Hz; the corrected position from PGN 100 and the fallback), RTCM out, and
 detection (a radio, unknown text, an IMU, a receiver taking over from a silent onboard one).
 `tests/isobus_probe.py build/aow-hatd` checks the ISOBUS address claim and the tractor ECU role on
 vcan1 (stop the service first).
