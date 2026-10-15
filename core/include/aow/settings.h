@@ -18,6 +18,7 @@ struct Settings {
         bool steerSwitch = false;
         bool steerButton = false;
         bool currentSensor = false;
+        bool useYAxis = false;            // PGN 251: the IMU is turned 90 degrees, roll and pitch swap
         uint8_t minSpeed = 3;             // 0.1 km/h
         uint8_t motorDriverConfig = 0;    // PGN 251 byte 8
         uint8_t currentThreshold = 100;   // PGN 251 byte 1 when the current sensor is on

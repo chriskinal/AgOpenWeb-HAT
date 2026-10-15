@@ -94,11 +94,11 @@ int main() {
 
         CHECK(nav::select(s, t0 + 1'000'000) == nav::Sentence::Panda);
         char out[256];
-        const size_t n = nav::build(s, t0 + 1'000'000, out, sizeof out);
+        const size_t n = nav::build(s, nullptr, t0 + 1'000'000, out, sizeof out);
         const std::string panda = sentence(out, n);
         CHECK(panda.rfind("$PANDA,123519.0,4807.038000,N,01131.000000,E,1,8,0.9,545.400,0.0,5.500,65535,0,0,0*", 0) == 0);
         CHECK(checksumOk(panda));
-        CHECK(nav::build(s, t0 + 1'000'000, out, 40) == 0);  // too small: nothing, not a torn sentence
+        CHECK(nav::build(s, nullptr, t0 + 1'000'000, out, 40) == 0);  // too small: nothing, not a torn sentence
 
         // Stale after 5 s without a position sentence (VTG alone does not count).
         CHECK(nav::select(s, t0 + 5'000'001) == nav::Sentence::None);
@@ -117,7 +117,7 @@ int main() {
         CHECK(s.fixQuality == 4 && s.numSatellites == 20 && near(s.ageDgps, 1.2f, 1e-4));
         CHECK(s.latitude < -33.99 && s.longitude < -151.2);
         char out[256];
-        const std::string panda = sentence(out, nav::buildPanda(s, out, sizeof out));
+        const std::string panda = sentence(out, nav::buildPanda(s, nullptr, out, sizeof out));
         // 59.9999999' rounds to 34 deg 00.000000', not 33 deg 60.000000'
         CHECK(panda.rfind("$PANDA,010203.4,3400.000000,S,15112.500000,W,4,20,0.6,", 0) == 0);
         CHECK(checksumOk(panda));
@@ -136,7 +136,7 @@ int main() {
         CHECK(s.headingQuality == 4 && near(s.ageDgps, 1.0f, 1e-4));
         CHECK(nav::select(s, 1) == nav::Sentence::Paogi);
         char out[256];
-        const std::string paogi = sentence(out, nav::build(s, 1, out, sizeof out));
+        const std::string paogi = sentence(out, nav::build(s, nullptr, 1, out, sizeof out));
         CHECK(paogi.rfind("$PAOGI,123519.0,4807.038000,N,01131.000000,E,1,24,0.9,545.400,1.0,0.000,271.2,-1.50,0,0.00*", 0) == 0 ||
               paogi.rfind("$PAOGI,123519.0,4807.038000,N,01131.000000,E,1,24,0.9,545.400,1.0,0.000,271.3,-1.50,0,0.00*", 0) == 0);
         CHECK(checksumOk(paogi));
@@ -178,7 +178,7 @@ int main() {
         CHECK(near(s.ageDgps, 7.0f));
         CHECK(near(s.fixTime, 10000.5, 1e-6));  // 3618.5 s of week - 18 leap = 01:00:00.5
         char out[256];
-        const std::string paogi = sentence(out, nav::build(s, 9, out, sizeof out));
+        const std::string paogi = sentence(out, nav::build(s, nullptr, 9, out, sizeof out));
         CHECK(paogi.rfind("$PAOGI,010000.5,4807.038000,N,01131.000020,E,4,12,0.9,545.400,7.0,", 0) == 0);
         CHECK(paogi.find(",181.8,1.25,-1,0.00*") != std::string::npos ||
               paogi.find(",181.7,1.25,-1,0.00*") != std::string::npos);  // pitch -0.5 rounds away from 0

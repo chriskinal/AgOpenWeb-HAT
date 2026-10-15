@@ -28,7 +28,8 @@ void GnssLink::pollReceiver() {
             if (!gnss::carriesPosition(m)) continue;
 
             char out[256];
-            const size_t len = nav::build(parser_.state(), now, out, sizeof out);
+            const imu::Data* imu = imu_ && imu_->valid(now) ? &imu_->data() : nullptr;
+            const size_t len = nav::build(parser_.state(), imu, now, out, sizeof out);
             if (!len) continue;
             if (app_.send(reinterpret_cast<const uint8_t*>(out), len)) ++counters_.navSent;
             else ++counters_.navSendErrors;

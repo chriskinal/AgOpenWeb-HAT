@@ -37,10 +37,12 @@ void AppLink::handle(const uint8_t* buf, int len) {
     case pgn::Hello:
         send(out, pgn::buildHelloReply(pgn::SrcSteer, out, sizeof out));
         send(out, pgn::buildHelloReply(pgn::SrcGps, out, sizeof out));
+        if (imuPresent_) send(out, pgn::buildHelloReply(pgn::SrcImu, out, sizeof out));
         break;
     case pgn::Scan:
         send(out, pgn::buildScanReply(pgn::SrcSteer, ip_, out, sizeof out));
         send(out, pgn::buildScanReply(pgn::SrcGps, ip_, out, sizeof out));
+        if (imuPresent_) send(out, pgn::buildScanReply(pgn::SrcImu, ip_, out, sizeof out));
         break;
     case pgn::SteerData:
         if (!pgn::decodeSteerCommand(f.data, f.len, command_)) {

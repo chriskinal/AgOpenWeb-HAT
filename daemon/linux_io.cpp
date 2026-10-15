@@ -186,11 +186,15 @@ speed_t baudConstant(unsigned baud) {
 
 }  // namespace
 
-SerialPort::~SerialPort() {
-    if (fd_ >= 0) close(fd_);
+SerialPort::~SerialPort() { close(); }
+
+void SerialPort::close() {
+    if (fd_ >= 0) ::close(fd_);
+    fd_ = -1;
 }
 
 bool SerialPort::open(const char* device, unsigned baud) {
+    close();
     const speed_t speed = baudConstant(baud);
     if (speed == B0) {
         LOG_ERROR(Gnss, "serial: unsupported baud rate %u", baud);
@@ -204,6 +208,7 @@ bool SerialPort::open(const char* device, unsigned baud) {
     termios t{};
     if (tcgetattr(fd_, &t) < 0) {
         LOG_ERROR(Gnss, "serial: %s: not a tty: %s", device, std::strerror(errno));
+        close();
         return false;
     }
     cfmakeraw(&t);
@@ -213,6 +218,7 @@ bool SerialPort::open(const char* device, unsigned baud) {
     cfsetospeed(&t, speed);
     if (tcsetattr(fd_, TCSANOW, &t) < 0) {
         LOG_ERROR(Gnss, "serial: %s: %s", device, std::strerror(errno));
+        close();
         return false;
     }
     tcflush(fd_, TCIOFLUSH);

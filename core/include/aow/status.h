@@ -25,6 +25,11 @@ struct Status {
     uint8_t satellites = 0;
     uint32_t navSent = 0;
 
+    // External IMU (AOW HAT: not in the firmware's status).
+    const char* imuType = "None";
+    bool imuValid = false;
+    float imuHeading = 0, imuRoll = 0, imuPitch = 0, imuYawRate = 0;  // deg, deg/s
+
     // Times each CAN channel's interface was restarted after it stopped sending (can_watch.h).
     uint32_t canRestarts[3] = {};
 

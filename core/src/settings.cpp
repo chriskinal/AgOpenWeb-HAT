@@ -34,6 +34,7 @@ std::string toJson(const Settings& s) {
     st["steerSwitch"] = s.steer.steerSwitch;
     st["steerButton"] = s.steer.steerButton;
     st["currentSensor"] = s.steer.currentSensor;
+    st["useYAxis"] = s.steer.useYAxis;
     st["minSpeed"] = s.steer.minSpeed;
     st["motorDriverConfig"] = s.steer.motorDriverConfig;
     st["currentThreshold"] = s.steer.currentThreshold;
@@ -104,6 +105,7 @@ bool fromJson(const std::string& json, Settings& s, std::string* error) {
     get(st, "steerSwitch", n.steer.steerSwitch);
     get(st, "steerButton", n.steer.steerButton);
     get(st, "currentSensor", n.steer.currentSensor);
+    get(st, "useYAxis", n.steer.useYAxis);
     get(st, "minSpeed", n.steer.minSpeed);
     get(st, "motorDriverConfig", n.steer.motorDriverConfig);
     get(st, "currentThreshold", n.steer.currentThreshold);

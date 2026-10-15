@@ -67,26 +67,32 @@ Sentence select(const gnss::State& s, uint64_t nowUs) {
     return fix && fresh ? Sentence::Panda : Sentence::None;
 }
 
-size_t buildPanda(const gnss::State& s, char* out, size_t cap) {
+size_t buildPanda(const gnss::State& s, const imu::Data* imu, char* out, size_t cap) {
     Writer w{out, cap};
     addCommon(w, s, "PANDA");
-    w.add("65535,0,0,0");  // IMU heading (x10, 65535 = none), roll, pitch, yaw rate
+    if (imu)  // heading x10, roll x10, pitch in degrees, yaw rate in deg/s
+        w.add("%d,%d,%d,%.2f", static_cast<int>(imu->heading * 10.0f), static_cast<int>(std::lround(imu->roll * 10.0f)),
+              static_cast<int>(std::lround(imu->pitch)), static_cast<double>(imu->yawRate));
+    else
+        w.add("65535,0,0,0");  // IMU heading (x10, 65535 = none), roll, pitch, yaw rate
     return finish(w);
 }
 
-size_t buildPaogi(const gnss::State& s, char* out, size_t cap) {
+size_t buildPaogi(const gnss::State& s, const imu::Data* imu, char* out, size_t cap) {
     if (!s.hasDualHeading) return 0;
     Writer w{out, cap};
     addCommon(w, s, "PAOGI");
-    const int pitch = s.hasIns ? static_cast<int>(std::lround(s.insPitch)) : 0;
-    w.add("%.1f,%.2f,%d,0.00", s.dualHeading, s.dualRoll, pitch);  // yaw rate: no IMU
+    // Pitch from the INS if there is one, else the IMU's; the yaw rate only from an IMU.
+    const float pitch = s.hasIns ? s.insPitch : imu ? imu->pitch : 0.0f;
+    w.add("%.1f,%.2f,%d,%.2f", s.dualHeading, s.dualRoll, static_cast<int>(std::lround(pitch)),
+          imu && !s.hasIns ? static_cast<double>(imu->yawRate) : 0.0);
     return finish(w);
 }
 
-size_t build(const gnss::State& s, uint64_t nowUs, char* out, size_t cap) {
+size_t build(const gnss::State& s, const imu::Data* imu, uint64_t nowUs, char* out, size_t cap) {
     switch (select(s, nowUs)) {
-    case Sentence::Panda: return buildPanda(s, out, cap);
-    case Sentence::Paogi: return buildPaogi(s, out, cap);
+    case Sentence::Panda: return buildPanda(s, imu, out, cap);
+    case Sentence::Paogi: return buildPaogi(s, imu, out, cap);
     case Sentence::None: break;
     }
     return 0;

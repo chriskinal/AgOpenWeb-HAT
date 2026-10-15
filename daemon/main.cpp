@@ -24,6 +24,7 @@
 
 #include "aow/app_link.h"
 #include "aow/gnss_link.h"
+#include "aow/imu.h"
 #include "aow/indicators.h"
 #include "aow/log.h"
 #include "aow/motor.h"
@@ -59,6 +60,7 @@ struct Options {
     const char* canIfaces = "can0,can1,can2";  // CAN1 (K_Bus), CAN2 (ISO_Bus), CAN3 (V_Bus)
     const char* keyaSerial = nullptr;          // RS-232 #2 on the HAT
     const char* radio = nullptr;               // RS-232 #1 on the HAT: RTK radio
+    const char* imu = nullptr;                 // BNO085 (RVC) on an RS-232 port, or TM171 on USB
     unsigned pwmHz = 20000;                    // --board hat: motor PWM frequency
     float adcRef = 5.0f;                       // --board hat: the measured 5V_MAIN
     bool noWatchdog = false;                   // --board hat: leave the STWD100 off (debugging)
@@ -93,6 +95,10 @@ void usage() {
         "  --gvret-port N    SavvyCAN (GVRET) over TCP (default 23; 0 = off)\n"
         "  --keya-serial DEV probe for a Keya motor on this serial port at startup\n"
         "  --radio DEV       RTK radio serial port; its RTCM goes to the receiver\n"
+        "  --imu DEV         external IMU: a BNO085 (RVC) on an RS-232 port at 115200, or a TM171\n"
+        "                    on USB (/dev/ttyACMx; better its /dev/serial/by-id name). Takes the\n"
+        "                    port from --radio or --keya-serial if they name the same one;\n"
+        "                    reopened when a USB IMU is unplugged and plugged back in\n"
         "  -v, --verbose     status summary every 5 s instead of every 60 s\n"
         "  --version");
 }
@@ -114,6 +120,7 @@ bool parseArgs(int argc, char** argv, Options& o) {
         else if (!std::strcmp(a, "--gvret-port") && hasValue) o.gvretPort = static_cast<uint16_t>(std::atoi(argv[++i]));
         else if (!std::strcmp(a, "--keya-serial") && hasValue) o.keyaSerial = argv[++i];
         else if (!std::strcmp(a, "--radio") && hasValue) o.radio = argv[++i];
+        else if (!std::strcmp(a, "--imu") && hasValue) o.imu = argv[++i];
         else if (!std::strcmp(a, "--pwm-hz") && hasValue) o.pwmHz = static_cast<unsigned>(std::atoi(argv[++i]));
         else if (!std::strcmp(a, "--adc-ref") && hasValue) o.adcRef = static_cast<float>(std::atof(argv[++i]));
         else if (!std::strcmp(a, "--no-watchdog")) o.noWatchdog = true;
@@ -254,6 +261,27 @@ int main(int argc, char** argv) {
         if (!rtcm.open(opt.rtcmPort)) return fail(1);
     }
 
+    // An IMU on a port the service also gives the radio or the Keya probe: the IMU has it, so
+    // one line in daemon.env moves a port over without editing the unit.
+    if (opt.imu && opt.radio && !std::strcmp(opt.imu, opt.radio)) {
+        LOG_INFO(Imu, "%s is the IMU's: no radio", opt.imu);
+        opt.radio = nullptr;
+    }
+    if (opt.imu && opt.keyaSerial && !std::strcmp(opt.imu, opt.keyaSerial)) {
+        LOG_INFO(Imu, "%s is the IMU's: no Keya serial probe", opt.imu);
+        opt.keyaSerial = nullptr;
+    }
+    aow::linux_io::SerialPort imuPort;
+    aow::imu::Imu imu;
+    // A USB IMU (the TM171 is a USB serial device, /dev/ttyACMx) may be plugged in late or come
+    // and go: the port is reopened once a second while its device node is there.
+    auto openImu = [&]() {
+        if (access(opt.imu, F_OK) != 0 || !imuPort.open(opt.imu, 115200)) return false;
+        LOG_INFO(Imu, "IMU port %s open, waiting for a BNO085 or TM171", opt.imu);
+        return true;
+    };
+    if (opt.imu && !openImu()) LOG_WARNING(Imu, "IMU port %s not there yet: opened when it appears", opt.imu);
+
     aow::linux_io::SerialPort radioPort;
     unsigned radioBaud = shared.settings().gps.radioBaud;
     if (opt.radio) {
@@ -387,6 +415,8 @@ int main(int argc, char** argv) {
     SteerAdapter steerAdapter(autosteer, shared);
     app.setSteerModule(&steerAdapter);
     gnss.setPassThrough(startSettings.gps.passThrough);
+    gnss.setImu(&imu);
+    imu.setSwapXY(startSettings.steer.useYAxis);
     if (opt.gnssDevice) shared.gnssPort = &gnssPort;  // for the UM98x page
 
     LOG_INFO(Network, "Listening on :%u, replying to %s:%u", opt.listenPort, opt.appHost, opt.appPort);
@@ -394,20 +424,21 @@ int main(int argc, char** argv) {
     aow::log::global().setStartupDone();
 
     // Without GNSS the last two entries hold fd -1, which poll() skips.
-    enum { kApp, kTick, kSignal, kGnss, kRtcm, kRadio };
-    pollfd fds[] = {{udp.fd(), POLLIN, 0}, {tickFd, POLLIN, 0}, {sigFd, POLLIN, 0},
-                    {gnssPort.fd(), POLLIN, 0}, {rtcm.fd(), POLLIN, 0}, {radioPort.fd(), POLLIN, 0}};
+    enum { kApp, kTick, kSignal, kGnss, kRtcm, kRadio, kImu, kFds };
+    pollfd fds[kFds] = {{udp.fd(), POLLIN, 0},       {tickFd, POLLIN, 0},      {sigFd, POLLIN, 0},
+                        {gnssPort.fd(), POLLIN, 0},  {rtcm.fd(), POLLIN, 0},   {radioPort.fd(), POLLIN, 0},
+                        {imuPort.fd(), POLLIN, 0}};
     const uint64_t startUs = clock.nowUs();
     aow::indicators::Leds leds(startUs / 1000);
     uint32_t lastRtcmPackets = 0, lastRadioBytes = 0, lastButtonPresses = 0;
     uint64_t lastRadioPulseMs = 0, nextLeds = 0;
     uint8_t ledColors[4] = {};
     const uint64_t summaryTicks = opt.verbose ? 500 : 6000;
-    uint64_t ticks = 0, nextSummary = summaryTicks, nextTurnSensor = 0, nextMotorProcess = 0, nextKick = 0;
+    uint64_t ticks = 0, nextSummary = summaryTicks, nextTurnSensor = 0, nextMotorProcess = 0, nextKick = 0, nextImuOpen = 0;
     bool watchdogOn = false, isoAppLink = false;
     int code = 0;
     for (;;) {
-        if (poll(fds, 6, -1) < 0) {
+        if (poll(fds, kFds, -1) < 0) {
             if (errno == EINTR) continue;
             LOG_ERROR(System, "poll: %s", std::strerror(errno));
             code = 1;
@@ -449,6 +480,20 @@ int main(int argc, char** argv) {
             while ((n = radioPort.read(buf, sizeof buf)) > 0)
                 if (opt.gnssDevice && !gnssLent) gnss.forwardRadio(buf, static_cast<size_t>(n));
         }
+        if (fds[kImu].revents & (POLLERR | POLLHUP | POLLNVAL)) {
+            LOG_WARNING(Imu, "IMU port %s went away: reopened when it is back", opt.imu);
+            imuPort.close();
+            fds[kImu].fd = -1;
+        } else if (fds[kImu].revents) {
+            uint8_t buf[512];
+            int n;
+            const aow::imu::Type before = imu.type();
+            while ((n = imuPort.read(buf, sizeof buf)) > 0) imu.feed(buf, static_cast<size_t>(n), clock.nowUs());
+            if (imu.type() != before) {
+                LOG_INFO(Imu, "%s detected on %s", aow::imu::typeName(imu.type()), opt.imu);
+                app.setImuPresent(true);
+            }
+        }
         if (fds[kTick].revents) {
             uint64_t expirations = 0;
             if (read(tickFd, &expirations, sizeof expirations) == sizeof expirations) ticks += expirations;
@@ -461,6 +506,10 @@ int main(int argc, char** argv) {
                     nextKick = ticks + 10;
                     board.kickWatchdog();
                 }
+            }
+            if (opt.imu && fds[kImu].fd < 0 && ticks >= nextImuOpen) {  // a USB IMU coming back
+                nextImuOpen = ticks + 100;
+                if (openImu()) fds[kImu].fd = imuPort.fd();
             }
             // --test-hang-after: a hung control loop, for the hardware watchdog to catch. After
             // the kick, so the timeout runs from here; the outputs stay as they are.
@@ -482,6 +531,7 @@ int main(int argc, char** argv) {
                 settingsSeen = shared.settingsVersion();
                 const aow::Settings s = shared.settings();
                 autosteer.setSettings(s);
+                imu.setSwapXY(s.steer.useYAxis);
                 gnss.setPassThrough(s.gps.passThrough);
                 if (opt.radio && s.gps.radioBaud != radioBaud) {  // live, as the firmware
                     radioBaud = s.gps.radioBaud;
@@ -522,6 +572,12 @@ int main(int argc, char** argv) {
             st.fixQuality = g.fixQuality;
             st.satellites = g.numSatellites;
             st.navSent = gnss.counters().navSent;
+            st.imuType = aow::imu::typeName(imu.type());
+            st.imuValid = imu.valid(clock.nowUs());
+            st.imuHeading = imu.data().heading;
+            st.imuRoll = imu.data().roll;
+            st.imuPitch = imu.data().pitch;
+            st.imuYawRate = imu.data().yawRate;
 
             // For the ISOBUS task controller: the app's sections, and none once the app is gone.
             isoAppLink = st.haveAppLink;

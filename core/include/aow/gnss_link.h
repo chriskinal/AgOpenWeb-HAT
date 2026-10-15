@@ -8,6 +8,7 @@
 
 #include "aow/gnss.h"
 #include "aow/hal.h"
+#include "aow/imu.h"
 #include "aow/nmea.h"
 
 namespace aow {
@@ -27,6 +28,9 @@ public:
     // The Device page's GPS passthrough: every sentence goes to the app as received, instead
     // of PANDA/PAOGI.
     void setPassThrough(bool on) { passThrough_ = on; }
+
+    // An external IMU: its data goes into PANDA/PAOGI while it is sending.
+    void setImu(const imu::Imu* imu) { imu_ = imu; }
 
     const gnss::State& state() const { return parser_.state(); }
 
@@ -51,6 +55,7 @@ private:
     gnss::Parser parser_;
     Counters counters_;
     bool passThrough_ = false;
+    const imu::Imu* imu_ = nullptr;
 };
 
 }  // namespace aow

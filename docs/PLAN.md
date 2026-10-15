@@ -65,7 +65,7 @@ and rates. Line counts are the firmware's (.h + .cpp).
 
 ### 2.3 No hardware on the HAT
 
-Section and hydraulic outputs (`MachineProcessor`), a separate IMU (`IMUProcessor`, `I2CManager`),
+Section and hydraulic outputs (`MachineProcessor`), the IMU's I2C path (`I2CManager`),
 the steering-wheel encoder (`EncoderProcessor`), the pressure sensor, JD PWM, the analog work
 switch and its page, the speed pulse (`PWMProcessor`), the Danfoss valve, the ESP32 bridge, the
 second GPS UART. Sections stay on an external machine module or go over ISOBUS (section 8).
@@ -77,6 +77,7 @@ second GPS UART. Sections stay on an external machine module or go over ISOBUS (
 | Serial5 `SerialGPS1`, 460800 | GNSS in, RTCM and UM98x commands out | GNSS UART (UART5) |
 | Serial3 `SerialRadio`, setting (115200) | RTK radio in, forwarded to GNSS | RS-232 #1 (UART2) |
 | Serial7 `SerialRS232`, 115200 | Keya serial motor | RS-232 #2 (UART3) |
+| Serial4 `SerialIMU`, 115200 (TTL) | IMU: BNO085 in RVC mode or TM171 (`IMUProcessor`) | `--imu DEV` (done 2026-10-14, on ptys). A BNO085 on either RS-232 port, through a TTL to RS-232 converter; takes the port from `--radio` or `--keya-serial` if they name it. A TM171 on USB: it is a USB serial device (`/dev/ttyACMx`), best named by its `/dev/serial/by-id` link; the port is reopened when it is unplugged and plugged back in |
 
 ### 2.5 Where the port differs from the firmware, on purpose
 
@@ -108,6 +109,14 @@ second GPS UART. Sections stay on an external machine module or go over ISOBUS (
   check cut it to one tick with a second popup. The switch-mode "not ready" popup shows once per
   attempt, not every 10 ms. GVRET also mirrors the JSON engine's frames (the firmware mirrored
   only the driver's own reads and writes).
+- External IMU (`core/imu`): the yaw rate is a real rate, deg/s over 100 ms with the 360 wrap
+  handled (the firmware sums yaw steps over 20 packets and resets with `prevYaw = 0`, so the
+  first step after each reset is the whole yaw angle; for the TM171 it is always 0). Pitch goes
+  out in degrees in PANDA and PAOGI, as AgOpenWeb reads it (the firmware sent an IMU's pitch x10).
+  The TM171's heading is kept in 0..360. Detection does not block and works at any time, and
+  needs three valid packets (the BNO's 8-bit checksum passes a stray "AA AA" in a TM171 stream
+  one time in 256). PGN 211, which the firmware builds with roll x10 twice, is not sent: the
+  firmware never calls it either.
 - Firmware dead code not carried over: `CANFilterHelper` (SocketCAN filters instead, if needed),
   `KeyaCANDriver` (Keya runs through the tractor CAN driver, as in the firmware),
   `WheelAngleFusion` (can never initialise as shipped), the CAN `work[]` rules (never parsed).

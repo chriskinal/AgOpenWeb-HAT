@@ -74,6 +74,7 @@ bool Autosteer::onSteerConfig(const uint8_t* d, size_t len) {
     n.steer.steerButton = sett0 & 0x40;
     n.steer.minSpeed = d[2];
     n.steer.currentSensor = sett1 & 0x04;
+    n.steer.useYAxis = sett1 & 0x08;
     if (n.steer.currentSensor) n.steer.currentThreshold = d[1];
     n.steer.motorDriverConfig = d[3];
     if ((sett1 & 0x01) || (n.steer.motorDriverConfig & 0x01)) n.steer.cytronDriver = false;  // Danfoss

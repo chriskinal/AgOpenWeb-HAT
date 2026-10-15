@@ -74,6 +74,20 @@ int main() {
     CHECK(std::memcmp(f.data, "\x7F\x00\x00\x01\x7F\x00\x00", 7) == 0);
     udp.out.clear();
 
+    // With an IMU detected, hello and scan are answered as the IMU (121) too, as the firmware.
+    link.setImuPresent(true);
+    udp.in.push_back({0x80, 0x81, 0x7F, 0xC8, 0x03, 0x38, 0x00, 0x00, 0x47});
+    link.poll();
+    CHECK(udp.out.size() == 3);
+    CHECK(parsed(udp.out[2], f) && f.src == pgn::SrcImu && f.pgn == pgn::SrcImu && f.len == 5);
+    udp.out.clear();
+    udp.in.push_back({0x80, 0x81, 0x7F, 0xCA, 0x03, 0xCA, 0xCA, 0x05, 0x47});
+    link.poll();
+    CHECK(udp.out.size() == 3);
+    CHECK(parsed(udp.out[2], f) && f.src == pgn::SrcImu && f.pgn == pgn::ScanReply && f.len == 7);
+    udp.out.clear();
+    link.setImuPresent(false);
+
     // No PGN 254 yet.
     CHECK(!link.haveCommand());
     CHECK(link.usSinceCommand() == UINT64_MAX);

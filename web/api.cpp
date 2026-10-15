@@ -106,6 +106,15 @@ Response status(Backend& b, const char* version) {
     gnss["fixQuality"] = st.fixQuality;
     gnss["satellites"] = st.satellites;
     doc["appConnected"] = st.haveAppLink;
+    JsonObject imu = doc["imu"].to<JsonObject>();  // AOW HAT: not in the firmware's status
+    imu["type"] = st.imuType;
+    imu["valid"] = st.imuValid;
+    if (st.imuValid) {
+        imu["heading"] = st.imuHeading;
+        imu["roll"] = st.imuRoll;
+        imu["pitch"] = st.imuPitch;
+        imu["yawRate"] = st.imuYawRate;
+    }
     JsonArray canRestarts = doc["canRestarts"].to<JsonArray>();  // AOW HAT: see daemon/can_watch.h
     for (uint32_t n : st.canRestarts) canRestarts.add(n);
     isobusStatusJson(b.isobusStatus(), doc["isobus"].to<JsonObject>());  // AOW HAT: not in the firmware's status

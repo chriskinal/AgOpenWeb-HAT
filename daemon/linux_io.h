@@ -93,6 +93,7 @@ public:
     // Returns false and prints the reason on failure (including a baud rate termios lacks).
     bool open(const char* device, unsigned baud);
     bool setBaud(unsigned baud);  // on an open port
+    void close();                 // safe on a closed port
     int fd() const { return fd_; }
 
     int read(uint8_t* buf, size_t cap) override;

@@ -59,7 +59,9 @@ The Teensy firmware is not being rewritten and nothing is ported back to it.
   the control loop), SK6812 LEDs from the PCM block, the piezo. Not yet run with a motor driver.
   Tractor CAN (all 9 brands, JSON engine, Keya CAN), Keya serial, CAN page and upload, GVRET on
   TCP 23: done and tested on vcan. The firmware's CAN files live in `core/src/can` near-verbatim.
-  UM98x (GPS) page, radio RTCM (`--radio`) and GPS passthrough: done. LED and buzzer logic
+  UM98x (GPS) page, radio RTCM (`--radio`) and GPS passthrough: done. External IMU (`--imu`,
+  `core/imu`): a BNO085 (RVC) on an RS-232 port or a TM171 on USB (`/dev/ttyACMx`), reopened
+  after an unplug: done on ptys, no real IMU yet. LED and buzzer logic
   (`core/indicators`; `/api/status` shows the LED colours), `aow-hatctl`: done.
   PGNs are accepted only from the `--app` host (loopback); `--any-app` lifts that.
 - **ISOBUS (docs/PLAN.md section 8):** AgIsoStack++ is built into the daemon
@@ -134,6 +136,7 @@ scan, then PGN 254 at a set rate, checking every reply and timing the 253.
 `tests/steer_probe.py` closes the steering loop against `--board sim`.
 `tests/can_probe.py build/aow-hatd` runs Valtra/MF CAN steering and GVRET on vcan0-2.
 `tests/um98x_probe.py build/aow-hatd` runs the GPS page and radio with ptys as the devices.
+`tests/imu_probe.py build/aow-hatd` runs an external IMU (BNO085 RVC) on a pty: hello as 121, IMU fields in PANDA.
 `tests/isobus_probe.py build/aow-hatd` checks the ISOBUS address claim and the tractor ECU role on
 vcan1 (stop the service first).
 `tests/isobus_tc_probe.py build/aow-hatd build/isobus_implement` runs section control against a

@@ -1,5 +1,6 @@
 // The daemon's side of the PGN conversation with the app. Answers as the steer (126) and
-// GPS (120) modules: hello and scan replies, and a PGN 253 for every PGN 254.
+// GPS (120) modules, and the IMU (121) while one is connected: hello and scan replies, and a
+// PGN 253 for every PGN 254.
 // Keeps the latest PGN 254 and when it arrived; acting on it is the steering code's job.
 #pragma once
 
@@ -29,6 +30,8 @@ public:
     // Steering PGNs go to the module; without one, PGN 253 reports setStatus()'s value.
     void setSteerModule(SteerModule* m) { steer_ = m; }
     void setStatus(const pgn::SteerStatus& s) { status_ = s; }
+    // An external IMU has been detected: hello and scan are answered as the IMU module too.
+    void setImuPresent(bool on) { imuPresent_ = on; }
 
     // PGN 250, sent by the caller at 10 Hz.
     void sendTurnSensor(uint8_t value);
@@ -76,6 +79,7 @@ private:
     bool haveSections64_ = false;
     uint64_t sections64AtUs_ = 0;
     bool sectionControl_ = true;
+    bool imuPresent_ = false;
     bool anyFrame_ = false;
     uint64_t anyFrameAtUs_ = 0;
     Counters counters_;
