@@ -9,7 +9,7 @@ Type=simple
 # Options that belong to one unit (--adc-ref, the measured 5V_MAIN) are in /etc/aow-hat/daemon.env,
 # which updates never overwrite. This file is replaced by every update: do not edit it.
 EnvironmentFile=-/etc/aow-hat/daemon.env
-ExecStart=/usr/local/bin/aow-hatd --board hat --gnss /dev/ttyAMA5 --radio /dev/ttyAMA2 --keya-serial /dev/ttyAMA3 --can hatcan1,hatcan2,hatcan3 $AOW_HATD_OPTS
+ExecStart=/usr/local/bin/aow-hatd --board hat --gnss /dev/ttyAMA5 --rs232 /dev/ttyAMA2,/dev/ttyAMA3 --can hatcan1,hatcan2,hatcan3 $AOW_HATD_OPTS
 Restart=always
 RestartSec=1
 

@@ -142,6 +142,22 @@ int main() {
     post(s, port, "/api/device/settings", R"({"serialRadioBaud":38400})");
     CHECK(b.s.gps.radioBaud == 38400 && b.s.misc.buzzerVolume == 2);
 
+    // Ports: a change needs a restart; a clash is refused with a reason and nothing saved.
+    d = parse(request(s, port, "GET /api/device/settings HTTP/1.1\r\n\r\n"));
+    CHECK(d["rs232Port1"] == 1 && d["rs232Port2"] == 3 && d["usbImu"] == false);
+    r = post(s, port, "/api/device/settings", R"({"buzzerVolume":1})");
+    CHECK(parse(r)["restartRequired"] == false);
+    r = post(s, port, "/api/device/settings", R"({"rs232Port2":0,"usbImu":true})");
+    CHECK(parse(r)["restartRequired"] == true && b.s.ports.rs232[1] == 0 && b.s.ports.usbImu);
+    const int beforeClash = b.applied;
+    r = post(s, port, "/api/device/settings", R"({"rs232Port1":2,"buzzerVolume":0})");  // IMU twice
+    CHECK(r.rfind("HTTP/1.1 400", 0) == 0 && !parse(r)["message"].as<std::string>().empty());
+    CHECK(b.applied == beforeClash && b.s.ports.rs232[0] == 1 && b.s.misc.buzzerVolume == 1);
+    r = post(s, port, "/api/device/settings", R"({"rs232Port1":3,"rs232Port2":3})");  // Keya twice
+    CHECK(r.rfind("HTTP/1.1 400", 0) == 0);
+    r = post(s, port, "/api/device/settings", R"({"usbImu":false,"rs232Port2":3,"buzzerVolume":2})");
+    CHECK(parse(r)["restartRequired"] == true && b.s.ports.rs232[1] == 3 && !b.s.ports.usbImu);
+
     // Broken JSON and a failed save are reported, not applied.
     CHECK(post(s, port, "/api/device/settings", "{nope").rfind("HTTP/1.1 400", 0) == 0);
     b.failSave = true;

@@ -58,6 +58,43 @@ int main() {
     CHECK(p.gains.kp == 55.5f && p.misc.ledBrightness == 5 && p.misc.buzzerVolume == 1);
     CHECK(p.steer.softStartDurationMs == 1000);
 
+    // Ports: the firmware's layout by default, round trip, an unknown use turns the port off.
+    using P = Settings::Ports;
+    CHECK(d.ports.rs232[0] == P::kRadio && d.ports.rs232[1] == P::kKeya && !d.ports.usbImu);
+    Settings ps;
+    ps.ports.rs232[0] = P::kImu;
+    ps.ports.rs232[1] = P::kOff;
+    ps.ports.usbImu = true;
+    Settings pr;
+    CHECK(fromJson(toJson(ps), pr));
+    CHECK(pr.ports.rs232[0] == P::kImu && pr.ports.rs232[1] == P::kOff && pr.ports.usbImu);
+    CHECK(fromJson(R"({"ports":{"rs232_2":9}})", pr) && pr.ports.rs232[1] == P::kOff);
+
+    // Which device does what.
+    const std::string dev[2] = {"/dev/ttyAMA2", "/dev/ttyAMA3"};
+    PortPlan plan = planPorts(d.ports, dev);
+    CHECK(plan.radio == dev[0] && plan.keya == dev[1] && plan.imu.empty() && !plan.usbImu);
+    plan = planPorts(ps.ports, dev);  // IMU on RS-232 #1: the USB IMU stands down
+    CHECK(plan.imu == dev[0] && plan.radio.empty() && plan.keya.empty() && !plan.usbImu);
+    P u;
+    u.rs232[0] = P::kKeya;
+    u.rs232[1] = P::kRadio;
+    u.usbImu = true;
+    plan = planPorts(u, dev);
+    CHECK(plan.keya == dev[0] && plan.radio == dev[1] && plan.imu.empty() && plan.usbImu);
+    u.rs232[1] = P::kKeya;  // the same use twice (a hand-edited file): RS-232 #1 has it
+    plan = planPorts(u, dev);
+    CHECK(plan.keya == dev[0] && plan.radio.empty());
+    const std::string none[2] = {"", ""};  // no RS-232 devices given (not on the HAT)
+    plan = planPorts(d.ports, none);
+    CHECK(plan.radio.empty() && plan.keya.empty());
+
+    // What the page may save.
+    CHECK(portsError(d.ports).empty() && portsError(u).size() > 0 && portsError(ps.ports).size() > 0);
+    u.rs232[0] = P::kOff;
+    u.rs232[1] = P::kOff;
+    CHECK(portsError(u).empty());  // both off is fine
+
     // Broken JSON: rejected, settings untouched, reason given.
     Settings before = p;
     std::string err;

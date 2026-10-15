@@ -32,7 +32,7 @@ and rates. Line counts are the firmware's (.h + .cpp).
 |---|---|---|---|
 | `PGNProcessor`, `PGNUtils` | 350 | `core/pgn`, `core/app_link` (done) | hello, scan, 253 per 254 |
 | `GNSSProcessor`, `NAVProcessor`, `NMEAMessageBuilder`, `calc_crc32` | 2,800 | `core/nmea`, `core/gnss`, `core/nav` (done) | one GNSS UART; the u-blox GPS2/UBX path drops (the UM982 gives heading) |
-| `RTCMProcessor` | 210 | `core/gnss_link` (done) | UDP 2233 and the radio (`--radio`, RS-232 #1) to the GNSS UART |
+| `RTCMProcessor` | 210 | `core/gnss_link` (done) | UDP 2233 and the radio (RS-232 #1 by default, Device page) to the GNSS UART |
 | `EventLogger` | 600 | `core/log` + `daemon/web_thread` (done) | same levels, sources and rate limits; console → journald, UDP syslog, ring buffer, WebSocket 8083 |
 | `ConfigManager`, `EEPROMLayout` | 1,040 | `core/settings`, `daemon/shared` (done) | `/etc/aow-hat/settings.json`, written atomically; same fields and defaults |
 | `SimpleHTTPServer`, `SimpleWebSocket`, `SimpleWebManager`, `LogWebSocket`, `TelemetryWebSocket` | 3,000 | `web/server`, `web/api` (done for Home, Device, Event logger, Logs, Network) | same routes; ports 80, 8082, 8083 so the pages work unchanged |
@@ -41,7 +41,7 @@ and rates. Line counts are the firmware's (.h + .cpp).
 | `KickoutMonitor` | 700 | `core/steer` (done: current, CAN, motor error) | current-sense, CAN and Keya kickouts; PGN 250 from current |
 | `ADProcessor` | 840 | `core/steer` (done) + HAT ADC driver | WAS and current as the firmware; work switch digital only; adds remote, supply and key sense |
 | `PWMMotorDriver` | 340 | HAT driver | rewritten for PWM + DIR + EN; brake mode only where the driver supports it |
-| `MotorDriverManager`, `KeyaSerialDriver` | 590 | `core/motor` (done), `--keya-serial` | Keya over serial, `E2` probe |
+| `MotorDriverManager`, `KeyaSerialDriver` | 590 | `core/motor` (done), RS-232 #2 by default | Keya over serial, `E2` probe |
 | `TractorCANDriver`, `CANProtocolEngine`, `CANConfigParser` | 2,460 | `core/src/can` (done, near-verbatim via `teensy_compat.h`) + SocketCAN | all 9 brands, JSON brand files (`deploy/can-config`), Keya CAN, CAN wheel angle, CAN engage buttons, CAN kickout |
 | `GVRETServer` | 390 | `core/gvret` + web thread (done) | SavvyCAN on TCP 23 |
 | `MessageBuilder` | 140 | `core/steer_pgn`, `AppLink::sendPopup` (done) | PGN 221 popups |
@@ -75,9 +75,19 @@ second GPS UART. Sections stay on an external machine module or go over ISOBUS (
 | Firmware | Role | HAT |
 |---|---|---|
 | Serial5 `SerialGPS1`, 460800 | GNSS in, RTCM and UM98x commands out | GNSS UART (UART5) |
-| Serial3 `SerialRadio`, setting (115200) | RTK radio in, forwarded to GNSS | RS-232 #1 (UART2) |
-| Serial7 `SerialRS232`, 115200 | Keya serial motor | RS-232 #2 (UART3) |
-| Serial4 `SerialIMU`, 115200 (TTL) | IMU: BNO085 in RVC mode or TM171 (`IMUProcessor`) | `--imu DEV` (done 2026-10-14, on ptys). A BNO085 on either RS-232 port, through a TTL to RS-232 converter; takes the port from `--radio` or `--keya-serial` if they name it. A TM171 on USB: it is a USB serial device (`/dev/ttyACMx`), best named by its `/dev/serial/by-id` link; the port is reopened when it is unplugged and plugged back in |
+| Serial3 `SerialRadio`, setting (115200) | RTK radio in, forwarded to GNSS | RS-232 #1 (UART2) by default |
+| Serial7 `SerialRS232`, 115200 | Keya serial motor | RS-232 #2 (UART3) by default |
+| Serial4 `SerialIMU`, 115200 (TTL) | IMU: BNO085 in RVC mode or TM171 (`IMUProcessor`) | Either RS-232 port, through a TTL to RS-232 converter, or a TM171 on USB (a USB serial device, `/dev/ttyACMx`), reopened when it is unplugged and plugged back in (done 2026-10-14; a real TM171 on USB 2026-10-15) |
+
+What each RS-232 port is for (off, RTK radio, IMU, Keya motor) and the USB IMU are settings
+(`ports` in the settings file), set on the Device page's Serial Ports and IMU card; the service
+passes the two ports with `--rs232 /dev/ttyAMA2,/dev/ttyAMA3`. They apply at startup, and the
+page offers the restart. The defaults are the firmware's layout: the radio on #1, Keya on #2, no
+IMU. With the USB IMU on, the daemon tries each `/dev/serial/by-id` link to a `/dev/ttyACMx`
+(not the GNSS, radio or Keya port) until one sends IMU packets, moving on after 3 s of silence.
+The same card shows the IMU's live roll, pitch, heading and turn rate, with the sign checks to
+do after mounting it. `--radio`, `--keya-serial` and `--imu` still override the settings (bench
+and `--board sim`); an IMU named on the radio's or Keya's port takes it.
 
 ### 2.5 Where the port differs from the firmware, on purpose
 

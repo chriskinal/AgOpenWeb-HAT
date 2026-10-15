@@ -61,6 +61,14 @@ struct Settings {
         bool terminal = true;
     } isobus;
 
+    // What each RS-232 port is for, and a USB IMU (AOW HAT; the firmware's ports are fixed).
+    // Applied at startup: a change needs a restart. Each use goes to one port at most.
+    struct Ports {
+        enum Use : uint8_t { kOff, kRadio, kImu, kKeya };
+        uint8_t rs232[2] = {kRadio, kKeya};  // RS-232 #1, #2: as the firmware's
+        bool usbImu = false;                 // a TM171 on USB; not with an IMU on RS-232
+    } ports;
+
     struct Misc {
         bool invertWorkSwitch = false;
         uint8_t ledBrightness = 25;        // %, 5..100
@@ -75,5 +83,17 @@ std::string toJson(const Settings& s);
 
 // Applies the keys present in json over s. Returns false (s untouched) if json does not parse.
 bool fromJson(const std::string& json, Settings& s, std::string* error = nullptr);
+
+// Which device does what, from the ports settings and the RS-232 ports' device names (empty:
+// that port is not there). A use set on both ports goes to RS-232 #1; an IMU on RS-232 takes
+// the place of the USB IMU.
+struct PortPlan {
+    std::string radio, keya, imu;  // empty: none
+    bool usbImu = false;
+};
+PortPlan planPorts(const Settings::Ports& p, const std::string rs232[2]);
+
+// Why these ports settings cannot be saved, or empty if they can.
+std::string portsError(const Settings::Ports& p);
 
 }  // namespace aow

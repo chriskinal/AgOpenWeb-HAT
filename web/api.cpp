@@ -109,6 +109,7 @@ Response status(Backend& b, const char* version) {
     JsonObject imu = doc["imu"].to<JsonObject>();  // AOW HAT: not in the firmware's status
     imu["type"] = st.imuType;
     imu["valid"] = st.imuValid;
+    imu["port"] = st.imuPort;
     if (st.imuValid) {
         imu["heading"] = st.imuHeading;
         imu["roll"] = st.imuRoll;
@@ -187,11 +188,27 @@ Response deviceSettings(Backend& b, const Request& r) {
         doc["buzzerVolume"] = s.misc.buzzerVolume;
         doc["invertWorkSwitch"] = s.misc.invertWorkSwitch;
         doc["ledBrightness"] = s.misc.ledBrightness;
+        doc["rs232Port1"] = s.ports.rs232[0];  // AOW HAT: Settings::Ports, applied at startup
+        doc["rs232Port2"] = s.ports.rs232[1];
+        doc["usbImu"] = s.ports.usbImu;
         return Response::json(toString(doc));
     }
     if (r.method != "POST") return methodNotAllowed();
     JsonDocument doc;
     if (deserializeJson(doc, r.body) || !doc.is<JsonObject>()) return invalidJson();
+    const Settings::Ports before = s.ports;
+    if (doc["rs232Port1"].is<int>()) s.ports.rs232[0] = static_cast<uint8_t>(doc["rs232Port1"].as<int>());
+    if (doc["rs232Port2"].is<int>()) s.ports.rs232[1] = static_cast<uint8_t>(doc["rs232Port2"].as<int>());
+    if (doc["usbImu"].is<bool>()) s.ports.usbImu = doc["usbImu"];
+    const std::string portsErr = portsError(s.ports);
+    if (!portsErr.empty()) {
+        JsonDocument e;
+        e["status"] = "error";
+        e["message"] = portsErr;
+        return Response::json(toString(e), 400);
+    }
+    const bool restart = before.rs232[0] != s.ports.rs232[0] || before.rs232[1] != s.ports.rs232[1] ||
+                         before.usbImu != s.ports.usbImu;
     // Unlike the firmware, a field left out keeps its value rather than reverting to default.
     if (doc["udpPassthrough"].is<bool>()) s.gps.passThrough = doc["udpPassthrough"];
     if (doc["pwmBrakeMode"].is<bool>()) s.steer.pwmBrakeMode = doc["pwmBrakeMode"];
@@ -214,7 +231,8 @@ Response deviceSettings(Backend& b, const Request& r) {
         const int v = doc["ledBrightness"];
         s.misc.ledBrightness = static_cast<uint8_t>(v < 5 ? 5 : v > 100 ? 100 : v);
     }
-    return saveOr500(b, s, R"({"status":"saved"})");
+    return saveOr500(b, s, restart ? R"({"status":"saved","restartRequired":true})"
+                                   : R"({"status":"saved","restartRequired":false})");
 }
 
 // AOW HAT: the ISOBUS page's settings and live state. The settings apply at the next start of

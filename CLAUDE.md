@@ -59,9 +59,11 @@ The Teensy firmware is not being rewritten and nothing is ported back to it.
   the control loop), SK6812 LEDs from the PCM block, the piezo. Not yet run with a motor driver.
   Tractor CAN (all 9 brands, JSON engine, Keya CAN), Keya serial, CAN page and upload, GVRET on
   TCP 23: done and tested on vcan. The firmware's CAN files live in `core/src/can` near-verbatim.
-  UM98x (GPS) page, radio RTCM (`--radio`) and GPS passthrough: done. External IMU (`--imu`,
-  `core/imu`): a BNO085 (RVC) on an RS-232 port or a TM171 on USB (`/dev/ttyACMx`), reopened
-  after an unplug: done on ptys, and a real TM171 on the dev CM4 (signs checked on the bench). LED and buzzer logic
+  UM98x (GPS) page, radio RTCM and GPS passthrough: done. External IMU (`core/imu`): a BNO085
+  (RVC) on an RS-232 port or a TM171 on USB (`/dev/ttyACMx`), reopened after an unplug: done on
+  ptys, and a real TM171 on the dev CM4 (signs checked on the bench). What each RS-232 port is
+  for (radio, IMU, Keya, off) and the USB IMU are settings on the Device page (`ports`; the
+  service passes `--rs232`); `--radio`, `--keya-serial` and `--imu` override them. LED and buzzer logic
   (`core/indicators`; `/api/status` shows the LED colours), `aow-hatctl`: done.
   PGNs are accepted only from the `--app` host (loopback); `--any-app` lifts that.
 - **ISOBUS (docs/PLAN.md section 8):** AgIsoStack++ is built into the daemon

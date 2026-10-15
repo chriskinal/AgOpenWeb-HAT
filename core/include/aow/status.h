@@ -27,6 +27,7 @@ struct Status {
 
     // External IMU (AOW HAT: not in the firmware's status).
     const char* imuType = "None";
+    char imuPort[96] = {};         // the device it is read from; empty: no IMU port open
     bool imuValid = false;
     float imuHeading = 0, imuRoll = 0, imuPitch = 0, imuYawRate = 0;  // deg, deg/s
 

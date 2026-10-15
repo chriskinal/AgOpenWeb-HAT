@@ -70,6 +70,11 @@ std::string toJson(const Settings& s) {
     iso["tractorEcu"] = s.isobus.tractorEcu;
     iso["terminal"] = s.isobus.terminal;
 
+    JsonObject ports = doc["ports"].to<JsonObject>();
+    ports["rs232_1"] = s.ports.rs232[0];
+    ports["rs232_2"] = s.ports.rs232[1];
+    ports["usbImu"] = s.ports.usbImu;
+
     JsonObject m = doc["misc"].to<JsonObject>();
     m["invertWorkSwitch"] = s.misc.invertWorkSwitch;
     m["ledBrightness"] = s.misc.ledBrightness;
@@ -142,6 +147,13 @@ bool fromJson(const std::string& json, Settings& s, std::string* error) {
     get(iso, "terminal", n.isobus.terminal);
     if (n.isobus.channel < 1 || n.isobus.channel > 3) n.isobus.channel = 2;
 
+    JsonVariantConst ports = doc["ports"];
+    get(ports, "rs232_1", n.ports.rs232[0]);
+    get(ports, "rs232_2", n.ports.rs232[1]);
+    get(ports, "usbImu", n.ports.usbImu);
+    for (uint8_t& u : n.ports.rs232)
+        if (u > Settings::Ports::kKeya) u = Settings::Ports::kOff;
+
     JsonVariantConst m = doc["misc"];
     get(m, "invertWorkSwitch", n.misc.invertWorkSwitch);
     get(m, "ledBrightness", n.misc.ledBrightness);
@@ -160,6 +172,30 @@ bool fromJson(const std::string& json, Settings& s, std::string* error) {
 
     s = n;
     return true;
+}
+
+PortPlan planPorts(const Settings::Ports& p, const std::string rs232[2]) {
+    PortPlan plan;
+    for (int i = 0; i < 2; ++i) {
+        if (rs232[i].empty()) continue;
+        std::string* to = p.rs232[i] == Settings::Ports::kRadio ? &plan.radio
+                        : p.rs232[i] == Settings::Ports::kImu   ? &plan.imu
+                        : p.rs232[i] == Settings::Ports::kKeya  ? &plan.keya
+                                                                : nullptr;
+        if (to && to->empty()) *to = rs232[i];
+    }
+    plan.usbImu = p.usbImu && plan.imu.empty();
+    return plan;
+}
+
+std::string portsError(const Settings::Ports& p) {
+    for (uint8_t u : p.rs232)
+        if (u > Settings::Ports::kKeya) return "Unknown port use.";
+    if (p.rs232[0] != Settings::Ports::kOff && p.rs232[0] == p.rs232[1])
+        return "Both RS-232 ports are set to the same use.";
+    if (p.usbImu && (p.rs232[0] == Settings::Ports::kImu || p.rs232[1] == Settings::Ports::kImu))
+        return "Only one IMU: turn off the USB IMU or set the RS-232 port to something else.";
+    return {};
 }
 
 }  // namespace aow
