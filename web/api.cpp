@@ -116,6 +116,11 @@ Response status(Backend& b, const char* version) {
         imu["pitch"] = st.imuPitch;
         imu["yawRate"] = st.imuYawRate;
     }
+    JsonObject serial = doc["serial"].to<JsonObject>();  // AOW HAT: the Device page's port matrix
+    serial["gnssPort"] = st.gnssPort;
+    serial["radioBytes"] = st.radioBytes;
+    serial["nmeaOutSent"] = st.nmeaOutSent;
+    serial["rtcmOutBytes"] = st.rtcmOutBytes;
     JsonArray canRestarts = doc["canRestarts"].to<JsonArray>();  // AOW HAT: see daemon/can_watch.h
     for (uint32_t n : st.canRestarts) canRestarts.add(n);
     isobusStatusJson(b.isobusStatus(), doc["isobus"].to<JsonObject>());  // AOW HAT: not in the firmware's status
@@ -175,6 +180,11 @@ Response logData() {
     return Response::json(toString(doc));
 }
 
+// The RS-232 port the radio is on (0 or 1); port 1 when it is on neither.
+int radioPortIndex(const Settings::Ports& p) {
+    return p.where[Settings::Ports::kRadio] == Settings::Ports::kPort2 ? 1 : 0;
+}
+
 Response deviceSettings(Backend& b, const Request& r) {
     Settings s = b.settings();
     if (r.method == "GET") {
@@ -184,22 +194,50 @@ Response deviceSettings(Backend& b, const Request& r) {
         doc["udpPassthrough"] = s.gps.passThrough;
         doc["pwmBrakeMode"] = s.steer.pwmBrakeMode;
         doc["softStartDuration"] = s.steer.softStartDurationMs;
-        doc["serialRadioBaud"] = s.gps.radioBaud;
+        doc["serialRadioBaud"] = s.ports.baud[radioPortIndex(s.ports)];  // the radio's port's
         doc["buzzerVolume"] = s.misc.buzzerVolume;
         doc["invertWorkSwitch"] = s.misc.invertWorkSwitch;
         doc["ledBrightness"] = s.misc.ledBrightness;
-        doc["rs232Port1"] = s.ports.rs232[0];  // AOW HAT: Settings::Ports, applied at startup
-        doc["rs232Port2"] = s.ports.rs232[1];
-        doc["usbImu"] = s.ports.usbImu;
+        // AOW HAT: where each serial device is (Settings::Ports), as in the settings file.
+        using P = Settings::Ports;
+        JsonObject ports = doc["ports"].to<JsonObject>();
+        for (int d = 0; d < P::kDevices; ++d)
+            ports[P::deviceName(static_cast<P::Device>(d))] = P::whereName(static_cast<P::Where>(s.ports.where[d]));
+        JsonArray baud = ports["baud"].to<JsonArray>();
+        for (uint32_t v : s.ports.baud) baud.add(v);
+        ports["nmeaSentences"] = s.ports.nmeaSentences;
+        ports["nmeaRateHz"] = s.ports.nmeaRateHz;
         return Response::json(toString(doc));
     }
     if (r.method != "POST") return methodNotAllowed();
     JsonDocument doc;
     if (deserializeJson(doc, r.body) || !doc.is<JsonObject>()) return invalidJson();
-    const Settings::Ports before = s.ports;
-    if (doc["rs232Port1"].is<int>()) s.ports.rs232[0] = static_cast<uint8_t>(doc["rs232Port1"].as<int>());
-    if (doc["rs232Port2"].is<int>()) s.ports.rs232[1] = static_cast<uint8_t>(doc["rs232Port2"].as<int>());
-    if (doc["usbImu"].is<bool>()) s.ports.usbImu = doc["usbImu"];
+    // The ports: refused whole, with the reason, if they do not fit (two devices on a port).
+    using P = Settings::Ports;
+    const P before = s.ports;
+    JsonVariantConst ports = doc["ports"];
+    for (int d = 0; d < P::kDevices; ++d) {
+        JsonVariantConst w = ports[P::deviceName(static_cast<P::Device>(d))];
+        if (!w.is<const char*>()) continue;
+        bool known = false;
+        for (int i = P::kNone; i <= P::kOnboard; ++i)
+            if (!std::strcmp(w.as<const char*>(), P::whereName(static_cast<P::Where>(i)))) {
+                s.ports.where[d] = static_cast<uint8_t>(i);
+                known = true;
+            }
+        if (!known) s.ports.where[d] = 0xFF;  // portsError() names it
+    }
+    JsonArrayConst baud = ports["baud"];
+    for (size_t i = 0; i < 2 && i < baud.size(); ++i)
+        if (baud[i].is<uint32_t>()) s.ports.baud[i] = baud[i];
+    if (ports["nmeaSentences"].is<int>()) s.ports.nmeaSentences = static_cast<uint8_t>(ports["nmeaSentences"].as<int>() & 0x1F);
+    if (ports["nmeaRateHz"].is<int>()) {
+        const int v = ports["nmeaRateHz"];
+        if (v == 0 || v == 1 || v == 2 || v == 5 || v == 10) s.ports.nmeaRateHz = static_cast<uint8_t>(v);
+    }
+    // The firmware's field: the radio's port's rate. Silently ignored if not a valid rate, as before.
+    if (doc["serialRadioBaud"].is<uint32_t>() && validBaud(doc["serialRadioBaud"].as<uint32_t>()))
+        s.ports.baud[radioPortIndex(s.ports)] = doc["serialRadioBaud"];
     const std::string portsErr = portsError(s.ports);
     if (!portsErr.empty()) {
         JsonDocument e;
@@ -207,20 +245,15 @@ Response deviceSettings(Backend& b, const Request& r) {
         e["message"] = portsErr;
         return Response::json(toString(e), 400);
     }
-    const bool restart = before.rs232[0] != s.ports.rs232[0] || before.rs232[1] != s.ports.rs232[1] ||
-                         before.usbImu != s.ports.usbImu;
+    // Baud rates apply live; where things are, and NMEA out, at the next start.
+    bool restart = before.nmeaSentences != s.ports.nmeaSentences || before.nmeaRateHz != s.ports.nmeaRateHz;
+    for (int d = 0; d < P::kDevices; ++d) restart |= before.where[d] != s.ports.where[d];
     // Unlike the firmware, a field left out keeps its value rather than reverting to default.
     if (doc["udpPassthrough"].is<bool>()) s.gps.passThrough = doc["udpPassthrough"];
     if (doc["pwmBrakeMode"].is<bool>()) s.steer.pwmBrakeMode = doc["pwmBrakeMode"];
     if (doc["softStartDuration"].is<int>()) {
         const int v = doc["softStartDuration"];
         s.steer.softStartDurationMs = static_cast<uint16_t>(v < 0 ? 0 : v > 1000 ? 1000 : v);
-    }
-    if (doc["serialRadioBaud"].is<uint32_t>()) {
-        static const uint32_t kBauds[] = {4800, 9600, 14400, 19200, 38400, 57600, 115200, 230400, 460800, 921600};
-        const uint32_t v = doc["serialRadioBaud"];
-        for (uint32_t ok : kBauds)
-            if (v == ok) s.gps.radioBaud = v;
     }
     if (doc["buzzerVolume"].is<int>()) {
         const int v = doc["buzzerVolume"];

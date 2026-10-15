@@ -28,6 +28,8 @@ struct Status {
     // External IMU (AOW HAT: not in the firmware's status).
     const char* imuType = "None";
     char imuPort[96] = {};         // the device it is read from; empty: no IMU port open
+    char gnssPort[96] = {};        // the receiver's device; empty: none (or not found on USB yet)
+    uint32_t radioBytes = 0, nmeaOutSent = 0, rtcmOutBytes = 0;  // serial devices at work
     bool imuValid = false;
     float imuHeading = 0, imuRoll = 0, imuPitch = 0, imuYawRate = 0;  // deg, deg/s
 

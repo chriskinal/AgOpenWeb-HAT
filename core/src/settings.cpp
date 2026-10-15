@@ -2,6 +2,8 @@
 
 #include <ArduinoJson.h>
 
+#include <cstring>
+
 namespace aow {
 
 namespace {
@@ -51,7 +53,6 @@ std::string toJson(const Settings& s) {
 
     JsonObject gps = doc["gps"].to<JsonObject>();
     gps["passThrough"] = s.gps.passThrough;
-    gps["radioBaud"] = s.gps.radioBaud;
 
     JsonObject can = doc["can"].to<JsonObject>();
     can["brand"] = s.can.brand;
@@ -70,10 +71,14 @@ std::string toJson(const Settings& s) {
     iso["tractorEcu"] = s.isobus.tractorEcu;
     iso["terminal"] = s.isobus.terminal;
 
+    using P = Settings::Ports;
     JsonObject ports = doc["ports"].to<JsonObject>();
-    ports["rs232_1"] = s.ports.rs232[0];
-    ports["rs232_2"] = s.ports.rs232[1];
-    ports["usbImu"] = s.ports.usbImu;
+    for (int d = 0; d < P::kDevices; ++d)
+        ports[P::deviceName(static_cast<P::Device>(d))] = P::whereName(static_cast<P::Where>(s.ports.where[d]));
+    JsonArray baud = ports["baud"].to<JsonArray>();
+    for (uint32_t b : s.ports.baud) baud.add(b);
+    ports["nmeaSentences"] = s.ports.nmeaSentences;
+    ports["nmeaRateHz"] = s.ports.nmeaRateHz;
 
     JsonObject m = doc["misc"].to<JsonObject>();
     m["invertWorkSwitch"] = s.misc.invertWorkSwitch;
@@ -128,7 +133,8 @@ bool fromJson(const std::string& json, Settings& s, std::string* error) {
 
     JsonVariantConst gps = doc["gps"];
     get(gps, "passThrough", n.gps.passThrough);
-    get(gps, "radioBaud", n.gps.radioBaud);
+    uint32_t oldRadioBaud = 0;  // before the ports settings: RS-232 #1's
+    get(gps, "radioBaud", oldRadioBaud);
 
     JsonVariantConst can = doc["can"];
     get(can, "brand", n.can.brand);
@@ -147,12 +153,22 @@ bool fromJson(const std::string& json, Settings& s, std::string* error) {
     get(iso, "terminal", n.isobus.terminal);
     if (n.isobus.channel < 1 || n.isobus.channel > 3) n.isobus.channel = 2;
 
+    using P = Settings::Ports;
     JsonVariantConst ports = doc["ports"];
-    get(ports, "rs232_1", n.ports.rs232[0]);
-    get(ports, "rs232_2", n.ports.rs232[1]);
-    get(ports, "usbImu", n.ports.usbImu);
-    for (uint8_t& u : n.ports.rs232)
-        if (u > Settings::Ports::kKeya) u = Settings::Ports::kOff;
+    for (int d = 0; d < P::kDevices; ++d) {
+        const char* w = ports[P::deviceName(static_cast<P::Device>(d))] | "";
+        for (int i = P::kNone; i <= P::kOnboard; ++i)
+            if (!std::strcmp(w, P::whereName(static_cast<P::Where>(i))) && P::allowed(static_cast<P::Device>(d), static_cast<P::Where>(i)))
+                n.ports.where[d] = static_cast<uint8_t>(i);
+    }
+    JsonArrayConst baud = ports["baud"];
+    for (size_t i = 0; i < 2 && i < baud.size(); ++i)
+        if (baud[i].is<uint32_t>() && validBaud(baud[i].as<uint32_t>())) n.ports.baud[i] = baud[i];
+    if (baud.isNull() && validBaud(oldRadioBaud)) n.ports.baud[0] = oldRadioBaud;
+    get(ports, "nmeaSentences", n.ports.nmeaSentences);
+    get(ports, "nmeaRateHz", n.ports.nmeaRateHz);
+    if (n.ports.nmeaRateHz != 1 && n.ports.nmeaRateHz != 2 && n.ports.nmeaRateHz != 5 && n.ports.nmeaRateHz != 10)
+        n.ports.nmeaRateHz = 0;
 
     JsonVariantConst m = doc["misc"];
     get(m, "invertWorkSwitch", n.misc.invertWorkSwitch);
@@ -174,27 +190,73 @@ bool fromJson(const std::string& json, Settings& s, std::string* error) {
     return true;
 }
 
-PortPlan planPorts(const Settings::Ports& p, const std::string rs232[2]) {
-    PortPlan plan;
-    for (int i = 0; i < 2; ++i) {
-        if (rs232[i].empty()) continue;
-        std::string* to = p.rs232[i] == Settings::Ports::kRadio ? &plan.radio
-                        : p.rs232[i] == Settings::Ports::kImu   ? &plan.imu
-                        : p.rs232[i] == Settings::Ports::kKeya  ? &plan.keya
-                                                                : nullptr;
-        if (to && to->empty()) *to = rs232[i];
+bool Settings::Ports::allowed(Device d, Where w) {
+    switch (w) {
+    case kNone: case kPort1: case kPort2: return true;
+    case kUsb: return d == kGnss || d == kImu;  // the USB devices it can find: TM171, a receiver
+    case kOnboard: return d == kGnss;            // the receiver on J7
     }
-    plan.usbImu = p.usbImu && plan.imu.empty();
+    return false;
+}
+
+const char* Settings::Ports::deviceName(Device d) {
+    static const char* const kNames[kDevices] = {"gnss", "radio", "imu", "keya", "nmeaOut", "rtcmOut"};
+    return d < kDevices ? kNames[d] : "";
+}
+
+const char* Settings::Ports::whereName(Where w) {
+    static const char* const kNames[] = {"none", "port1", "port2", "usb", "onboard"};
+    return w <= kOnboard ? kNames[w] : "none";
+}
+
+bool validBaud(uint32_t baud) {
+    static const uint32_t kBauds[] = {4800, 9600, 19200, 38400, 57600, 115200, 230400, 460800, 921600};
+    for (uint32_t b : kBauds)
+        if (b == baud) return true;
+    return false;
+}
+
+PortPlan planPorts(const Settings::Ports& p, const std::string rs232[2], const std::string& onboardGnss,
+                   unsigned onboardBaud) {
+    using P = Settings::Ports;
+    PortPlan plan;
+    bool taken[2] = {false, false};
+    for (int d = 0; d < P::kDevices; ++d) {
+        const auto dev = static_cast<P::Device>(d);
+        const auto w = static_cast<P::Where>(p.where[d]);
+        if (!P::allowed(dev, w)) continue;
+        PortPlan::Dev& out = plan.dev[d];
+        if (w == P::kPort1 || w == P::kPort2) {
+            const int i = w == P::kPort1 ? 0 : 1;
+            if (rs232[i].empty() || taken[i]) continue;
+            taken[i] = true;
+            out.path = rs232[i];
+            out.port = i;
+            out.baud = dev == P::kImu || dev == P::kKeya ? 115200 : p.baud[i];
+        } else if (w == P::kUsb) {
+            out.usb = true;
+            out.baud = dev == P::kImu ? 115200 : 460800;  // ignored by USB serial (CDC) devices
+        } else if (w == P::kOnboard && !onboardGnss.empty()) {
+            out.path = onboardGnss;
+            out.baud = onboardBaud;
+        }
+    }
     return plan;
 }
 
 std::string portsError(const Settings::Ports& p) {
-    for (uint8_t u : p.rs232)
-        if (u > Settings::Ports::kKeya) return "Unknown port use.";
-    if (p.rs232[0] != Settings::Ports::kOff && p.rs232[0] == p.rs232[1])
-        return "Both RS-232 ports are set to the same use.";
-    if (p.usbImu && (p.rs232[0] == Settings::Ports::kImu || p.rs232[1] == Settings::Ports::kImu))
-        return "Only one IMU: turn off the USB IMU or set the RS-232 port to something else.";
+    using P = Settings::Ports;
+    int on[2] = {0, 0};
+    for (int d = 0; d < P::kDevices; ++d) {
+        if (!P::allowed(static_cast<P::Device>(d), static_cast<P::Where>(p.where[d])))
+            return std::string("That place does not suit the ") + P::deviceName(static_cast<P::Device>(d)) + ".";
+        if (p.where[d] == P::kPort1) ++on[0];
+        if (p.where[d] == P::kPort2) ++on[1];
+    }
+    for (int i = 0; i < 2; ++i)
+        if (on[i] > 1) return "RS-232 port " + std::to_string(i + 1) + " has more than one device.";
+    for (uint32_t b : p.baud)
+        if (!validBaud(b)) return "Unsupported baud rate.";
     return {};
 }
 

@@ -7,8 +7,9 @@
 // AOW HAT: copied from Firmware_Teensy_AiO_26 v26.5.5 web_pages/TouchFriendlyDeviceSettingsPage.h.
 // HAT changes: no VWAS, encoder or JD PWM controls (no such hardware); adds Invert Work Switch and LED
 // Brightness (firmware settings with no page); passthrough help mentions AgOpenWeb. A Serial Ports
-// and IMU card (what each RS-232 port is for, a USB IMU, the IMU's live readings): the RTK radio
-// baud rate moved into it, shown when a port is the radio.
+// card: a matrix of where each serial device is (GNSS receiver, RTK radio, IMU, Keya, NMEA out,
+// RTCM out), each RS-232 port's baud rate (the RTK radio baud rate became its port's), NMEA
+// out's sentences and rate, and what each device is doing, with the IMU's live readings.
 
 // TouchFriendlyDeviceSettingsPage.h
 // Touch-optimized device settings page maintaining all existing functionality
@@ -203,6 +204,18 @@ const char TOUCH_FRIENDLY_DEVICE_SETTINGS_PAGE[] PROGMEM = R"rawliteral(
             margin-top: 8px;
         }
         
+        /* AOW HAT: the serial port matrix */
+        .port-matrix { width: 100%; border-collapse: collapse; font-size: 15px; }
+        .port-matrix th { font-weight: 600; font-size: 13px; color: #7f8c8d; padding: 4px 2px; }
+        .port-matrix td { text-align: center; padding: 8px 2px; border-top: 1px solid #ecf0f1; }
+        .port-matrix td:first-child { text-align: left; font-weight: 600; }
+        .port-matrix input[type=radio] { width: 22px; height: 22px; }
+        .port-matrix th.clash { color: #c0392b; }
+        .nmea-boxes { display: flex; flex-wrap: wrap; gap: 14px; }
+        .nmea-boxes label { display: flex; align-items: center; gap: 6px; font-weight: normal; }
+        .nmea-boxes input { width: 20px; height: 20px; }
+        .port-live { font-size: 15px; padding: 10px; background: #f8f9fa; border-radius: 8px; line-height: 1.6; }
+
         .nav-buttons {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -216,13 +229,10 @@ const char TOUCH_FRIENDLY_DEVICE_SETTINGS_PAGE[] PROGMEM = R"rawliteral(
                 udpPassthrough: document.getElementById('udpPassthrough').checked,
                 pwmBrakeMode: document.getElementById('pwmBrakeMode').checked,
                 softStartDuration: parseInt(document.getElementById('softStartDuration').value),
-                serialRadioBaud: parseInt(document.getElementById('serialRadioBaud').value),
                 buzzerVolume: parseInt(document.getElementById('buzzerVolume').value),
                 invertWorkSwitch: document.getElementById('invertWorkSwitch').checked,
                 ledBrightness: parseInt(document.getElementById('ledBrightness').value),
-                rs232Port1: parseInt(document.getElementById('rs232Port1').value),
-                rs232Port2: parseInt(document.getElementById('rs232Port2').value),
-                usbImu: document.getElementById('usbImu').checked
+                ports: portsFromPage()
             };
             const clash = portsProblem();
             if (clash) {
@@ -281,13 +291,11 @@ const char TOUCH_FRIENDLY_DEVICE_SETTINGS_PAGE[] PROGMEM = R"rawliteral(
                     document.getElementById('udpPassthrough').checked = data.udpPassthrough || false;
                     document.getElementById('pwmBrakeMode').checked = data.pwmBrakeMode || false;
                     document.getElementById('softStartDuration').value = data.softStartDuration || 500;
-                    document.getElementById('serialRadioBaud').value = data.serialRadioBaud || 115200;
                     document.getElementById('buzzerVolume').value = (data.buzzerVolume !== undefined) ? data.buzzerVolume : 1;
                     document.getElementById('invertWorkSwitch').checked = data.invertWorkSwitch || false;
                     document.getElementById('ledBrightness').value = data.ledBrightness || 25;
-                    document.getElementById('rs232Port1').value = (data.rs232Port1 !== undefined) ? data.rs232Port1 : 1;
-                    document.getElementById('rs232Port2').value = (data.rs232Port2 !== undefined) ? data.rs232Port2 : 3;
-                    document.getElementById('usbImu').checked = data.usbImu || false;
+                    window.savedPorts = data.ports || {};
+                    portsToPage(data.ports || {});
                     portsChanged();
                 })
                 .catch((error) => {
@@ -295,20 +303,82 @@ const char TOUCH_FRIENDLY_DEVICE_SETTINGS_PAGE[] PROGMEM = R"rawliteral(
                 });
         }
         
-        // AOW HAT: the serial ports card. Each use on one port only, and one IMU.
+        // AOW HAT: the serial port matrix. One row per device, one column per place; a device
+        // is offered only the places that suit it. Each RS-232 port takes one device.
+        const DEVICES = [
+            ['gnss', 'GNSS Receiver', ['none', 'onboard', 'port1', 'port2', 'usb']],
+            ['radio', 'RTK Radio', ['none', 'port1', 'port2']],
+            ['imu', 'IMU', ['none', 'port1', 'port2', 'usb']],
+            ['keya', 'Keya Motor', ['none', 'port1', 'port2']],
+            ['nmeaOut', 'NMEA Out', ['none', 'port1', 'port2']],
+            ['rtcmOut', 'RTCM Out', ['none', 'port1', 'port2']]
+        ];
+        const PLACES = ['none', 'onboard', 'port1', 'port2', 'usb'];
+        const NAMES = {};
+        DEVICES.forEach(d => NAMES[d[0]] = d[1]);
+        const BAUDS = [4800, 9600, 19200, 38400, 57600, 115200, 230400, 460800, 921600];
+
+        function buildMatrix() {
+            const rows = document.getElementById('portRows');
+            rows.innerHTML = DEVICES.map(d => '<tr><td>' + d[1] + '</td>' + PLACES.map(p =>
+                '<td>' + (d[2].includes(p) ? '<input type="radio" name="where_' + d[0] + '" value="' + p + '" onchange="portsChanged()">' : '') + '</td>'
+            ).join('') + '</tr>').join('');
+            for (let i = 0; i < 2; ++i)
+                document.getElementById('baud' + i).innerHTML = BAUDS.map(b => '<option value="' + b + '">' + b + '</option>').join('');
+        }
+
+        function whereOf(dev) {
+            const el = document.querySelector('input[name="where_' + dev + '"]:checked');
+            return el ? el.value : 'none';
+        }
+
+        function portsFromPage() {
+            const ports = { baud: [parseInt(document.getElementById('baud0').value), parseInt(document.getElementById('baud1').value)] };
+            DEVICES.forEach(d => ports[d[0]] = whereOf(d[0]));
+            let mask = 0;
+            [1, 2, 4, 8, 16].forEach(b => { if (document.getElementById('nmea' + b).checked) mask |= b; });
+            ports.nmeaSentences = mask;
+            ports.nmeaRateHz = parseInt(document.getElementById('nmeaRate').value);
+            return ports;
+        }
+
+        function portsToPage(p) {
+            DEVICES.forEach(d => {
+                const el = document.querySelector('input[name="where_' + d[0] + '"][value="' + (p[d[0]] || 'none') + '"]');
+                if (el) el.checked = true;
+            });
+            const baud = p.baud || [115200, 115200];
+            for (let i = 0; i < 2; ++i) document.getElementById('baud' + i).value = baud[i];
+            const mask = (p.nmeaSentences !== undefined) ? p.nmeaSentences : 3;
+            [1, 2, 4, 8, 16].forEach(b => document.getElementById('nmea' + b).checked = (mask & b) !== 0);
+            document.getElementById('nmeaRate').value = p.nmeaRateHz || 0;
+            portsChanged();
+        }
+
+        function onPort(i) {  // the devices on RS-232 port i (0, 1)
+            return DEVICES.map(d => d[0]).filter(dev => whereOf(dev) === 'port' + (i + 1));
+        }
+
         function portsProblem() {
-            const p1 = parseInt(document.getElementById('rs232Port1').value);
-            const p2 = parseInt(document.getElementById('rs232Port2').value);
-            const usb = document.getElementById('usbImu').checked;
-            if (p1 !== 0 && p1 === p2) return 'Both RS-232 ports are set to the same thing.';
-            if (usb && (p1 === 2 || p2 === 2)) return 'Only one IMU: turn off the USB IMU or set the RS-232 port to something else.';
+            for (let i = 0; i < 2; ++i) {
+                const on = onPort(i);
+                if (on.length > 1) return 'Port ' + (i + 1) + ' has ' + on.map(dev => NAMES[dev]).join(' and ') + '. Each port takes one device.';
+            }
             return '';
         }
 
         function portsChanged() {
-            const p1 = parseInt(document.getElementById('rs232Port1').value);
-            const p2 = parseInt(document.getElementById('rs232Port2').value);
-            document.getElementById('radioBaudGroup').style.display = (p1 === 1 || p2 === 1) ? '' : 'none';
+            const heads = document.querySelectorAll('.port-matrix th');
+            for (let i = 0; i < 2; ++i) {
+                const on = onPort(i);
+                heads[3 + i].classList.toggle('clash', on.length > 1);
+                const fixed = on.length === 1 && (on[0] === 'imu' || on[0] === 'keya');
+                const sel = document.getElementById('baud' + i);
+                sel.disabled = fixed || on.length === 0;
+                document.getElementById('baudUse' + i).textContent =
+                    on.length === 0 ? '(nothing on it)' : fixed ? '(' + NAMES[on[0]] + ': 115200)' : '(' + on.map(dev => NAMES[dev]).join(', ') + ')';
+            }
+            document.getElementById('nmeaGroup').style.display = whereOf('nmeaOut') === 'none' ? 'none' : '';
             const problem = portsProblem();
             const box = document.getElementById('portsError');
             box.textContent = problem;
@@ -319,13 +389,38 @@ const char TOUCH_FRIENDLY_DEVICE_SETTINGS_PAGE[] PROGMEM = R"rawliteral(
 
         function deg(v) { return (v >= 0 ? '+' : '') + v.toFixed(1) + '&deg;'; }
 
-        function pollImu() {
+        function place(w) {
+            return { onboard: 'onboard', port1: 'port 1', port2: 'port 2', usb: 'USB' }[w] || w;
+        }
+
+        let lastCounts = null;
+        function pollStatus() {
             fetch('/api/status')
                 .then(response => response.json())
                 .then(data => {
+                    // Live state, from the settings in force (the saved ones) and the counters.
+                    const ser = data.serial || {};
+                    const lines = [];
+                    const saved = window.savedPorts || {};
+                    const dev = (p) => p ? esc(p.replace('/dev/serial/by-id/', 'USB ')) : '';  // USB names come from the device
+                    if (saved.gnss && saved.gnss !== 'none') {
+                        const fix = data.gnss ? data.gnss.fixQuality : 0;
+                        lines.push('<b>GNSS:</b> ' + (ser.gnssPort ? dev(ser.gnssPort) + ', fix ' + fix
+                            : saved.gnss === 'usb' ? 'looking for it on USB...' : 'not open'));
+                    }
+                    const moving = (k) => lastCounts && ser[k] > lastCounts[k];
+                    if (saved.radio && saved.radio !== 'none')
+                        lines.push('<b>RTK radio:</b> ' + (moving('radioBytes') ? 'corrections coming in' : 'nothing coming in'));
+                    if (saved.nmeaOut && saved.nmeaOut !== 'none')
+                        lines.push('<b>NMEA out:</b> ' + (moving('nmeaOutSent') ? 'sending' : 'nothing to send') + ' (' + ser.nmeaOutSent + ' sent)');
+                    if (saved.rtcmOut && saved.rtcmOut !== 'none')
+                        lines.push('<b>RTCM out:</b> ' + (moving('rtcmOutBytes') ? 'sending' : 'nothing to send'));
+                    document.getElementById('portLive').innerHTML = lines.length ? lines.join('<br>') : 'No serial devices set.';
+                    lastCounts = ser;
+
                     const imu = data.imu || {};
                     const el = document.getElementById('imuLive');
-                    const where = imu.port ? esc(imu.port.replace('/dev/serial/by-id/', 'USB ')) : '';  // USB names come from the device
+                    const where = dev(imu.port);
                     if (imu.valid) {
                         el.innerHTML = '<b>' + esc(imu.type) + '</b> <span style="color: #7f8c8d; font-size: 13px;">' + where + '</span><br>' +
                             'Roll ' + deg(imu.roll) + ' &nbsp; Pitch ' + deg(imu.pitch) +
@@ -334,17 +429,20 @@ const char TOUCH_FRIENDLY_DEVICE_SETTINGS_PAGE[] PROGMEM = R"rawliteral(
                         el.innerHTML = '<b>' + esc(imu.type) + '</b> has stopped sending.';
                     } else if (imu.port) {
                         el.innerHTML = 'Listening on ' + where + ' for an IMU...';
+                    } else if (saved.imu === 'usb') {
+                        el.textContent = 'Looking for a TM171 on USB...';
                     } else {
-                        el.textContent = 'No IMU.';
+                        el.textContent = saved.imu && saved.imu !== 'none' ? 'Not open.' : 'No IMU set.';
                     }
                 })
                 .catch(() => {})
-                .finally(() => setTimeout(pollImu, 500));
+                .finally(() => setTimeout(pollStatus, 1000));
         }
 
         window.onload = function() {
+            buildMatrix();
             loadSettings();
-            pollImu();
+            pollStatus();
         };
     </script>
 </head>
@@ -451,66 +549,60 @@ const char TOUCH_FRIENDLY_DEVICE_SETTINGS_PAGE[] PROGMEM = R"rawliteral(
             </div>
 
             <div class="card">
-                <h2 style="margin-top: 0;">Serial Ports and IMU</h2>
-                <div class="form-group">
-                    <label for="rs232Port1">RS-232 Port 1:</label>
-                    <select id="rs232Port1" name="rs232Port1" onchange="portsChanged()">
-                        <option value="0">Off</option>
-                        <option value="1">RTK Radio (Default)</option>
-                        <option value="2">IMU (BNO085 or TM171)</option>
-                        <option value="3">Keya Motor</option>
-                    </select>
+                <h2 style="margin-top: 0; color: #2c3e50;">Serial Ports</h2>
+                <div class="help-text" style="margin-bottom: 10px;">
+                    Tell the HAT what is plugged in where. Each RS-232 port takes one device.
                 </div>
-                <div class="form-group" style="margin-top: 15px;">
-                    <label for="rs232Port2">RS-232 Port 2:</label>
-                    <select id="rs232Port2" name="rs232Port2" onchange="portsChanged()">
-                        <option value="0">Off</option>
-                        <option value="1">RTK Radio</option>
-                        <option value="2">IMU (BNO085 or TM171)</option>
-                        <option value="3">Keya Motor (Default)</option>
-                    </select>
-                    <div class="help-text" style="margin-top: 5px;">
-                        What is plugged into each RS-232 port. An IMU on RS-232 needs a TTL to RS-232 converter. A Keya motor is looked for when the HAT starts.
-                    </div>
-                </div>
-
-                <div class="toggle-container" style="margin-top: 15px;">
-                    <div class="toggle-info">
-                        <label for="usbImu" class="toggle-label">USB IMU (TM171)</label>
-                        <div class="help-text">
-                            Use a TM171 plugged into a USB port. It is found by itself, and picked up again if it is unplugged and plugged back in.
-                        </div>
-                    </div>
-                    <label class="toggle-switch">
-                        <input type="checkbox" id="usbImu" name="usbImu" onchange="portsChanged()">
-                        <span class="toggle-slider"></span>
-                    </label>
-                </div>
-
-                <div class="form-group" id="radioBaudGroup" style="margin-top: 15px;">
-                    <label for="serialRadioBaud">RTK Radio Baud Rate:</label>
-                    <select id="serialRadioBaud" name="serialRadioBaud">
-                        <option value="4800">4800</option>
-                        <option value="9600">9600</option>
-                        <option value="14400">14400</option>
-                        <option value="19200">19200</option>
-                        <option value="38400">38400</option>
-                        <option value="57600">57600</option>
-                        <option value="115200">115200 (Default)</option>
-                        <option value="230400">230400</option>
-                        <option value="460800">460800</option>
-                        <option value="921600">921600</option>
-                    </select>
-                    <div class="help-text" style="margin-top: 5px;">
-                        Set the baud rate for the serial radio (XBee) used for RTK corrections. Some radios cannot easily change their baud rate, so match this setting to your radio's configuration.
-                    </div>
-                </div>
-
-                <div id="portsError" class="status error" style="display: none; margin-top: 15px;"></div>
+                <table class="port-matrix">
+                    <thead>
+                        <tr><th></th><th>None</th><th>Onboard</th><th>Port 1</th><th>Port 2</th><th>USB</th></tr>
+                    </thead>
+                    <tbody id="portRows"></tbody>
+                </table>
+                <div id="portsError" class="status error" style="display: none; margin-top: 10px;"></div>
 
                 <div class="form-group" style="margin-top: 15px;">
-                    <label>IMU now:</label>
-                    <div id="imuLive" style="font-size: 18px; padding: 10px; background: #f8f9fa; border-radius: 8px;">-</div>
+                    <label for="baud0">Port 1 Baud Rate: <span id="baudUse0" class="help-text"></span></label>
+                    <select id="baud0" class="baud-select"></select>
+                </div>
+                <div class="form-group" style="margin-top: 10px;">
+                    <label for="baud1">Port 2 Baud Rate: <span id="baudUse1" class="help-text"></span></label>
+                    <select id="baud1" class="baud-select"></select>
+                    <div class="help-text" style="margin-top: 5px;">
+                        Match the device's own rate. An IMU or Keya motor always runs at 115200. Rates apply as soon as they are saved.
+                    </div>
+                </div>
+
+                <div id="nmeaGroup" class="form-group" style="margin-top: 15px;">
+                    <label>NMEA Out Sentences:</label>
+                    <div class="nmea-boxes">
+                        <label><input type="checkbox" id="nmea1"> GGA</label>
+                        <label><input type="checkbox" id="nmea2"> VTG</label>
+                        <label><input type="checkbox" id="nmea4"> RMC</label>
+                        <label><input type="checkbox" id="nmea8"> ZDA</label>
+                        <label><input type="checkbox" id="nmea16"> HDT</label>
+                    </div>
+                    <label for="nmeaRate" style="margin-top: 10px;">NMEA Out Rate:</label>
+                    <select id="nmeaRate">
+                        <option value="0">As the receiver sends them</option>
+                        <option value="10">10 Hz</option>
+                        <option value="5">5 Hz</option>
+                        <option value="2">2 Hz</option>
+                        <option value="1">1 Hz</option>
+                    </select>
+                    <div class="help-text" style="margin-top: 5px;">
+                        The receiver's own sentences, for a rate controller, sprayer or yield monitor.
+                    </div>
+                </div>
+
+                <div class="form-group" style="margin-top: 15px;">
+                    <label>Now:</label>
+                    <div id="portLive" class="port-live">-</div>
+                </div>
+
+                <div class="form-group" style="margin-top: 15px;">
+                    <label>IMU:</label>
+                    <div id="imuLive" class="port-live">-</div>
                     <div class="help-text" style="margin-top: 5px;">
                         Mount the IMU with its arrow pointing to the front of the tractor. To check it: right side down (or tilt the IMU to the right) and roll goes positive; nose up and pitch goes positive; turn right and the heading goes up. If the IMU is turned 90 degrees, set "Use Y axis" in AgOpenWeb's steer settings.
                     </div>

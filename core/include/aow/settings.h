@@ -38,8 +38,7 @@ struct Settings {
 
     struct Gps {
         bool passThrough = false;          // raw NMEA to the app instead of PANDA/PAOGI
-        uint32_t radioBaud = 115200;       // RS-232 #1
-    } gps;
+    } gps;  // the radio's baud rate is its port's, Ports::baud (older files: gps.radioBaud)
 
     // CAN steering (the firmware's CANSteerConfig).
     struct Can {
@@ -61,12 +60,21 @@ struct Settings {
         bool terminal = true;
     } isobus;
 
-    // What each RS-232 port is for, and a USB IMU (AOW HAT; the firmware's ports are fixed).
-    // Applied at startup: a change needs a restart. Each use goes to one port at most.
+    // Where each serial device is (AOW HAT; the firmware's ports are fixed): the Device page's
+    // matrix. Applied at startup, except the baud rates, which apply live. Each RS-232 port
+    // holds one device at most; allowed() says which places suit which device.
     struct Ports {
-        enum Use : uint8_t { kOff, kRadio, kImu, kKeya };
-        uint8_t rs232[2] = {kRadio, kKeya};  // RS-232 #1, #2: as the firmware's
-        bool usbImu = false;                 // a TM171 on USB; not with an IMU on RS-232
+        enum Where : uint8_t { kNone, kPort1, kPort2, kUsb, kOnboard };
+        enum Device : uint8_t { kGnss, kRadio, kImu, kKeya, kNmeaOut, kRtcmOut, kDevices };
+        enum Sentence : uint8_t { kGga = 1, kVtg = 2, kRmc = 4, kZda = 8, kHdt = 16 };
+        uint8_t where[kDevices] = {kOnboard, kPort1, kNone, kPort2, kNone, kNone};  // the firmware's layout
+        uint32_t baud[2] = {115200, 115200};  // RS-232 #1, #2; an IMU or Keya there runs at 115200
+        uint8_t nmeaSentences = kGga | kVtg;  // NMEA out: which of the receiver's sentences
+        uint8_t nmeaRateHz = 0;               // 0: each as the receiver sends it; else 1, 2, 5, 10
+
+        static bool allowed(Device d, Where w);
+        static const char* deviceName(Device d);  // as in the settings file: "gnss", "radio", ...
+        static const char* whereName(Where w);    // "none", "port1", "port2", "usb", "onboard"
     } ports;
 
     struct Misc {
@@ -84,16 +92,26 @@ std::string toJson(const Settings& s);
 // Applies the keys present in json over s. Returns false (s untouched) if json does not parse.
 bool fromJson(const std::string& json, Settings& s, std::string* error = nullptr);
 
-// Which device does what, from the ports settings and the RS-232 ports' device names (empty:
-// that port is not there). A use set on both ports goes to RS-232 #1; an IMU on RS-232 takes
-// the place of the USB IMU.
+// The device path and baud rate of each serial device, from the ports settings, the RS-232
+// ports' device names (empty: not there) and the onboard receiver's. usb: to be found among
+// the USB serial devices. Nothing for a device whose place is not there or not allowed, or
+// for a second device on a port that already has one (a hand-edited file).
 struct PortPlan {
-    std::string radio, keya, imu;  // empty: none
-    bool usbImu = false;
+    struct Dev {
+        std::string path;  // empty: none (or USB)
+        unsigned baud = 0;
+        bool usb = false;
+        int port = -1;     // 0, 1: on that RS-232 port
+    };
+    Dev dev[Settings::Ports::kDevices];
 };
-PortPlan planPorts(const Settings::Ports& p, const std::string rs232[2]);
+PortPlan planPorts(const Settings::Ports& p, const std::string rs232[2], const std::string& onboardGnss,
+                   unsigned onboardBaud);
 
 // Why these ports settings cannot be saved, or empty if they can.
 std::string portsError(const Settings::Ports& p);
+
+// The baud rates an RS-232 port offers (the firmware's radio list).
+bool validBaud(uint32_t baud);
 
 }  // namespace aow

@@ -32,7 +32,7 @@ and rates. Line counts are the firmware's (.h + .cpp).
 |---|---|---|---|
 | `PGNProcessor`, `PGNUtils` | 350 | `core/pgn`, `core/app_link` (done) | hello, scan, 253 per 254 |
 | `GNSSProcessor`, `NAVProcessor`, `NMEAMessageBuilder`, `calc_crc32` | 2,800 | `core/nmea`, `core/gnss`, `core/nav` (done) | one GNSS UART; the u-blox GPS2/UBX path drops (the UM982 gives heading) |
-| `RTCMProcessor` | 210 | `core/gnss_link` (done) | UDP 2233 and the radio (RS-232 #1 by default, Device page) to the GNSS UART |
+| `RTCMProcessor` | 210 | `core/gnss_link` (done) | UDP 2233 and the radio (RS-232 #1 by default, Device page) to the receiver; RTCM out (new) |
 | `EventLogger` | 600 | `core/log` + `daemon/web_thread` (done) | same levels, sources and rate limits; console → journald, UDP syslog, ring buffer, WebSocket 8083 |
 | `ConfigManager`, `EEPROMLayout` | 1,040 | `core/settings`, `daemon/shared` (done) | `/etc/aow-hat/settings.json`, written atomically; same fields and defaults |
 | `SimpleHTTPServer`, `SimpleWebSocket`, `SimpleWebManager`, `LogWebSocket`, `TelemetryWebSocket` | 3,000 | `web/server`, `web/api` (done for Home, Device, Event logger, Logs, Network) | same routes; ports 80, 8082, 8083 so the pages work unchanged |
@@ -79,15 +79,29 @@ second GPS UART. Sections stay on an external machine module or go over ISOBUS (
 | Serial7 `SerialRS232`, 115200 | Keya serial motor | RS-232 #2 (UART3) by default |
 | Serial4 `SerialIMU`, 115200 (TTL) | IMU: BNO085 in RVC mode or TM171 (`IMUProcessor`) | Either RS-232 port, through a TTL to RS-232 converter, or a TM171 on USB (a USB serial device, `/dev/ttyACMx`), reopened when it is unplugged and plugged back in (done 2026-10-14; a real TM171 on USB 2026-10-15) |
 
-What each RS-232 port is for (off, RTK radio, IMU, Keya motor) and the USB IMU are settings
-(`ports` in the settings file), set on the Device page's Serial Ports and IMU card; the service
-passes the two ports with `--rs232 /dev/ttyAMA2,/dev/ttyAMA3`. They apply at startup, and the
-page offers the restart. The defaults are the firmware's layout: the radio on #1, Keya on #2, no
-IMU. With the USB IMU on, the daemon tries each `/dev/serial/by-id` link to a `/dev/ttyACMx`
-(not the GNSS, radio or Keya port) until one sends IMU packets, moving on after 3 s of silence.
-The same card shows the IMU's live roll, pitch, heading and turn rate, with the sign checks to
-do after mounting it. `--radio`, `--keya-serial` and `--imu` still override the settings (bench
-and `--board sim`); an IMU named on the radio's or Keya's port takes it.
+Where each serial device is, is a setting (`ports` in the settings file), set on the Device
+page's Serial Ports matrix: one row per device, one column per place (none, onboard, RS-232 #1,
+#2, USB), each RS-232 port holding one device. The service passes the onboard receiver
+(`--gnss /dev/ttyAMA5`) and the two ports (`--rs232 /dev/ttyAMA2,/dev/ttyAMA3`). The defaults
+are the firmware's layout: the receiver onboard, the radio on #1, Keya on #2.
+
+| Device | Places | Notes |
+|---|---|---|
+| GNSS receiver | onboard (J7), #1, #2, USB | on a port at the port's rate; on USB, found by its NMEA |
+| RTK radio | #1, #2 | its RTCM goes to the receiver |
+| IMU | #1, #2, USB | BNO085 (RVC) or TM171, at 115200; on USB, found by its packets |
+| Keya motor | #1, #2 | probed at startup, 115200 |
+| NMEA out (new) | #1, #2 | the receiver's GGA, VTG, RMC, ZDA, HDT as chosen, as received or at 1-10 Hz |
+| RTCM out (new) | #1, #2 | a copy of every correction byte sent to the receiver |
+
+Each port has a baud rate (the firmware's radio rate became the radio's port's; older files'
+`gps.radioBaud` is read as #1's). Rates apply live; where things are, and NMEA out's choices,
+at startup, and the page offers the restart. On USB, `daemon/usb_scout` listens to each
+`/dev/serial/by-id` device not otherwise in use for up to 3 s (a ttyUSB adapter at 115200, then
+460800) and never writes to it. The page shows what each device is doing and the IMU's live
+roll, pitch, heading and turn rate, with the sign checks to do after mounting it.
+`--radio`, `--keya-serial` and `--imu` still override the settings (bench and `--board sim`);
+an IMU named on the radio's or Keya's port takes it.
 
 ### 2.5 Where the port differs from the firmware, on purpose
 

@@ -136,27 +136,36 @@ int main() {
     r = post(s, port, "/api/device/settings",
              R"({"softStartDuration":2500,"serialRadioBaud":12345,"buzzerVolume":2,"invertWorkSwitch":true,"ledBrightness":0})");
     CHECK(parse(r)["status"] == "saved" && b.applied == 1);
-    CHECK(b.s.steer.softStartDurationMs == 1000 && b.s.gps.radioBaud == 115200);
+    CHECK(b.s.steer.softStartDurationMs == 1000 && b.s.ports.baud[0] == 115200);
     CHECK(b.s.misc.buzzerVolume == 2 && b.s.misc.invertWorkSwitch && b.s.misc.ledBrightness == 5);
     CHECK(!b.s.gps.passThrough);
     post(s, port, "/api/device/settings", R"({"serialRadioBaud":38400})");
-    CHECK(b.s.gps.radioBaud == 38400 && b.s.misc.buzzerVolume == 2);
+    CHECK(b.s.ports.baud[0] == 38400 && b.s.misc.buzzerVolume == 2);
 
-    // Ports: a change needs a restart; a clash is refused with a reason and nothing saved.
+    // Ports: where each device is, as names; a move needs a restart, a baud rate does not; a
+    // clash is refused with a reason and nothing saved.
+    using P = Settings::Ports;
     d = parse(request(s, port, "GET /api/device/settings HTTP/1.1\r\n\r\n"));
-    CHECK(d["rs232Port1"] == 1 && d["rs232Port2"] == 3 && d["usbImu"] == false);
-    r = post(s, port, "/api/device/settings", R"({"buzzerVolume":1})");
-    CHECK(parse(r)["restartRequired"] == false);
-    r = post(s, port, "/api/device/settings", R"({"rs232Port2":0,"usbImu":true})");
-    CHECK(parse(r)["restartRequired"] == true && b.s.ports.rs232[1] == 0 && b.s.ports.usbImu);
+    CHECK(d["ports"]["gnss"] == "onboard" && d["ports"]["radio"] == "port1" && d["ports"]["keya"] == "port2");
+    CHECK(d["ports"]["imu"] == "none" && d["ports"]["baud"][0] == 38400 && d["serialRadioBaud"] == 38400);
+    r = post(s, port, "/api/device/settings", R"({"ports":{"baud":[38400,9600]}})");
+    CHECK(parse(r)["restartRequired"] == false && b.s.ports.baud[1] == 9600);
+    r = post(s, port, "/api/device/settings", R"({"ports":{"keya":"none","imu":"usb","nmeaOut":"port2","nmeaRateHz":5}})");
+    CHECK(parse(r)["restartRequired"] == true && b.s.ports.where[P::kImu] == P::kUsb);
+    CHECK(b.s.ports.where[P::kNmeaOut] == P::kPort2 && b.s.ports.nmeaRateHz == 5 && b.s.ports.where[P::kKeya] == P::kNone);
     const int beforeClash = b.applied;
-    r = post(s, port, "/api/device/settings", R"({"rs232Port1":2,"buzzerVolume":0})");  // IMU twice
+    r = post(s, port, "/api/device/settings", R"({"ports":{"rtcmOut":"port2"},"buzzerVolume":0})");  // #2 twice
     CHECK(r.rfind("HTTP/1.1 400", 0) == 0 && !parse(r)["message"].as<std::string>().empty());
-    CHECK(b.applied == beforeClash && b.s.ports.rs232[0] == 1 && b.s.misc.buzzerVolume == 1);
-    r = post(s, port, "/api/device/settings", R"({"rs232Port1":3,"rs232Port2":3})");  // Keya twice
+    CHECK(b.applied == beforeClash && b.s.ports.where[P::kRtcmOut] == P::kNone && b.s.misc.buzzerVolume == 2);
+    r = post(s, port, "/api/device/settings", R"({"ports":{"keya":"usb"}})");  // no USB Keya
     CHECK(r.rfind("HTTP/1.1 400", 0) == 0);
-    r = post(s, port, "/api/device/settings", R"({"usbImu":false,"rs232Port2":3,"buzzerVolume":2})");
-    CHECK(parse(r)["restartRequired"] == true && b.s.ports.rs232[1] == 3 && !b.s.ports.usbImu);
+    r = post(s, port, "/api/device/settings", R"({"ports":{"radio":"somewhere"}})");
+    CHECK(r.rfind("HTTP/1.1 400", 0) == 0 && b.s.ports.where[P::kRadio] == P::kPort1);
+    // The firmware's radio rate is the radio's port's.
+    r = post(s, port, "/api/device/settings", R"({"ports":{"radio":"port2","nmeaOut":"port1"},"serialRadioBaud":57600})");
+    CHECK(parse(r)["restartRequired"] == true && b.s.ports.baud[1] == 57600 && b.s.ports.baud[0] == 38400);
+    r = post(s, port, "/api/device/settings", R"({"ports":{"radio":"port1","imu":"none","nmeaOut":"none","keya":"port2"}})");
+    CHECK(parse(r)["status"] == "saved");
 
     // Broken JSON and a failed save are reported, not applied.
     CHECK(post(s, port, "/api/device/settings", "{nope").rfind("HTTP/1.1 400", 0) == 0);

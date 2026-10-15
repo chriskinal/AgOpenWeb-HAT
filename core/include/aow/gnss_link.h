@@ -32,6 +32,14 @@ public:
     // An external IMU: its data goes into PANDA/PAOGI while it is sending.
     void setImu(const imu::Imu* imu) { imu_ = imu; }
 
+    // NMEA out (AOW HAT): the receiver's sentences of the chosen types (Settings::Ports::Sentence
+    // bits), as received, to a serial port, e.g. for a rate controller. rateHz 0: every one;
+    // else at most that many of each type a second. nullptr: off.
+    void setNmeaOut(hal::SerialPort* port, uint8_t sentences, uint8_t rateHz);
+    // RTCM out (AOW HAT): a copy of every correction byte the receiver is sent, from the app and
+    // from the radio, to a serial port. nullptr: off.
+    void setRtcmOut(hal::SerialPort* port) { rtcmOut_ = port; }
+
     const gnss::State& state() const { return parser_.state(); }
 
     struct Counters {
@@ -41,12 +49,19 @@ public:
         uint32_t rtcmPackets = 0;
         uint32_t rtcmBytesDropped = 0;  // serial port would not take them
         uint32_t radioBytes = 0;
+        uint32_t nmeaOutSent = 0;       // sentences written to NMEA out
+        uint32_t rtcmOutBytes = 0;      // bytes written to RTCM out
+        uint32_t outBytesDropped = 0;   // NMEA or RTCM out port would not take them
     };
     const Counters& counters() const { return counters_; }
     const nmea::SentenceReader& reader() const { return reader_; }
 
 private:
+    // The current sentence as the receiver sent it: body, checksum, CRLF. Returns its length.
+    size_t rawSentence(char* out, size_t cap) const;
     void sendRaw();
+    void nmeaOut(uint64_t nowUs);
+    void toReceiver(const uint8_t* data, size_t len);
 
     hal::SerialPort& receiver_;
     hal::UdpLink& app_;
@@ -56,6 +71,11 @@ private:
     Counters counters_;
     bool passThrough_ = false;
     const imu::Imu* imu_ = nullptr;
+    hal::SerialPort* nmeaOut_ = nullptr;
+    uint8_t nmeaSentences_ = 0;
+    uint64_t nmeaIntervalUs_ = 0;
+    uint64_t nmeaLastUs_[5] = {};  // per sentence type, in Sentence bit order
+    hal::SerialPort* rtcmOut_ = nullptr;
 };
 
 }  // namespace aow

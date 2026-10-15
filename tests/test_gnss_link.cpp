@@ -97,5 +97,45 @@ int main() {
     link.forwardRadio(rtcm, 3);
     CHECK(serial.tx.size() == 3 && link.counters().radioBytes == 3);
 
+    // RTCM out: a copy of what the receiver is sent, from the app and the radio.
+    FakeSerial rtcmOut;
+    link.setRtcmOut(&rtcmOut);
+    link.forwardRtcm(rtcm, sizeof rtcm);
+    link.forwardRadio(rtcm, 3);
+    link.forwardRtcm(rtcm, 4);  // a runt: not to the receiver, so not out either
+    CHECK(rtcmOut.tx.size() == sizeof rtcm + 3 && std::memcmp(rtcmOut.tx.data(), rtcm, sizeof rtcm) == 0);
+    CHECK(link.counters().rtcmOutBytes == sizeof rtcm + 3);
+    rtcmOut.writeLimit = 2;
+    link.forwardRadio(rtcm, 3);
+    CHECK(link.counters().outBytesDropped == 1 && serial.tx.size() == 3 + sizeof rtcm + 3 + 3);
+    link.setRtcmOut(nullptr);
+
+    // NMEA out: only the chosen types, as received, any talker; PANDA to the app as before.
+    const std::string vtg = "$GPVTG,054.7,T,034.4,M,005.5,N,010.2,K*48\r\n";
+    const std::string gga = "$GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,*47\r\n";
+    const std::string rmc = "$GNRMC,123519,A,4807.038,N,01131.000,E,022.4,084.4,230394,003.1,W*74\r\n";
+    FakeSerial nmeaOut;
+    link.setNmeaOut(&nmeaOut, 1 | 4, 0);  // GGA and RMC, every one
+    app.out.clear();
+    serial.rx = vtg + gga + rmc;
+    link.pollReceiver();
+    const std::string sent(nmeaOut.tx.begin(), nmeaOut.tx.end());
+    CHECK(sent == gga + rmc);
+    CHECK(link.counters().nmeaOutSent == 2 && app.out.size() == 1 && app.out[0].rfind("$PANDA", 0) == 0);
+
+    // At 5 Hz from a 10 Hz receiver: every other GGA.
+    nmeaOut.tx.clear();
+    link.setNmeaOut(&nmeaOut, 1, 5);
+    for (int i = 0; i < 10; ++i) {
+        clock.us += 100'000;
+        serial.rx = gga;
+        link.pollReceiver();
+    }
+    CHECK(nmeaOut.tx.size() == 5 * gga.size());
+    link.setNmeaOut(nullptr, 0, 0);
+    serial.rx = gga;
+    link.pollReceiver();
+    CHECK(nmeaOut.tx.size() == 5 * gga.size());
+
     return finish("gnss_link");
 }
