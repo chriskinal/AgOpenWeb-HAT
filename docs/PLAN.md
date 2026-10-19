@@ -221,6 +221,8 @@ for bench use.
 | Lock to a loopback module, so 100 Hz packets stop being broadcast on every interface | `UdpCommunicationService` `LockToSubnet` | discovery of LAN modules |
 | Service unit: start after `aow-hatd` when a HAT is fitted | `deploy/linux/agopenweb.service` | installs with no HAT |
 | ISOBUS (section 8), optional: send PGN 241 (section control on/off) and read PGN 240 (the implement's section count and reported states), as AgOpenGPS does for AOG-TaskController | `PgnBuilder`, section control | machine modules on PGN 239/229 |
+| Terminal screen (section 8, "an AgOpenWeb accessory"): send the terminal status PGN (provisional 152: state at 2 Hz, names on change and every 5 s) while a task controller's PGN 240 is heard | `PgnBuilder`, `IsobusTaskControllerService` | AgOpenGPS's own AOG-TaskController, which ignores it |
+| Terminal screen: read the command trailer on PGN 240 (accept a length past the sections), act once per new sequence through the app's own commands and rules; a terminal press neither needs nor takes the web client's control | `IsobusTaskControllerService.TryParseHeartbeat`, `MainViewModel.Commands.Track.cs` | PGN 240 without a trailer, as AOG-TaskController sends it |
 
 ## 6. Build order
 
@@ -401,7 +403,8 @@ is not. The ISOBUS programs and the critical daemon talk, but stay separate proc
 - **The link: PGN frames over UDP on loopback.** The same framing as the app link (`core/pgn`),
   so there is no second protocol, and the probes and dissectors already read it.
   - **`aow-hatd` to `aow-tcd`, `127.0.0.1:8890`.** A copy of each app frame the task
-    controller needs (254, 229, 239, 241), sent by the control thread as it arrives, unchanged,
+    controller needs (254, 229, 239, 241, and the terminal status PGN below), sent by the
+    control thread as it arrives, unchanged,
     the app's source byte (0x7F) kept. Section latency stays where it is now (1.0 to 2.7 ms to
     the bus) plus one loopback hop. No receiver on the port costs a `sendto` and nothing else.
   - **Plus a status PGN from `aow-hatd`, 10 Hz** (source 126, number provisional: **150**, to be
@@ -445,6 +448,77 @@ is not. The ISOBUS programs and the critical daemon talk, but stay separate proc
      within 2 s from the implement's own timeout, `aow-tcd` back within seconds), stop the
      ISOBUS loop on purpose (the systemd watchdog restarts it), restart `aow-hatd` (sections
      off within 2 s, back when it returns).
+
+**The terminal screen: an AgOpenWeb accessory (decided 2026-10-19; not built).** What
+`aow-tcd` puts on the tractor's own terminal becomes AgOpenWeb's operator view in small: the
+app's status line, its field card, its modules card, and the buttons for autosteer and section
+control. It replaces upstream's diagnostic pages as the first screen.
+
+- **An accessory, not a replacement. The app stays the authority.** The terminal shows only
+  what the app sends and asks the app to act; it decides nothing. Fields, tracks, sections,
+  steer settings and the steer wizard stay in AgOpenWeb, and the terminal has no pages for them.
+  The one setting it owns is ISOBUS section control, which is the task controller's own (the
+  app already follows it through PGN 240).
+- **Autosteer: engage and disengage, both through the app.** A press reaches the app, which runs
+  the same command as its own button (`ToggleAutoSteerCommand` and the section master and manual
+  commands), so every app rule applies: engage needs a track or contour, the speed limits, GPS
+  lost after 2 s, no engage with the steer wizard open. Disengage always goes through.
+  `aow-hatd` is not in the path, so the rule above (it never acts on a helper) holds, and it
+  works the same with an AiO board and a CAN adapter.
+- **Like a hardware switch, not a second browser.** A terminal press does not take or need the
+  web client's control (`ControlAuthority`): it is one more physical input in the cab, as the
+  steer and work switches in PGN 253 already are.
+- **No app, no buttons.** With no terminal status from the app for 2 s, the screen says
+  "AgOpenWeb not connected", Autosteer, Auto and Manual grey out and send nothing, and the
+  section rows show what the implement reports only.
+- **Commands ride in PGN 240**, the task controller's own PGN, as a trailer after the section
+  bytes:
+  - `marker` (0xA1: terminal commands, version 1), `sequence` (0 to 255), `action`.
+  - Actions say what is wanted, never "toggle": 1 autosteer engage, 2 autosteer disengage,
+    3 section Auto on, 4 Auto off, 5 Manual on, 6 Manual off. The terminal picks the action
+    from the state the app last reported, so a stale screen can only ask for what is already
+    so, never flip it the wrong way.
+  - `aow-tcd` raises `sequence` on the soft key's release and keeps the command in every
+    heartbeat (10 Hz) for at least 300 ms before the next, so a lost datagram loses nothing.
+    The app acts once per new `sequence`. The first heartbeat it hears after starting, or after
+    the heartbeat was lost, only sets the sequence it compares against: nothing is acted on
+    from before.
+  - `aow-tcd` sends no commands while the app's terminal status is stale.
+  - **Today's app drops a PGN 240 that is longer than its sections**
+    (`IsobusTaskControllerService.TryParseHeartbeat` wants the length exact). So `aow-tcd` adds
+    the trailer only after it has heard the app's terminal status PGN, which only an app that
+    reads the trailer sends. An older app gets upstream's PGN 240 as now.
+- **What the terminal shows, and from where.**
+  - Speed and XTE: PGN 254. Fix, age, satellites, and the steer, GPS and IMU module states:
+    `aow-hatd`'s status PGN.
+  - Everything else is the app's: a **terminal status PGN** from the app (source 0x7F, number
+    provisional: **152**, checked with 150 and 151), forwarded by `aow-hatd` to 8890 like the
+    other app frames. Two kinds, by a first byte:
+    - **State, 2 Hz:** autosteer engaged and available, section Auto and Manual on, Machine
+      module present, metric or not, tool width, worked, boundary, actual and trip areas, trip
+      distance, overlap. Rate and time left are worked out on the terminal side from speed and
+      tool width, as the browser does.
+    - **Names, on change and every 5 s:** field, job and AB line (name and heading). Every 5 s so
+      a restarted `aow-tcd` fills in without the app knowing.
+- **Pages.** A data mask of 480 x 480, the common cab size; terminals scale it, so text stays
+  large. Soft keys down the side: Autosteer, Auto, Manual, ISOBUS section control, Field,
+  Modules.
+  - **Home:** the status line (fix, age, satellites, speed, XTE, a dot each for GPS, Steer,
+    IMU, Machine and Implement); field and job; worked and left with a bar; rate and time left;
+    AB line; the sections commanded and as the implement reports them.
+  - **Field:** the app's whole field card: total, worked, remaining, time left, overlap, actual,
+    actual remaining, rate, trip area and distance. Rows that need a boundary show only with
+    one. No reset trip: that changes the app's data and stays in the app.
+  - **Modules:** the app's modules card plus the implement (name, section count and width, the
+    task controller's address), and from there upstream's diagnostics and settings pages.
+- **Our own object pool**, in `aow-tcd`'s source. Upstream's `AOG_TC.iop` stays unmodified
+  under the third-party rule. One working set and one pool, uploaded by `aow-tcd`.
+- **Later:** auxiliary inputs (joystick buttons on autosteer and Auto), a light-bar mask.
+- **Order of work** (after `aow-tcd` exists): the pool and the Home page from `aow-hatd`'s data
+  alone; then the app's terminal status PGN (section 5) and the rest of the pages; then the
+  command trailer and its handling in the app; then the button tests: a press while the screen
+  is stale, a lost datagram, the app restarted mid-press, the terminal unplugged with autosteer
+  engaged (the app carries on: losing the terminal does nothing).
 
 **Structure.**
 
