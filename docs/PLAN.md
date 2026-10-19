@@ -484,10 +484,8 @@ control. It replaces upstream's diagnostic pages as the first screen.
     the heartbeat was lost, only sets the sequence it compares against: nothing is acted on
     from before.
   - `aow-tcd` sends no commands while the app's terminal status is stale.
-  - **Today's app drops a PGN 240 that is longer than its sections**
-    (`IsobusTaskControllerService.TryParseHeartbeat` wants the length exact). So `aow-tcd` adds
-    the trailer only after it has heard the app's terminal status PGN, which only an app that
-    reads the trailer sends. An older app gets upstream's PGN 240 as now.
+  - The trailer is always sent. AgOpenWeb's parser (`TryParseHeartbeat`, which wants the length
+    exact today) changes in step: no installed base to stay compatible with, as the beta starts.
 - **What the terminal shows, and from where.**
   - Speed and XTE: PGN 254. Fix, age, satellites, and the steer, GPS and IMU module states:
     `aow-hatd`'s status PGN.
