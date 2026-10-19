@@ -43,7 +43,8 @@ size_t buildHardwareMessage(const char* message, uint8_t seconds, uint8_t color,
 // Hello reply: PGN = src (126 steer, 120 GPS, 121 IMU), five zero data bytes.
 size_t buildHelloReply(uint8_t src, uint8_t* out, size_t cap);
 
-// PGN 203: the module's IPv4 address and the first three octets of its subnet.
-size_t buildScanReply(uint8_t src, const uint8_t ip[4], uint8_t* out, size_t cap);
+// PGN 203: the module's IPv4 address, then the first three octets of the address the scan came
+// from, as AgOpenGPS's firmware (rem_ip): AgIO's Auto Set copies them into its subnet boxes.
+size_t buildScanReply(uint8_t src, const uint8_t ip[4], const uint8_t subnet[3], uint8_t* out, size_t cap);
 
 }  // namespace aow::pgn

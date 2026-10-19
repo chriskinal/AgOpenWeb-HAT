@@ -56,6 +56,8 @@ struct UdpLink {
     virtual ~UdpLink() = default;
     virtual int receive(uint8_t* buf, size_t cap) = 0;  // non-blocking
     virtual bool send(const uint8_t* buf, size_t len) = 0;
+    // The IPv4 address the last datagram receive() returned came from. False if not known.
+    virtual bool lastSource(uint8_t ip[4]) const { (void)ip; return false; }
 };
 
 struct Watchdog {

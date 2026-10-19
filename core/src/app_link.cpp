@@ -39,11 +39,16 @@ void AppLink::handle(const uint8_t* buf, int len) {
         send(out, pgn::buildHelloReply(pgn::SrcGps, out, sizeof out));
         if (imuPresent_) send(out, pgn::buildHelloReply(pgn::SrcImu, out, sizeof out));
         break;
-    case pgn::Scan:
-        send(out, pgn::buildScanReply(pgn::SrcSteer, ip_, out, sizeof out));
-        send(out, pgn::buildScanReply(pgn::SrcGps, ip_, out, sizeof out));
-        if (imuPresent_) send(out, pgn::buildScanReply(pgn::SrcImu, ip_, out, sizeof out));
+    case pgn::Scan: {
+        // The scanner's subnet, as the firmware. From loopback (the app on this unit) there is
+        // nothing to move, so our own.
+        uint8_t from[4];
+        const uint8_t* subnet = udp_.lastSource(from) && from[0] != 127 ? from : ip_;
+        send(out, pgn::buildScanReply(pgn::SrcSteer, ip_, subnet, out, sizeof out));
+        send(out, pgn::buildScanReply(pgn::SrcGps, ip_, subnet, out, sizeof out));
+        if (imuPresent_) send(out, pgn::buildScanReply(pgn::SrcImu, ip_, subnet, out, sizeof out));
         break;
+    }
     case pgn::SteerData:
         if (!pgn::decodeSteerCommand(f.data, f.len, command_)) {
             ++counters_.rejected;

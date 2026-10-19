@@ -14,6 +14,12 @@ using Bytes = std::vector<uint8_t>;
 struct FakeUdp : hal::UdpLink {
     std::deque<Bytes> in;
     std::vector<Bytes> out;
+    Bytes from;  // what lastSource() reports; empty = not known
+    bool lastSource(uint8_t ip[4]) const override {
+        if (from.size() != 4) return false;
+        std::memcpy(ip, from.data(), 4);
+        return true;
+    }
     int receive(uint8_t* buf, size_t cap) override {
         if (in.empty()) return 0;
         Bytes b = in.front();
@@ -73,6 +79,29 @@ int main() {
     CHECK(parsed(udp.out[0], f) && f.src == pgn::SrcSteer && f.pgn == pgn::ScanReply && f.len == 7);
     CHECK(std::memcmp(f.data, "\x7F\x00\x00\x01\x7F\x00\x00", 7) == 0);
     udp.out.clear();
+
+    // Scan from another host (--any-app): bytes 9-11 are the scanner's subnet, for AgIO's
+    // Auto Set; from loopback they stay our own.
+    udp.from = {192, 168, 43, 10};
+    udp.in.push_back({0x80, 0x81, 0x7F, 0xCA, 0x03, 0xCA, 0xCA, 0x05, 0x47});
+    link.poll();
+    CHECK(udp.out.size() == 2);
+    for (const Bytes& r : udp.out) {
+        CHECK(parsed(r, f) && f.pgn == pgn::ScanReply && f.len == 7);
+        CHECK(std::memcmp(f.data, "\x7F\x00\x00\x01\xC0\xA8\x2B", 7) == 0);
+    }
+    udp.out.clear();
+    {
+        const uint8_t lanIp[4] = {10, 0, 0, 5};
+        FakeUdp lanUdp;
+        AppLink lan(lanUdp, clock, lanIp);
+        lanUdp.from = {127, 0, 0, 1};
+        lanUdp.in.push_back({0x80, 0x81, 0x7F, 0xCA, 0x03, 0xCA, 0xCA, 0x05, 0x47});
+        lan.poll();
+        CHECK(lanUdp.out.size() == 2 && parsed(lanUdp.out[1], f));
+        CHECK(std::memcmp(f.data, "\x0A\x00\x00\x05\x0A\x00\x00", 7) == 0);
+    }
+    udp.from.clear();
 
     // With an IMU detected, hello and scan are answered as the IMU (121) too, as the firmware.
     link.setImuPresent(true);

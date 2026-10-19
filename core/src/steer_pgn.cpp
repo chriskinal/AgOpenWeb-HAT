@@ -52,8 +52,8 @@ size_t buildHelloReply(uint8_t src, uint8_t* out, size_t cap) {
     return build(src, src, data, sizeof data, out, cap);
 }
 
-size_t buildScanReply(uint8_t src, const uint8_t ip[4], uint8_t* out, size_t cap) {
-    const uint8_t data[7] = {ip[0], ip[1], ip[2], ip[3], ip[0], ip[1], ip[2]};
+size_t buildScanReply(uint8_t src, const uint8_t ip[4], const uint8_t subnet[3], uint8_t* out, size_t cap) {
+    const uint8_t data[7] = {ip[0], ip[1], ip[2], ip[3], subnet[0], subnet[1], subnet[2]};
     return build(src, ScanReply, data, sizeof data, out, cap);
 }
 

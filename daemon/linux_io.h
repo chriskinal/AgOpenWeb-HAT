@@ -39,6 +39,7 @@ public:
 
     int receive(uint8_t* buf, size_t cap) override;
     bool send(const uint8_t* buf, size_t len) override;
+    bool lastSource(uint8_t ip[4]) const override;
 
     uint32_t ignored() const { return ignored_; }   // datagrams from other hosts
     uint32_t ownCopies() const { return ownCopies_; }  // dropped copies from our own addresses
@@ -50,6 +51,8 @@ private:
     bool haveDest_ = false;
     bool filter_ = false;
     in_addr accept_{};
+    in_addr lastFrom_{};
+    bool haveFrom_ = false;
     uint32_t ignored_ = 0;
     uint32_t ownCopies_ = 0;
     const std::atomic<uint32_t>* own_ = nullptr;
