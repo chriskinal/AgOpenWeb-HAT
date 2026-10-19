@@ -25,6 +25,7 @@ implement on time; a slow or dropped Wi-Fi link only delays the picture.
 | Stack | AgIsoStack++'s `VirtualTerminalServer`, the commit `CMakeLists.txt` already pins | Already fetched and built. It claims the address, takes and parses the pool, answers the implement's commands |
 | CAN side | A SocketCAN interface name on the command line | `hatcan2` on the HAT, any adapter on another Linux box, or a `vcan` fed by a CAN-over-IP bridge |
 | HAT needed | No | It needs Linux and a CAN interface. It never assumes `aow-hatd` is running |
+| Link to `aow-hatd` and restarts | As `aow-tcd` (`docs/PLAN.md` section 8, "Its own service"): a status PGN to `127.0.0.1:8891` once a second; systemd `Type=notify`, `WatchdogSec`, `Restart=always`, no `Requires` either way | `aow-hatd` shows it as running or not and never waits on it |
 | Who interprets the screens | The service. It flattens the object tree into a plain draw list | The browser needs no knowledge of ISOBUS, and the renderer can never be out of step with the stack |
 | What the browser runs | Plain HTML, CSS and JavaScript: a canvas for the draw list, real input elements for typing. No native code, no plugin | The client is a browser, on any tablet. Only the picture and the touches cross Wi-Fi |
 | Link to the browser | One WebSocket, straight from the browser to the service | No change to the app's host code. Moving it behind the app's socket later keeps the same messages |

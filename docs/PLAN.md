@@ -373,12 +373,78 @@ on AgIsoStack++ (MIT). It already runs headless on SocketCAN and does section co
   Windows CAN drivers. Its own virtual terminal status page: decide when building.
 - Pin AgIsoStack++ to the commit upstream pins.
 
-**Why inside `aow-hatd`, not its own service.** Run separately it binds UDP 8888, which the
-daemon already holds; it picks its network interface by a `192.168.5.x` match and broadcasts
-there; and it has no UI off Windows. Inside the daemon the section states and speed are
-already in memory, the settings and web pages are the daemon's, and it ships in the same update
-package. A crash in the stack takes steering down with it until systemd restarts the daemon.
-That is accepted: if the implement side has failed there is no reason to keep steering.
+**Inside `aow-hatd` (decided 2026-10-10; reversed 2026-10-19, below).** Run separately,
+upstream's program binds UDP 8888, which the daemon already holds; it picks its network
+interface by a `192.168.5.x` match and broadcasts there; and it has no UI off Windows. Inside the
+daemon the section states and speed were already in memory, and it shipped in the same package.
+A crash in the stack took steering down with it, which was accepted then: "if the implement side
+has failed there is no reason to keep steering". The records below describe this build.
+
+**Its own service, `aow-tcd` (decided 2026-10-19; not built).** The task controller parses
+whatever device description any implement uploads, the same exposure `docs/PLAN_VT.md` gives as
+the reason the terminal server is its own program. A bad description must not stop steering,
+GNSS out and the brand CAN at speed: losing sections is an annoyance, losing steering mid-pass
+is not. The ISOBUS programs and the critical daemon talk, but stay separate processes.
+
+- **Where.** This repo, beside `aow-hatd` and the planned `aow-vtd`. Not in AgOpenWeb: the stack
+  is C++, the app is .NET, and the CAN interface is on the unit, not in the app's process.
+  The app keeps speaking PGNs only (254/229 out, 241 out, 240 in), as it does to upstream's
+  AOG-TaskController.
+- **What moves.** `daemon/isobus.cpp`, `daemon/isobus_vt.cpp` (the status screen on the
+  tractor's terminal), `daemon/isobus_compat/`, the tractor ECU role, and the `isobus`
+  settings. `third_party/aog-taskcontroller/` stays unmodified. `-DAOW_ISOBUS=OFF` leaves
+  `aow-tcd` out of the build; nothing ISOBUS is left in `aow-hatd`.
+- **The rule.** `aow-hatd` never waits on a helper and never changes steering because of what a
+  helper says or does not say. It only sends, non-blocking, as it already sends PGN 253. A
+  helper that is silent shows as not running on `/api/status`, nothing more. A helper that hears
+  nothing from `aow-hatd` goes to its safe state on its own.
+- **The link: PGN frames over UDP on loopback.** The same framing as the app link (`core/pgn`),
+  so there is no second protocol, and the probes and dissectors already read it.
+  - **`aow-hatd` to `aow-tcd`, `127.0.0.1:8890`.** A copy of each app frame the task
+    controller needs (254, 229, 239, 241), sent by the control thread as it arrives, unchanged,
+    the app's source byte (0x7F) kept. Section latency stays where it is now (1.0 to 2.7 ms to
+    the bus) plus one loopback hop. No receiver on the port costs a `sendto` and nothing else.
+  - **Plus a status PGN from `aow-hatd`, 10 Hz** (source 126, number provisional: **150**, to be
+    checked against AgOpenGPS's and AgOpenWeb's PGN lists before use): app link up, GNSS speed
+    and fix quality (the tractor ECU role's speed with no app), the unit's LAN address (for
+    the terminal screen), version. Sent from the control loop beside PGN 250. It is the
+    heartbeat: `aow-tcd` treats 2 s without it as `aow-hatd` gone, and sets every section off,
+    as it does now when the app goes quiet.
+  - **`aow-tcd` to the app, `127.0.0.1:9999`.** PGN 240 straight from `aow-tcd`, source 0x80,
+    as upstream sends it; `aow-hatd` does not relay it. Check that AgOpenWeb takes PGN 240 from a
+    loopback port other than 8888's.
+  - **`aow-tcd` to `aow-hatd`, `127.0.0.1:8891`, 1 Hz** (source 0x80, number provisional:
+    **151**): running, address claimed, implement connected, section count, tractor ECU
+    state. A port of its own, so the app link's sender rule (only the app, only source 0x7F)
+    stays as it is. 3 s without it: `/api/status` shows the task controller as not running.
+    `aow-vtd` reports on the same port when it is built.
+- **Restarts are systemd's.** `aow-tcd.service`: `Type=notify`, `WatchdogSec=5` with
+  `sd_notify` pings from the ISOBUS loop (catches a hang as well as a crash), `Restart=always`,
+  `RestartSec=1`, normal priority. `After=aow-hatd.service` only: no `Requires` or `BindsTo` in
+  either direction, so neither restarts the other. `/api/status` counts its restarts (from
+  systemd's `NRestarts`). Enabled when `isobus.enabled` is on; the installer and the ISOBUS
+  page's save switch it.
+- **Settings and the page.** `aow-tcd` owns the ISOBUS settings, in their own file,
+  `/etc/aow-hat/isobus.json`, so no two processes write `settings.json`. It serves its status
+  and settings as JSON on `127.0.0.1:8092`; `aow-hatd`'s web thread passes `/api/isobus`
+  through to it, so the ISOBUS page, its tile and its URL stay as they are. No answer: the page
+  says the task controller is not running.
+- **Curvature steering** (scope item 3), if it is ever built, is steering and belongs in
+  `aow-hatd`, with its stop paths and tests. It would need its own address claim there, or
+  commands carried to `aow-tcd`; decide when it is built.
+- **Order of work.**
+  1. In `aow-hatd`: the forwarding to 8890, the status PGN, the 8891 listener, unit tests for
+     each in `tests/test_app_link.cpp`.
+  2. `aow-tcd`: a `main` around the moved files, reading its PGNs from 8890 instead of
+     `Shared`, the 2 s heartbeat rule with a test, `sd_notify`.
+  3. The `/api/isobus` pass-through and the settings file move (the old `isobus` section in
+     `settings.json` is read once and carried over).
+  4. Service unit, installer, `package.sh`; `aow-hatd` loses its ISOBUS code.
+  5. The three ISOBUS probes start both programs. Then on the dev CM4 over the linked channels:
+     kill `aow-tcd` with steering running (steering carries on, sections off on the implement
+     within 2 s from the implement's own timeout, `aow-tcd` back within seconds), stop the
+     ISOBUS loop on purpose (the systemd watchdog restarts it), restart `aow-hatd` (sections
+     off within 2 s, back when it returns).
 
 **Structure.**
 
