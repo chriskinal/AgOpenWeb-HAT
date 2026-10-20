@@ -323,8 +323,12 @@ low (the CM4 stays off).
 | HAT on `5V_IO`: U1 ~15 µA, U3 + R14 ~6 µA, Q1 holding `GLOBAL_EN` against the CM4's 100 k pull-up ~50 µA, leakage ~5 µA | ~76 µA at 5 V ≈ 35 µA at 12 V |
 | **Total** | **≈ 0.31 mA ≈ 7.5 mAh/day ≈ 2.7 Ah/year** |
 
-Negligible against a tractor battery. **Check (issues H6):** whether an NVMe in the PCIe slot adds to
-the IO board's 150 µA. The slot's 3.3 V converter runs from 12 V.
+Negligible against a tractor battery. Measured on the whole system booting from an SD card: under
+1 mA (issues B7).
+
+**An NVMe in the PCIe slot adds about 80 mA with the key off** (measured 2026-10-19, issues H6). The
+slot's supply runs from the IO board's 12 V, which the HAT does not switch, so it stays on after
+shutdown: about 1.9 Ah a day, a 100 Ah battery in about 50 days.
 
 ### 4.6 The 12 V lead (panel connector → IO board J20)
 
