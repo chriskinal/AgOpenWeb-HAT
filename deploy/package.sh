@@ -33,7 +33,7 @@ done
 [ -f "$KEY" ] || { echo "signing key not found: $KEY" >&2; exit 1; }
 for tool in cmake dtc openssl; do command -v $tool >/dev/null || { echo "$tool not found" >&2; exit 1; }; done
 
-BUILD="$REPO/build-package"
+BUILD="${AOW_PACKAGE_BUILD:-$REPO/build-package}"  # deploy/dev.sh puts it in its build volume
 cmake -S "$REPO" -B "$BUILD" -DCMAKE_BUILD_TYPE=Release ${VERSION:+-DAOW_VERSION="$VERSION"} >/dev/null
 cmake --build "$BUILD" --target aow-hatd -j"$(nproc)" >/dev/null
 VERSION="$("$BUILD/aow-hatd" --version | awk '{print $2}')"

@@ -95,8 +95,9 @@ The Teensy firmware is not being rewritten and nothing is ported back to it.
   (headless, UI on port 5174) as services. The hardware watchdog is live while the daemon
   runs: stop the service, do not kill the process. Device names: CAN `hatcan1`-`hatcan3`,
   GNSS `/dev/ttyAMA5`, RS-232 `/dev/ttyAMA2` and `/dev/ttyAMA3`, ADC `/dev/spidev0.3`.
-  Sync with `rsync -a --exclude build --exclude hardware --exclude .git ./
-  chris@192.168.4.217:AgOpenWeb-HAT/`, build there with cmake.
+  Build on the Mac (`deploy/dev.sh`, below) and install the package through its update page; the
+  CM4 needs no compiler (an SD-card unit will not have one). Its `~/AgOpenWeb-HAT` rsync copy is
+  only for running the Python probes there.
 
 ## Layout
 
@@ -128,10 +129,13 @@ cmake -B build && cmake --build build && ctest --test-dir build
 # Without cmake (e.g. on the Mac): compile a test directly
 c++ -std=c++17 -Wall -Wextra -Icore/include -Ihal/include core/src/*.cpp tests/test_pgn.cpp -o /tmp/t && /tmp/t
 
-# The daemon on the Mac: build and probe it in a Trixie arm64 container (same OS/arch as the CM4)
-docker run --rm -v "$PWD":/src:ro debian:trixie bash -c 'apt-get update -qq && apt-get install -y -qq g++ cmake python3 >/dev/null &&
-  cmake -S /src -B /b && cmake --build /b -j && ctest --test-dir /b &&
-  { /b/aow-hatd & sleep 0.3; python3 /src/tests/pgn_probe.py --rate 100 -n 500; }'
+# The daemon on the Mac: a Trixie arm64 container (the CM4's OS/arch; image in .devcontainer/,
+# builds kept in the Docker volume aow-hat-build). Needs OrbStack (or Docker Desktop) running.
+deploy/dev.sh test                          # build + ctest, incremental
+deploy/dev.sh package --version 0.2.20      # signed .aowpkg + .tar.gz into dist/
+deploy/dev.sh install dist/aow-hat-0.2.20-linux-arm64.aowpkg   # to the dev CM4's update page
+deploy/dev.sh shell                         # e.g. run build/main/aow-hatd and tests/pgn_probe.py
+# VS Code: "Reopen in Container" uses the same image and volume; clangd sees the Linux headers.
 ```
 
 `tests/pgn_probe.py` stands in for the app (binds UDP 9999, so stop AgOpenWeb first): hello,

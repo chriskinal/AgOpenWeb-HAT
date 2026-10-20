@@ -1,0 +1,20 @@
+{
+  // The same image and build volume as deploy/dev.sh, so the editor sees what the CM4 sees:
+  // Linux headers (SocketCAN, GPIO, spidev) and the compile database of the last build.
+  "name": "AgOpenWeb-HAT (Trixie arm64)",
+  "build": { "dockerfile": "Dockerfile" },
+  "workspaceMount": "source=${localWorkspaceFolder},target=/src,type=bind",
+  "workspaceFolder": "/src",
+  "mounts": ["source=aow-hat-build,target=/build,type=volume"],
+  "postCreateCommand": "cmake -S /src -B /build/main -DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
+  "customizations": {
+    "vscode": {
+      "extensions": ["llvm-vs-code-extensions.vscode-clangd", "ms-vscode.cmake-tools"],
+      "settings": {
+        "clangd.arguments": ["--compile-commands-dir=/build/main", "--header-insertion=never"],
+        "cmake.buildDirectory": "/build/main",
+        "C_Cpp.intelliSenseEngine": "disabled"
+      }
+    }
+  }
+}
