@@ -134,7 +134,7 @@ c++ -std=c++17 -Wall -Wextra -Icore/include -Ihal/include core/src/*.cpp tests/t
 deploy/dev.sh test                          # build + ctest, incremental
 deploy/dev.sh package --version 0.2.20      # signed .aowpkg + .tar.gz into dist/
 deploy/dev.sh install dist/aow-hat-0.2.20-linux-arm64.aowpkg   # to the dev CM4's update page
-deploy/dev.sh shell                         # e.g. run build/main/aow-hatd and tests/pgn_probe.py
+deploy/dev.sh shell                         # builds are in /build/main there, e.g. /build/main/aow-hatd
 # VS Code: "Reopen in Container" uses the same image and volume; clangd sees the Linux headers.
 ```
 
