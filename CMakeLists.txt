@@ -10,9 +10,10 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-# ISOBUS (docs/PLAN.md section 8): AgIsoStack++ (MIT), followed close to upstream (its VT server and
-# client are changing fast). AOG-TaskController's file builds unchanged against it; after a move,
-# run the three tests/isobus_*probe.py on vcan1.
+# ISOBUS (docs/PLAN.md section 8): AgIsoStack++ (MIT) at upstream's latest commit. Pinned so a build
+# is repeatable, not to hold it back: move the pin to upstream HEAD before each package, then run
+# the unit tests and the three tests/isobus_*probe.py on vcan1. AOG-TaskController's file must
+# keep building unchanged.
 # Fetched before our warning flags are set, so they do not apply to it. Needs the network at
 # the first configure; -DAOW_ISOBUS=OFF builds the daemon without the stack.
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
