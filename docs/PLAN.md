@@ -366,6 +366,12 @@ checkout.
 
 Decided 2026-10-10. Nothing here is built.
 
+**Testing without implements (2026-10-22).** We own none. The task controller is tested against
+`tests/isobus_implement` (one boom, fixed sections); its probes move to the simulators of the
+separate MIT repository `isobus-implement-sim` (<https://github.com/chriskinal/isobus-implement-sim>,
+private for now) as they are built: booms, section geometry and rates from profile files, and
+faults on demand.
+
 **Why now.** The Teensy had too little memory for an ISOBUS stack. The CM4 has about 1.5 GB
 free with the daemon and AgOpenWeb running; a stack with a large implement pool needs a few MB.
 The RT kernel ships `can-j1939`, and ISOBUS is 250 kbit/s extended-frame CAN, which every HAT

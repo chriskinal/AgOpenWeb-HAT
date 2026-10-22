@@ -124,6 +124,14 @@ to start) and the browser scales the canvas.
 
 Each phase leaves something that runs and can be checked on `vcan1`.
 
+**Step −1: implement simulators (2026-10-22).** We own no ISOBUS implements, and open tools for
+simulating them barely exist. A separate MIT repository, `isobus-implement-sim`
+(<https://github.com/chriskinal/isobus-implement-sim>, private for now; plan in its
+`docs/PLAN.md`), builds them: machines from profile files, driven by commands, with faults on
+demand. Phases 1 to 5 below run against it, on `vcan1` and on CAN3 wired to CAN2. Phase 0 (a real
+implement) stays, but moves after them: a simulator only proves we match our own reading of the
+standard.
+
 | Phase | What | Done when |
 |---|---|---|
 | 0 | **Bus trial, no code.** AgIsoVirtualTerminal on a Linux box against a real implement, on a direct CAN interface and then through the CAN-over-IP bridge | the implement's screens load and stay up for an hour on each link. If they do not load through the bridge, that route is closed before any code is written |
