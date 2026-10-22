@@ -156,6 +156,8 @@ vcan1 (stop the service first).
 simulated implement on vcan1.
 `tests/isobus_vt_probe.py build/aow-hatd build/isobus_vt build/isobus_implement` checks the status
 screen for a tractor's terminal against a stand-in terminal on vcan1.
+`tests/loop_load.py [secs]` runs on the HAT with CAN2 and CAN3 linked and the service running: the
+control loop's timing (`/api/status` `loop`) idle, with CAN3 flooding CAN2, and with every core busy.
 On the HAT: `tests/adc_read.py` reads all eight ADC channels, `tests/hat_bench.py` plays the app
 with a fixed target angle for a pot-and-meter bench, and `aow-hatd --board hat --indicator-test`
 cycles the LEDs and plays the chime (stop the service first for both daemon tests).
