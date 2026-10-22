@@ -213,6 +213,23 @@ same to each other. The daemon now drops datagrams from any host but `--app` (lo
 default), counts them, and logs a warning naming the sender. `--any-app` turns the filter off
 for bench use.
 
+**Loop timing under load (2026-10-22, v0.2.22).** `/api/status` `loop` gives the control loop's
+worst cases over the last 10 s and since start: how late a tick starts against its schedule,
+how long its work takes, how long the input read takes (the ADC on SPI0, shared with the three
+CAN controllers), ticks missed, and ticks over 1 ms late; the summary log line every 60 s
+repeats them. On the dev CM4 (CAN2 and CAN3 linked, the app connected, no motor), 60 s each:
+
+| Load | CAN2 frames/s | Late max | Work max | Inputs max | Missed, >1 ms late |
+|---|---|---|---|---|---|
+| none | 44 | 424 us | 628 us | 560 us | 0, 0 |
+| CAN3 flooding CAN2 at bus rate | 1,723 | 322 us | 459 us | 424 us | 0, 0 |
+| the flood and a normal-priority busy loop on every core | 1,723 | 332 us | 410 us | 382 us | 0, 0 |
+
+A saturated 250 kbit/s bus and four busy cores leave the loop at priority 80 untouched; the
+SPI0 shared with the CAN controllers adds nothing measurable. Idle is a little worse than
+loaded because the `ondemand` governor drops the cores to 600 MHz (1.5 GHz under load). This
+is the case for `aow-vtd` (`docs/PLAN_VT.md`): a pool upload cannot go faster than the bus.
+
 ## 5. Changes needed in AgOpenWeb
 
 | Change | Where | Must not break |

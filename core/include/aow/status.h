@@ -4,6 +4,7 @@
 
 #include <cstdint>
 
+#include "aow/loop_timing.h"
 #include "aow/port_monitor.h"
 
 namespace aow {
@@ -64,6 +65,9 @@ struct Status {
 
     // Times each CAN channel's interface was restarted after it stopped sending (can_watch.h).
     uint32_t canRestarts[3] = {};
+
+    // The control loop's own timing (loop_timing.h).
+    LoopStats loop;
 
     // The four status LEDs (indicators::Color as numbers: 0 off, 1 red, 2 amber, 3 green, 4 blue).
     uint8_t leds[4] = {};

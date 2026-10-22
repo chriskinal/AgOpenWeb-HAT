@@ -102,7 +102,10 @@ to start) and the browser scales the canvas.
 - **One operator.** Any number of browsers may watch; one at a time may press. The service
   enforces it: the first to press holds control until idle for a set time or until it lets go.
 - **The service never raises its own priority** and takes no lock that `aow-hatd`'s control
-  thread uses. The two share only the CAN interface.
+  thread uses. The two share only the CAN interface, and below it SPI0. Measured 2026-10-22
+  (`docs/PLAN.md` section 4, "Loop timing under load"): CAN2 saturated at bus rate with every
+  core busy at normal priority left the control loop's timing unchanged. Check `/api/status`
+  `loop` again with a real pool upload in phase 0.
 - **An unsupported object is drawn as a labelled box**, never dropped silently and never a
   reason to refuse the pool.
 - **A bad pool is refused, not survived.** The stack reports the faulting object; the service

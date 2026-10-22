@@ -153,6 +153,18 @@ Response status(Backend& b, const char* version) {
     }
     JsonArray canRestarts = doc["canRestarts"].to<JsonArray>();  // AOW HAT: see daemon/can_watch.h
     for (uint32_t n : st.canRestarts) canRestarts.add(n);
+    JsonObject loop = doc["loop"].to<JsonObject>();  // AOW HAT: the control loop's timing (aow/loop_timing.h)
+    loop["periodUs"] = st.loop.periodUs;
+    loop["ticks"] = st.loop.ticks;
+    loop["missed"] = st.loop.missed;
+    loop["lateOver1ms"] = st.loop.lateOver1ms;
+    loop["windowS"] = st.loop.windowS;
+    loop["lateMaxUs"] = st.loop.lateMaxUs;
+    loop["workMaxUs"] = st.loop.workMaxUs;
+    loop["inputsMaxUs"] = st.loop.inputsMaxUs;
+    loop["lateMaxEverUs"] = st.loop.lateMaxEverUs;
+    loop["workMaxEverUs"] = st.loop.workMaxEverUs;
+    loop["inputsMaxEverUs"] = st.loop.inputsMaxEverUs;
     isobusStatusJson(b.isobusStatus(), doc["isobus"].to<JsonObject>());  // AOW HAT: not in the firmware's status
     static const char* const kColors[] = {"off", "red", "amber", "green", "blue"};
     JsonArray leds = doc["leds"].to<JsonArray>();

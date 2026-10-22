@@ -157,13 +157,19 @@ int openSignalFd() {
     return signalfd(-1, &set, SFD_CLOEXEC);
 }
 
-int openTickTimer() {
-    const int fd = timerfd_create(CLOCK_MONOTONIC, TFD_CLOEXEC);
-    if (fd < 0) return -1;
+// Arms (or rearms) the tick timer: the first tick one period from now, then every period.
+// Rearming clears ticks that piled up during startup.
+bool armTickTimer(int fd) {
     itimerspec spec{};
     spec.it_interval.tv_nsec = kTickNs;
     spec.it_value.tv_nsec = kTickNs;
-    if (timerfd_settime(fd, 0, &spec, nullptr) < 0) {
+    return timerfd_settime(fd, 0, &spec, nullptr) == 0;
+}
+
+int openTickTimer() {
+    const int fd = timerfd_create(CLOCK_MONOTONIC, TFD_CLOEXEC);
+    if (fd < 0) return -1;
+    if (!armTickTimer(fd)) {
         close(fd);
         return -1;
     }
@@ -462,6 +468,10 @@ int main(int argc, char** argv) {
     uint64_t ticks = 0, nextSummary = summaryTicks, nextTurnSensor = 0, nextMotorProcess = 0, nextKick = 0;
     bool watchdogOn = false, isoAppLink = false;
     int code = 0;
+    // Tick n is due n periods after this rearm; each tick's lateness is measured from that.
+    aow::LoopTiming loopTiming(kTickNs / 1000, 1000);  // worst cases over 10 s windows
+    armTickTimer(tickFd);
+    loopTiming.start(clock.nowUs());
     for (;;) {
         fds.clear();
         fds.push_back({udp.fd(), POLLIN, 0});
@@ -504,6 +514,7 @@ int main(int argc, char** argv) {
             }
         }
         if (fds[kTick].revents) {
+            const uint64_t tickBeginUs = clock.nowUs();
             uint64_t expirations = 0;
             if (read(tickFd, &expirations, sizeof expirations) == sizeof expirations) ticks += expirations;
             if (!opt.noWatchdog) {
@@ -543,7 +554,10 @@ int main(int argc, char** argv) {
                 gnss.setNmeaCorrected(s.ports.nmeaCorrected);
             }
             const aow::Settings& settings = autosteer.settings();
-            const aow::steer::Output out = autosteer.tick(board.read(settings));
+            const uint64_t inputsBeginUs = clock.nowUs();
+            const aow::steer::Inputs inputs = board.read(settings);
+            const uint64_t inputsEndUs = clock.nowUs();
+            const aow::steer::Output out = autosteer.tick(inputs);
             motor->command(out.enable, out.pwm);
             if (ticks >= nextMotorProcess) {  // 50 Hz, as the firmware's motor task
                 nextMotorProcess = ticks + 2;
@@ -637,12 +651,18 @@ int main(int argc, char** argv) {
             }
             std::copy(std::begin(ledColors), std::end(ledColors), std::begin(st.leds));
             for (int i = 0; i < 3; ++i) st.canRestarts[i] = shared.canRestarts[i].load(std::memory_order_relaxed);
+            st.loop = loopTiming.stats();  // up to the last tick: this one is recorded below
             shared.setStatus(st);
 
             if (ticks >= nextSummary) {
                 nextSummary = ticks + summaryTicks;
                 logSummary(app, &gnss, autosteer, &udp);
+                const aow::LoopStats& ls = loopTiming.stats();
+                LOG_INFO(System, "Loop: late max %u us (ever %u), work max %u us (ever %u), inputs max %u us (ever %u), missed %u, >1 ms late %u",
+                         ls.lateMaxUs, ls.lateMaxEverUs, ls.workMaxUs, ls.workMaxEverUs, ls.inputsMaxUs,
+                         ls.inputsMaxEverUs, ls.missed, ls.lateOver1ms);
             }
+            loopTiming.record(ticks, tickBeginUs, inputsBeginUs, inputsEndUs, clock.nowUs());
         }
     }
 
