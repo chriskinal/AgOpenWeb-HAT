@@ -61,7 +61,8 @@ public:
     std::vector<std::uint8_t> load_version(const std::vector<std::uint8_t>&, isobus::NAME) override { return {}; }
     bool save_version(const std::vector<std::uint8_t>&, const std::vector<std::uint8_t>&, isobus::NAME) override { return true; }
     bool delete_version(const std::vector<std::uint8_t>&, isobus::NAME) override { return true; }
-    bool delete_all_versions(isobus::NAME) override { return true; }
+    std::vector<std::array<std::uint8_t, 32>> get_extended_versions(isobus::NAME) override { return {}; }
+    bool delete_all_versions(std::uint8_t, isobus::NAME) override { return true; }
     bool delete_object_pool(isobus::NAME) override { return true; }
 
     void step() {

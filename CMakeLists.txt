@@ -10,7 +10,9 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-# ISOBUS (docs/PLAN.md section 8): AgIsoStack++ (MIT), at the commit AOG-TaskController pins.
+# ISOBUS (docs/PLAN.md section 8): AgIsoStack++ (MIT), followed close to upstream (its VT server and
+# client are changing fast). AOG-TaskController's file builds unchanged against it; after a move,
+# run the three tests/isobus_*probe.py on vcan1.
 # Fetched before our warning flags are set, so they do not apply to it. Needs the network at
 # the first configure; -DAOW_ISOBUS=OFF builds the daemon without the stack.
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
@@ -20,7 +22,7 @@ if(AOW_ISOBUS)
   include(FetchContent)
   set(CAN_DRIVER "SocketCAN" CACHE STRING "" FORCE)
   FetchContent_Declare(isobus
-    URL https://github.com/Open-Agriculture/AgIsoStack-plus-plus/archive/c0e1ebb06a2ad9d5bf86c98b3d028ab8fa350130.tar.gz
+    URL https://github.com/Open-Agriculture/AgIsoStack-plus-plus/archive/42ea80e14e4ad1340697bda632b7f6abdcd54826.tar.gz
     DOWNLOAD_EXTRACT_TIMESTAMP TRUE)
   FetchContent_MakeAvailable(isobus)
 endif()
