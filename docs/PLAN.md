@@ -228,7 +228,8 @@ repeats them. On the dev CM4 (CAN2 and CAN3 linked, the app connected, no motor)
 A saturated 250 kbit/s bus and four busy cores leave the loop at priority 80 untouched; the
 SPI0 shared with the CAN controllers adds nothing measurable. Idle is a little worse than
 loaded because the `ondemand` governor drops the cores to 600 MHz (1.5 GHz under load). This
-is the case for `aow-vtd` (`docs/PLAN_VT.md`): a pool upload cannot go faster than the bus.
+is the case for the terminal's CAN gateway on CAN2 (`docs/PLAN_VT.md`): a pool upload cannot go
+faster than the bus.
 
 ## 5. Changes needed in AgOpenWeb
 
@@ -386,7 +387,8 @@ channel does.
    ISOBUS guidance command want either a bought unlock or an authenticated (TIM) session. Nobody
    has the certificates, so this covers unlocked tractors and open valves only: uncommon.
 4. Virtual terminal server (the implement's screen in AgOpenWeb): not part of this phase.
-   Planned separately in `docs/PLAN_VT.md` (2026-10-13), as its own service; nothing built.
+   Planned in `docs/PLAN_VT.md`: since 2026-10-24 the terminal runs in AgOpenWeb on the
+   AgIsoStack-dotnet wrapper, and this repo provides a CAN gateway to it; nothing built here.
 
 **Source.** AOG-TaskController (AgOpenGPS-Official, GPL-3, `/Users/chris/Code/AOG-TaskController`)
 on AgIsoStack++ (MIT). It already runs headless on SocketCAN and does section control only.
@@ -407,15 +409,16 @@ A crash in the stack took steering down with it, which was accepted then: "if th
 has failed there is no reason to keep steering". The records below describe this build.
 
 **Its own service, `aow-tcd` (decided 2026-10-19; not built).** The task controller parses
-whatever device description any implement uploads, the same exposure `docs/PLAN_VT.md` gives as
-the reason the terminal server is its own program. A bad description must not stop steering,
-GNSS out and the brand CAN at speed: losing sections is an annoyance, losing steering mid-pass
-is not. The ISOBUS programs and the critical daemon talk, but stay separate processes.
+whatever device description any implement uploads, the exposure the first terminal plan
+(`docs/PLAN_VT.md`, 2026-10-13) gave as the reason its server would be its own program. A bad
+description must not stop steering, GNSS out and the brand CAN at speed: losing sections is an
+annoyance, losing steering mid-pass is not. The ISOBUS programs and the critical daemon talk,
+but stay separate processes.
 
-- **Where.** This repo, beside `aow-hatd` and the planned `aow-vtd`. Not in AgOpenWeb: the stack
-  is C++, the app is .NET, and the CAN interface is on the unit, not in the app's process.
-  The app keeps speaking PGNs only (254/229 out, 241 out, 240 in), as it does to upstream's
-  AOG-TaskController.
+- **Where.** This repo, beside `aow-hatd` and the planned terminal gateway. Not in AgOpenWeb:
+  the stack is C++, the app is .NET, and the CAN interface is on the unit, not in the app's
+  process. The app keeps speaking PGNs only (254/229 out, 241 out, 240 in), as it does to
+  upstream's AOG-TaskController.
 - **What moves.** `daemon/isobus.cpp`, `daemon/isobus_vt.cpp` (the status screen on the
   tractor's terminal), `daemon/isobus_compat/`, the tractor ECU role, and the `isobus`
   settings. `third_party/aog-taskcontroller/` stays unmodified. `-DAOW_ISOBUS=OFF` leaves
@@ -444,7 +447,8 @@ is not. The ISOBUS programs and the critical daemon talk, but stay separate proc
     **151**): running, address claimed, implement connected, section count, tractor ECU
     state. A port of its own, so the app link's sender rule (only the app, only source 0x7F)
     stays as it is. 3 s without it: `/api/status` shows the task controller as not running.
-    `aow-vtd` reports on the same port when it is built.
+    The terminal's CAN gateway (`docs/PLAN_VT.md` section 3) reports on the same port when it is
+    built.
 - **Restarts are systemd's.** `aow-tcd.service`: `Type=notify`, `WatchdogSec=5` with
   `sd_notify` pings from the ISOBUS loop (catches a hang as well as a crash), `Restart=always`,
   `RestartSec=1`, normal priority. `After=aow-hatd.service` only: no `Requires` or `BindsTo` in

@@ -4,7 +4,7 @@ This file provides guidance to Claude Code when working with this repository.
 
 **Key documentation:**
 - **[docs/PLAN.md](docs/PLAN.md)** - Software plan: decisions, firmware-to-daemon mapping, safety rules, build phases
-- **[docs/PLAN_VT.md](docs/PLAN_VT.md)** - Plan for a virtual terminal service (the implement's screens in AgOpenWeb); nothing built
+- **[docs/PLAN_VT.md](docs/PLAN_VT.md)** - The virtual terminal (the implement's screens in AgOpenWeb): runs in the app on the AgIsoStack-dotnet wrapper; this repo's part is the CAN gateway, not built
 - **[hardware/hat/HARDWARE_HAT_DESIGN.md](hardware/hat/HARDWARE_HAT_DESIGN.md)** - What the board does and why: mechanical, power, circuits, pinouts
 - **[hardware/hat/HARDWARE_HAT_NETLIST.md](hardware/hat/HARDWARE_HAT_NETLIST.md)** - Every part and net
 - **[hardware/hat/HARDWARE_HAT_ISSUES.md](hardware/hat/HARDWARE_HAT_ISSUES.md)** - Open decisions (H#) and bench checks (B#)
