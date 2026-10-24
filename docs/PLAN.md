@@ -573,8 +573,9 @@ control. It replaces upstream's diagnostic pages as the first screen.
   and the log warns after 5 s without that.
 - Cost on the CM4: the stack takes about 4.5 minutes to build the first time; the binary grew
   from 0.7 to 1.0 MB; resident memory 39 MB with ISOBUS running against 23 MB without.
-- AgIsoStack++ is fetched by CMake as a tarball of the pinned commit (no git needed);
-  `-DAOW_ISOBUS=OFF` builds without it. Its logging macros share names with the daemon's:
+- AgIsoStack++ is fetched by CMake as a tarball of the pinned commit;
+  `-DAOW_ISOBUS=OFF` builds without it. Upstream fixes not yet merged are carried as patches
+  in `third_party/agisostack-patches/`, applied with `git apply` after the download. Its logging macros share names with the daemon's:
   see the include order at the top of `daemon/isobus.cpp`.
 - Not yet tried against a second real CAN node.
 
@@ -707,10 +708,17 @@ tractor's virtual terminal, carried over.
   off, waiting or connected.
 - `tests/isobus_vt.cpp` is a stand-in terminal with no display, on AgIsoStack++'s VT server: it
   parses the pool as AgIsoVT would and prints what a terminal would show.
-  `tests/isobus_vt_probe.py` (17 checks) uses it on vcan: the pool is accepted, the pages fill,
+  `tests/isobus_vt_probe.py` (20 checks) uses it on vcan: the pool is accepted, the pages fill,
   an implement and its sections show, a soft key changes the page, the tractor ECU switch is
-  saved, the app going away shows, a different terminal is taken when the first leaves, and
-  with the setting off no screen is offered.
+  saved, the app going away shows, a different terminal is taken when the first leaves, with
+  the setting off no screen is offered, and a slow terminal (each clear-to-send 150 ms late,
+  so the upload takes about 19 s) still gets the screen.
+- 2026-10-24, found on the Wi-Fi terminal bench: the daemon gave up on a terminal that had not
+  connected within 10 s of being offered the screen, so an upload on a busy bus (another
+  implement uploading) was cut off and retried for ever. It now lets a terminal go only after
+  10 s without hearing from it. On the same bench the stack lost single frames (an ETP data
+  packet or DPO) because two threads fill its single-producer transmit queue: upstream PR #793,
+  carried as a patch until it is merged.
 - Also run with the stand-in on `hatcan3` against the installed daemon on `hatcan2`: the screen
   went up in about 3 s.
 - AgIsoStack++ ties a partner to the first terminal whose NAME matches and never to another, so

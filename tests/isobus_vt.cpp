@@ -1,7 +1,10 @@
 // A stand-in ISOBUS virtual terminal with no display, for tests/isobus_vt_probe.py: it takes an
 // object pool from a client (the daemon's status screen), and prints what a terminal would show.
 //
-//   isobus_vt INTERFACE
+//   isobus_vt INTERFACE [IDENTITY] [CTS_DELAY_MS]
+//
+// CTS_DELAY_MS makes it a slow terminal: each transport protocol clear-to-send goes out that late,
+// so a client's upload takes longer (every batch waits for one).
 //
 // stdout, one line each:  "connected"  "pool ok" / "pool bad OBJECT"  "mask ID"
 //                         "string ID TEXT" (newlines as |)   "number ID VALUE"
@@ -32,6 +35,34 @@ static void onSignal(int) { running = false; }
 
 using WorkingSet = isobus::VirtualTerminalServerManagedWorkingSet;
 
+// The SocketCAN driver, with clear-to-send frames (TP and ETP) held back for a while.
+class SlowClearToSend : public isobus::CANHardwarePlugin {
+public:
+    SlowClearToSend(std::shared_ptr<isobus::SocketCANInterface> inner, unsigned delayMs)
+        : inner_(std::move(inner)), delayMs_(delayMs) {}
+    std::string get_name() const override { return inner_->get_name(); }
+    bool get_is_valid() const override { return inner_->get_is_valid(); }
+    void close() override { inner_->close(); }
+    void open() override { inner_->open(); }
+    bool read_frame(isobus::CANMessageFrame& frame) override { return inner_->read_frame(frame); }
+    bool write_frame(const isobus::CANMessageFrame& frame) override {
+        const std::uint32_t pf = (frame.identifier >> 16) & 0xFF;
+        const bool cts = frame.dataLength > 0 && ((pf == 0xEC && frame.data[0] == 0x11) || (pf == 0xC8 && frame.data[0] == 0x15));
+        if (!cts || delayMs_ == 0) return inner_->write_frame(frame);
+        auto inner = inner_;
+        const unsigned ms = delayMs_;
+        std::thread([inner, frame, ms] {
+            std::this_thread::sleep_for(std::chrono::milliseconds(ms));
+            inner->write_frame(frame);
+        }).detach();
+        return true;
+    }
+
+private:
+    std::shared_ptr<isobus::SocketCANInterface> inner_;
+    unsigned delayMs_;
+};
+
 class Terminal : public isobus::VirtualTerminalServer {
 public:
     using isobus::VirtualTerminalServer::VirtualTerminalServer;
@@ -46,6 +77,7 @@ public:
     std::uint16_t get_data_mask_area_size_x_pixels() const override { return 480; }
     std::uint16_t get_data_mask_area_size_y_pixels() const override { return 480; }
     void suspend_working_set(std::shared_ptr<WorkingSet>) override {}
+    void handle_unexpected_working_set_shutdown(std::shared_ptr<WorkingSet>, UnexpectedShutdownReason) override {}
     SupportedWideCharsErrorCode get_supported_wide_chars(std::uint8_t, std::uint16_t, std::uint16_t, std::uint8_t& ranges,
                                                          std::vector<std::uint8_t>&) override {
         ranges = 0;
@@ -65,20 +97,17 @@ public:
     bool delete_all_versions(std::uint8_t, isobus::NAME) override { return true; }
     bool delete_object_pool(isobus::NAME) override { return true; }
 
+    // Called from update() once a pool has been parsed and answered; on success the server has
+    // already made it the active working set.
+    void object_pool_parse_finished(std::shared_ptr<WorkingSet> ws, bool success) override {
+        if (success)
+            std::printf("pool ok\nconnected\n");
+        else
+            std::printf("pool bad %u\n", ws->get_object_pool_faulting_object_id());
+    }
+
     void step() {
         update();
-        using State = WorkingSet::ObjectPoolProcessingThreadState;
-        for (const auto& ws : managedWorkingSetList) {
-            const State state = ws->get_object_pool_processing_state();
-            if (state == State::Fail && !reportedBad_) {
-                reportedBad_ = true;
-                std::printf("pool bad %u\n", ws->get_object_pool_faulting_object_id());
-            }
-            if (state == State::Joined && !activeWorkingSet) {
-                activeWorkingSet = ws;
-                std::printf("pool ok\nconnected\n");
-            }
-        }
         if (activeWorkingSet) report();
         std::fflush(stdout);
     }
@@ -133,20 +162,20 @@ private:
 
     std::map<std::uint16_t, std::string> last_;
     std::uint16_t mask_ = 0xFFFF;
-    bool reportedBad_ = false;
 };
 
 int main(int argc, char** argv) {
     if (argc < 2) {
-        std::fprintf(stderr, "usage: isobus_vt INTERFACE [IDENTITY]\n");
+        std::fprintf(stderr, "usage: isobus_vt INTERFACE [IDENTITY] [CTS_DELAY_MS]\n");
         return 2;
     }
     std::signal(SIGINT, onSignal);
     std::signal(SIGTERM, onSignal);
 
     auto driver = std::make_shared<isobus::SocketCANInterface>(argv[1]);
+    const unsigned ctsDelayMs = argc > 3 ? static_cast<unsigned>(std::atoi(argv[3])) : 0;
     isobus::CANHardwareInterface::set_number_of_can_channels(1);
-    isobus::CANHardwareInterface::assign_can_channel_frame_handler(0, driver);
+    isobus::CANHardwareInterface::assign_can_channel_frame_handler(0, std::make_shared<SlowClearToSend>(driver, ctsDelayMs));
     if (!isobus::CANHardwareInterface::start() || !driver->get_is_valid()) {
         std::fprintf(stderr, "could not open %s\n", argv[1]);
         return 1;

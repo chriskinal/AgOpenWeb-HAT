@@ -63,8 +63,8 @@ class Lines:
 
 
 class Terminal(Lines):
-    def __init__(self, binary, identity=3):
-        super().__init__([binary, "vcan1", str(identity)])
+    def __init__(self, binary, identity=3, cts_delay_ms=0):
+        super().__init__([binary, "vcan1", str(identity), str(cts_delay_ms)])
         self.connected = False
         self.pool = None
         self.mask = None
@@ -222,6 +222,27 @@ def main():
         vt = Terminal(vt_bin)
         run(6.0)
         check(not vt.connected and status()["terminal"] == "off", "terminal off in the settings: no screen is offered")
+    finally:
+        code = stop(proc)
+        check(code == 0, "the daemon stops cleanly (exit %s)" % code)
+        if vt:
+            vt.stop()
+            vt = None
+
+    # 7. A slow terminal: every clear-to-send 150 ms late, so the upload takes over 10 s. The daemon
+    # waits for it (it used to give up on a terminal that had not connected within 10 s).
+    log_path = os.path.join(cfgdir, "daemon.log")
+    log_start = os.path.getsize(log_path)
+    proc = start({"enabled": True, "channel": 2})
+    try:
+        run(1.5)
+        vt = Terminal(vt_bin, cts_delay_ms=150)
+        t = run(60.0, lambda: vt.connected and vt.pool == "ok" and status()["terminal"] == "connected")
+        check(t is not None and t > 10, "a slow terminal takes the screen after more than 10 s (%s)" % ("%.1f s" % t if t else "never"))
+        with open(log_path, errors="replace") as f:
+            f.seek(log_start)
+            dropped = f.read().count("VT Client connection has been terminated")
+        check(dropped == 0, "the daemon kept the connection through the slow upload (dropped %d times)" % dropped)
     finally:
         code = stop(proc)
         check(code == 0, "the daemon stops cleanly (exit %s)" % code)

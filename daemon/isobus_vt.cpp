@@ -17,6 +17,7 @@
 
 #include "isobus_vt.h"
 
+#include <atomic>
 #include <cstdarg>
 #include <cstdio>
 #include <map>
@@ -57,6 +58,10 @@ struct IsobusVt::Impl {
     std::uint32_t disconnectedSinceMs = 0, lastStatusMs = 0, lastSectionsMs = 0, lastAppMs = 0;
     std::uint32_t partnerSinceMs = 0;
     std::uint64_t partnerName = 0;
+    // When the partner terminal was last heard (any VT to ECU message from its NAME). Written on
+    // the stack's thread, read here.
+    std::atomic<std::uint64_t> heardName{0};
+    std::atomic<std::uint32_t> heardMs{0};
     bool tractorEcuSetting = false;  // what the settings page of the screen shows
 
     void string(std::uint16_t id, const std::string& value) {
@@ -68,6 +73,7 @@ struct IsobusVt::Impl {
     void setup();
     void forget();
     void disconnected();
+    static void fromTerminal(const isobus::CANMessage& message, void* parent);
     void strings(const View& v);
     void sections(const View& v);
 };
@@ -122,6 +128,13 @@ void IsobusVt::Impl::setup() {
     helper->initialize();
 }
 
+void IsobusVt::Impl::fromTerminal(const isobus::CANMessage& message, void* parent) {
+    auto* m = static_cast<Impl*>(parent);
+    auto source = message.get_source_control_function();
+    if (source && source->get_NAME().get_full_name() == m->heardName.load())
+        m->heardMs = SystemTiming::get_timestamp_ms();
+}
+
 // The stack ties a partner to the first terminal that matches and keeps it for good, so a
 // different terminal (another NAME) that arrives later is never picked up. Start again with a
 // fresh partner; the next pass takes whichever terminal is on the bus then.
@@ -152,7 +165,10 @@ void IsobusVt::Impl::disconnected() {
     }
     sent.clear();
     configSynced = false;
-    if (SystemTiming::time_expired_ms(partnerSinceMs, 10000)) forget();
+    // Only once the terminal has gone quiet. Connecting is not a deadline: an upload to a slow
+    // terminal, or on a bus another implement is uploading on, can take well over 10 s.
+    const std::uint32_t heard = heardMs.load();
+    if (SystemTiming::time_expired_ms(partnerSinceMs, 10000) && SystemTiming::time_expired_ms(heard, 10000)) forget();
 }
 
 void IsobusVt::Impl::sections(const View& v) {
@@ -239,9 +255,13 @@ IsobusVt::IsobusVt(std::shared_ptr<isobus::InternalControlFunction> tc, std::fun
     : impl_(std::make_unique<Impl>()) {
     impl_->tc = std::move(tc);
     impl_->setTractorEcu = std::move(setTractorEcu);
+    isobus::CANNetworkManager::CANNetwork.add_any_control_function_parameter_group_number_callback(
+        static_cast<std::uint32_t>(isobus::CANLibParameterGroupNumber::VirtualTerminalToECU), &Impl::fromTerminal, impl_.get());
 }
 
 IsobusVt::~IsobusVt() {
+    isobus::CANNetworkManager::CANNetwork.remove_any_control_function_parameter_group_number_callback(
+        static_cast<std::uint32_t>(isobus::CANLibParameterGroupNumber::VirtualTerminalToECU), &Impl::fromTerminal, impl_.get());
     if (impl_->client && impl_->started) impl_->client->terminate();
 }
 
@@ -264,6 +284,7 @@ bool IsobusVt::update(const View& v) {
         if (partner->get_NAME().get_full_name() != m.partnerName)
             LOG_INFO(Can, "ISOBUS: terminal at address %u: offering it the status screen", partner->get_address());
         m.partnerName = partner->get_NAME().get_full_name();
+        m.heardName = m.partnerName;
         return false;
     }
     m.client->update();
