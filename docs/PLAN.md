@@ -447,7 +447,7 @@ but stay separate processes.
     **151**): running, address claimed, implement connected, section count, tractor ECU
     state. A port of its own, so the app link's sender rule (only the app, only source 0x7F)
     stays as it is. 3 s without it: `/api/status` shows the task controller as not running.
-    The terminal's CAN gateway (`docs/PLAN_VT.md` section 3) reports on the same port when it is
+    The terminal's CAN gateway (`docs/PLAN_VT.md` section 2) reports on the same port when it is
     built.
 - **Restarts are systemd's.** `aow-tcd.service`: `Type=notify`, `WatchdogSec=5` with
   `sd_notify` pings from the ISOBUS loop (catches a hang as well as a crash), `Restart=always`,
