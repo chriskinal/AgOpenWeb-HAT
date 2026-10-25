@@ -7,6 +7,8 @@
 // the clients. SocketCAN lets it share the channel with aow-hatd's ISOBUS work. Normal priority.
 // Bus state, error counters and bitrate come from rtnetlink once a second. Under systemd it
 // reports ready and pings the watchdog from the loop (Type=notify), so a hang is restarted too.
+// Once a second, and when a terminal connects or goes, it tells aow-hatd how it is (PGN 153 to
+// 127.0.0.1:8891, aow/helper_status.h), for the ISOBUS page and /api/status.
 #include <arpa/inet.h>
 #include <fcntl.h>
 #include <linux/can.h>
@@ -33,6 +35,7 @@
 #include <vector>
 
 #include "aow/aow_link.h"
+#include "aow/helper_status.h"
 
 namespace {
 
@@ -287,6 +290,7 @@ struct Options {
     std::string listen = "127.0.0.1";
     uint16_t port = aow::link::kDefaultPort;
     std::string name;
+    uint16_t statusPort = aow::helper::kPort;  // 0: no reports
 };
 
 [[noreturn]] void usage(int code) {
@@ -296,8 +300,9 @@ struct Options {
         "  --listen ADDR      address to listen on (default 127.0.0.1; 0.0.0.0 for every network)\n"
         "  --port N           TCP port (default %u)\n"
         "  --name TEXT        the gateway's name in its HELLO (default: host name and interfaces)\n"
+        "  --status-port N    report to aow-hatd on 127.0.0.1:N (default %u; 0 = off)\n"
         "  --version\n",
-        kVersion, aow::link::kDefaultPort);
+        kVersion, aow::link::kDefaultPort, aow::helper::kPort);
     std::exit(code);
 }
 
@@ -323,6 +328,7 @@ Options parse(int argc, char** argv) {
         else if (a == "--listen" && hasValue) o.listen = argv[++i];
         else if (a == "--port" && hasValue) o.port = static_cast<uint16_t>(std::atoi(argv[++i]));
         else if (a == "--name" && hasValue) o.name = argv[++i];
+        else if (a == "--status-port" && hasValue) o.statusPort = static_cast<uint16_t>(std::atoi(argv[++i]));
         else if (a == "--version") { std::printf("aow-linkd %s\n", kVersion); std::exit(0); }
         else if (a == "--help" || a == "-h") usage(0);
         else { std::fprintf(stderr, "unknown option: %s\n", a.c_str()); usage(2); }
@@ -361,6 +367,52 @@ void closeHard(int fd, const std::string& last) {
     close(fd);
 }
 
+// The report for aow-hatd, one datagram on loopback. Nobody listening costs nothing.
+class Reporter {
+public:
+    explicit Reporter(uint16_t port) {
+        if (!port) return;
+        fd_ = socket(AF_INET, SOCK_DGRAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0);
+        to_.sin_family = AF_INET;
+        to_.sin_port = htons(port);
+        to_.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    }
+    ~Reporter() { if (fd_ >= 0) close(fd_); }
+
+    void send(const aow::link::Gateway& g, const Options& o) {
+        if (fd_ < 0) return;
+        aow::helper::LinkGateway s;
+        const aow::link::Gateway::ControlInfo c = g.control();
+        s.clientConnected = c.connected;
+        s.allNetworks = o.listen != "127.0.0.1";
+        s.port = o.port;
+        s.monitors = static_cast<uint8_t>(g.monitors());
+        s.connections = g.connections();
+        s.toClient = static_cast<uint32_t>(c.counters.toClient);
+        s.toBus = static_cast<uint32_t>(c.counters.toBus);
+        s.txDropped = c.txDropped;
+        s.rxDropped = c.rxDropped;
+        std::snprintf(s.client, sizeof s.client, "%s", c.name.c_str());
+        std::snprintf(s.clientAddress, sizeof s.clientAddress, "%s", c.peer.c_str());
+        for (const aow::link::Channel& ch : g.channels()) {
+            if (s.channelCount == aow::helper::LinkGateway::kMaxChannels) break;
+            aow::helper::LinkGateway::Channel& out = s.channels[s.channelCount++];
+            std::snprintf(out.interface, sizeof out.interface, "%s", ch.name.c_str());
+            out.bitrate = ch.bitrate;
+            out.state = ch.state;
+            out.txErrors = ch.txErrors;
+            out.rxErrors = ch.rxErrors;
+        }
+        uint8_t buf[300];
+        const size_t n = aow::helper::encode(s, buf, sizeof buf);
+        if (n) sendto(fd_, buf, n, MSG_DONTWAIT, reinterpret_cast<const sockaddr*>(&to_), sizeof to_);
+    }
+
+private:
+    int fd_ = -1;
+    sockaddr_in to_{};
+};
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -398,6 +450,8 @@ int main(int argc, char** argv) {
     log("aow-linkd " + std::string(kVersion) + ": " + ifaces + " <-> tcp " + opt.listen + ":" + std::to_string(opt.port) +
         ", AOW link version " + std::to_string(aow::link::kVersion));
     notify("READY=1");
+    Reporter reporter(opt.statusPort);
+    bool reportedControl = false;
 
     std::map<int, int> fds;  // client id -> socket
     int nextId = 1;
@@ -467,6 +521,8 @@ int main(int argc, char** argv) {
                 channels[i].refresh(nl);
                 gateway.setChannel(static_cast<uint8_t>(i), channels[i].info());
             }
+            reporter.send(gateway, opt);
+            reportedControl = gateway.hasControl();
         } else {
             // The overflow count comes with each read; the state waits for the refresh.
             for (size_t i = 0; i < channels.size(); ++i) {
@@ -488,6 +544,10 @@ int main(int argc, char** argv) {
                 gateway.lost(id, "not reading (more than 1 MB behind)");
         }
         closeClients();
+        if (gateway.hasControl() != reportedControl) {  // a terminal came or went: say so now
+            reporter.send(gateway, opt);
+            reportedControl = gateway.hasControl();
+        }
         if (now >= nextPing) {
             nextPing = now + kPingMs;
             notify("WATCHDOG=1");
@@ -496,6 +556,7 @@ int main(int argc, char** argv) {
 
     gateway.shutdown();
     closeClients();
+    reporter.send(gateway, opt);
     close(listener);
     log("aow-linkd: stopped");
     return 0;

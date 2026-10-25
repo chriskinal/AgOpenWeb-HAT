@@ -1,7 +1,8 @@
 // AgOpenWeb HAT. GPL-3.0-or-later.
 //
 // AOW HAT: a new page, not from the firmware (the Teensy had no ISOBUS). It uses the firmware
-// pages' stylesheet and layout. Settings and live state come from /api/isobus.
+// pages' stylesheet and layout. Settings and live state come from /api/isobus, and with them the
+// AOW link gateway's (aow-linkd, docs/PLAN_VT.md section 2), shown here, not set.
 
 #ifndef ISOBUS_PAGE_H
 #define ISOBUS_PAGE_H
@@ -92,8 +93,32 @@ const char ISOBUS_PAGE[] PROGMEM = R"rawliteral(
             document.getElementById('legend').style.display = have ? 'block' : 'none';
         }
 
+        const BUSSTATE = {
+            'error active': ['OK', 'good'], 'error warning': ['Errors (warning)', 'warn'],
+            'error passive': ['Errors (passive)', 'warn'], 'bus-off': ['Bus off', 'bad'], 'down': ['Interface down', 'bad']
+        };
+
+        function showGateway(g) {
+            if (!g || !g.running) {
+                set('gw_state', 'Not running', 'idle');
+                ['gw_terminal', 'gw_listen', 'gw_channel', 'gw_bus', 'gw_frames', 'gw_dropped'].forEach(id => set(id, '-'));
+                return;
+            }
+            set('gw_state', g.clientConnected ? 'Terminal connected' : 'Waiting for AgOpenWeb', g.clientConnected ? 'good' : 'warn');
+            set('gw_terminal', g.clientConnected ? (g.client || 'unnamed') + ' (' + g.clientAddress + ')' : '-');
+            set('gw_listen', (g.allNetworks ? 'Every network' : 'This unit only') + ', port ' + g.port, g.allNetworks ? 'warn' : '');
+            const ch = g.channels && g.channels[0];
+            set('gw_channel', ch ? ch.interface + (ch.bitrate ? ', ' + ch.bitrate / 1000 + ' kbit/s' : '') : '-');
+            const bs = ch ? (BUSSTATE[ch.state] || [ch.state, '']) : ['-', ''];
+            set('gw_bus', ch && ch.state !== 'error active' && ch.state !== 'down' ? bs[0] + ' (tx ' + ch.txErrors + ', rx ' + ch.rxErrors + ')' : bs[0], bs[1]);
+            set('gw_frames', g.clientConnected ? g.framesToClient + ' to the terminal, ' + g.framesToBus + ' to the bus' : '-');
+            const lost = g.rxDropped + g.txDropped;
+            set('gw_dropped', g.clientConnected ? (lost ? g.rxDropped + ' from the bus, ' + g.txDropped + ' to it' : 'None') : '-', lost ? 'warn' : '');
+        }
+
         function poll() {
-            fetch('/api/isobus').then(r => r.json()).then(d => showStatus(d.status)).catch(() => set('state', 'No answer from the daemon', 'bad'));
+            fetch('/api/isobus').then(r => r.json()).then(d => { showStatus(d.status); showGateway(d.linkGateway); })
+                .catch(() => set('state', 'No answer from the daemon', 'bad'));
         }
 
         function loadSettings() {
@@ -103,6 +128,7 @@ const char ISOBUS_PAGE[] PROGMEM = R"rawliteral(
                 document.getElementById('tractorEcu').checked = d.tractorEcu;
                 document.getElementById('terminal').checked = d.terminal;
                 showStatus(d.status);
+                showGateway(d.linkGateway);
             });
         }
 
@@ -227,6 +253,20 @@ const char ISOBUS_PAGE[] PROGMEM = R"rawliteral(
             <div class="legend" id="legend" style="display: none;">
                 Green: on. Orange: asked for, not yet reported on. Red: reported on, not asked for. Grey: off.
             </div>
+        </div>
+
+        <h2>Virtual Terminal Gateway</h2>
+        <div class="card">
+            <div class="help-text" style="margin-bottom: 8px;">
+                Carries the implement bus to AgOpenWeb, which shows the implement's own screens. Off unless it was turned on when the HAT software was installed.
+            </div>
+            <div class="row"><span>Gateway</span><span id="gw_state">-</span></div>
+            <div class="row"><span>Terminal</span><span id="gw_terminal">-</span></div>
+            <div class="row"><span>Listening on</span><span id="gw_listen">-</span></div>
+            <div class="row"><span>Channel</span><span id="gw_channel">-</span></div>
+            <div class="row"><span>Bus</span><span id="gw_bus">-</span></div>
+            <div class="row"><span>Frames</span><span id="gw_frames">-</span></div>
+            <div class="row"><span>Lost</span><span id="gw_dropped">-</span></div>
         </div>
     </div>
 </body>

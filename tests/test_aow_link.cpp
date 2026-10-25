@@ -32,7 +32,7 @@ std::vector<Msg> take(Gateway& g, Gateway::ClientId id) {
     std::string* s = g.output(id);
     if (!s) return out;
     size_t at = 0;
-    while (s->size() - at >= 2 && s->size() - at >= 2 + static_cast<uint8_t>((*s)[at + 1])) {
+    while (s->size() - at >= 2 && s->size() - at >= 2u + static_cast<uint8_t>((*s)[at + 1])) {
         const size_t n = static_cast<uint8_t>((*s)[at + 1]);
         out.push_back({static_cast<uint8_t>((*s)[at]), s->substr(at + 2, n)});
         at += 2 + n;
@@ -135,6 +135,8 @@ int main() {
     }
     CHECK(count(m, Status) == 2);
     CHECK(g.hasControl() && bus.drained.size() == 2);
+    CHECK(g.control().connected && g.control().name == "AgOpenWeb test" && g.control().peer == "10.0.0.2");
+    CHECK(g.connections() == 1 && g.monitors() == 0);
 
     // Heartbeats every 100 ms; the echo and the time held after the client's own.
     g.tick(t);
@@ -160,6 +162,7 @@ int main() {
     m = take(g, 3);
     CHECK(!m.empty() && m[0].type == Hello && count(m, Status) == 2);
     CHECK(g.takeClosing().empty());
+    CHECK(g.monitors() == 1 && g.connections() == 1);
 
     // From the bus to both; from the control client to the bus, and to the monitor.
     Frame f;
@@ -218,6 +221,7 @@ int main() {
     m = take(g, 1);
     st = first(m, Status);
     CHECK(st && st->body[0] == 0 && st->body[1] == BusOff && static_cast<uint8_t>(st->body[2]) == 255 && u32(st->body, 4) == 7);
+    CHECK(g.control().rxDropped == 7 && g.control().txDropped == 1 && g.control().counters.toBus == 3);
     CHECK(g.channels()[0].name == "hatcan2");
     g.tick(t + 1020);
     CHECK(count(take(g, 1), Status) == 0);
@@ -238,6 +242,7 @@ int main() {
     g.tick(t + 2201);
     closing = g.takeClosing();
     CHECK(closed(closing, 1) == -1 && !g.hasControl() && !g.txPending());
+    CHECK(!g.control().connected && g.control().name.empty());
     bus.full = 0;
 
     // A new control client gets in at once.

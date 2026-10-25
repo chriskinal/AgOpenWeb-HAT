@@ -194,6 +194,7 @@ bool Gateway::handle(ClientId id, Client& c, uint8_t type, const std::string& bo
         c.role = role;
         if (role == Control) {
             control_ = id;
+            ++connections_;
             for (size_t i = 0; i < channels_.size(); ++i) {
                 bus_.drain(static_cast<uint8_t>(i));  // nothing older than the link
                 tx_[i].clear();
@@ -264,6 +265,27 @@ void Gateway::sendStatus(Client& c, uint8_t i) {
     const Channel& ch = channels_[i];
     const uint32_t base = i < c.overflowBase.size() ? c.overflowBase[i] : ch.overflow;
     putStatus(c.out, i, ch, ch.overflow - base, c.role == Control ? c.txDropped : 0);
+}
+
+Gateway::ControlInfo Gateway::control() const {
+    ControlInfo info;
+    auto it = clients_.find(control_);
+    if (control_ < 0 || it == clients_.end()) return info;
+    const Client& c = it->second;
+    info.connected = true;
+    info.name = c.name;
+    info.peer = c.peer;
+    info.counters = c.counters;
+    info.txDropped = c.txDropped;
+    for (size_t i = 0; i < channels_.size() && i < c.overflowBase.size(); ++i)
+        info.rxDropped += channels_[i].overflow - c.overflowBase[i];
+    return info;
+}
+
+size_t Gateway::monitors() const {
+    size_t n = 0;
+    for (const auto& [id, c] : clients_) n += c.role == Monitor;
+    return n;
 }
 
 void Gateway::fromBus(const Frame& f) {

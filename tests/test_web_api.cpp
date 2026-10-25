@@ -26,6 +26,9 @@ struct FakeBackend : Backend {
     Status status() override { return st; }
     IsobusStatus iso;
     IsobusStatus isobusStatus() override { return iso; }
+    bool linkHeard = false;
+    helper::LinkGateway link;
+    bool linkGateway(helper::LinkGateway& g) override { g = link; return linkHeard; }
     void restart() override { ++restarts; }
     std::string updatePackage, updateJson;
     int reboots = 0;
@@ -96,6 +99,25 @@ int main() {
     CHECK(d["isobus"]["state"] == "claimed" && d["isobus"]["address"] == 247 && d["isobus"]["channel"] == 2);
     CHECK(d["isobus"]["name"] == "A00082000AFE0014" && d["isobus"]["busActive"] == false);
 
+    // The AOW link gateway: not running until it reports; then its terminal, counts and channel.
+    CHECK(d["linkGateway"]["running"] == false && d["linkGateway"]["client"].isNull());
+    b.linkHeard = true;
+    b.link.clientConnected = true;
+    b.link.port = 2323;
+    b.link.toClient = 24439;
+    std::snprintf(b.link.client, sizeof b.link.client, "AgOpenWeb");
+    std::snprintf(b.link.clientAddress, sizeof b.link.clientAddress, "127.0.0.1");
+    b.link.channelCount = 1;
+    std::snprintf(b.link.channels[0].interface, sizeof b.link.channels[0].interface, "hatcan2");
+    b.link.channels[0].bitrate = 250000;
+    b.link.channels[0].state = 2;
+    d = parse(request(s, port, "GET /api/status HTTP/1.1\r\n\r\n"));
+    CHECK(d["linkGateway"]["running"] == true && d["linkGateway"]["clientConnected"] == true);
+    CHECK(d["linkGateway"]["client"] == "AgOpenWeb" && d["linkGateway"]["clientAddress"] == "127.0.0.1");
+    CHECK(d["linkGateway"]["port"] == 2323 && d["linkGateway"]["allNetworks"] == false && d["linkGateway"]["framesToClient"] == 24439);
+    CHECK(d["linkGateway"]["channels"].size() == 1 && d["linkGateway"]["channels"][0]["interface"] == "hatcan2");
+    CHECK(d["linkGateway"]["channels"][0]["state"] == "error passive" && d["linkGateway"]["channels"][0]["bitrate"] == 250000);
+
     // The ISOBUS page: settings and the same state; a save says whether a restart is needed.
     b.iso.sections = 3;
     std::snprintf(b.iso.implement, sizeof b.iso.implement, "Sprayer 24 m");
@@ -107,6 +129,7 @@ int main() {
     d = parse(request(s, port, "GET /api/isobus HTTP/1.1\r\n\r\n"));
     CHECK(d["enabled"] == false && d["channel"] == 2 && d["tractorEcu"] == true && d["terminal"] == true);
     CHECK(d["status"]["terminal"] == "off");
+    CHECK(d["linkGateway"]["running"] == true && d["linkGateway"]["client"] == "AgOpenWeb");
     CHECK(d["status"]["state"] == "claimed" && d["status"]["taskController"]["setpoint"] == "101");
     CHECK(d["status"]["taskController"]["actual"] == "100" && d["status"]["tractorEcu"]["state"] == "active");
     // Strings are copied into the reply: the status they come from is a temporary.

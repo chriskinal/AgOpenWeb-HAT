@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """The AOW link gateway on virtual CAN: starts aow-linkd on vcan1 and checks the parts that need a
 real interface: frames both ways (ids, flags, data, kernel timestamps), the bus drained when a
-control client connects, STATUS following the interface down and up, and an interface that is
-missing at start found when it appears. The protocol itself is checked by AgIsoStack-dotnet's
+control client connects, STATUS following the interface down and up, an interface that is
+missing at start found when it appears, and its reports to aow-hatd (PGN 153, here on 18891). The protocol itself is checked by AgIsoStack-dotnet's
 bench/aowlink_check.py: give its path as a second argument to run it here too.
 
     sudo modprobe vcan; sudo ip link add vcan1 type vcan; sudo ip link set vcan1 up
@@ -17,6 +17,7 @@ import sys
 import time
 
 PORT = 12323
+STATUS_PORT = 18891
 CAN_EFF = 0x80000000
 HELLO, FRAME, HEARTBEAT, STATUS, CLOSE = 1, 2, 3, 4, 5
 failures = 0
@@ -78,6 +79,31 @@ def states(ms):
     return [b[1] for t, b in ms if t == STATUS]
 
 
+def reports(sock, seconds):
+    """The gateway's reports (PGN 153 bodies, decoded) received within the time."""
+    out, end = [], time.monotonic() + seconds
+    while time.monotonic() < end:
+        sock.settimeout(max(0.01, end - time.monotonic()))
+        try:
+            d = sock.recv(512)
+        except socket.timeout:
+            break
+        if len(d) < 6 or d[:2] != b"\x80\x81" or d[3] != 153 or (sum(d[2:-1]) & 0xFF) != d[-1]:
+            continue
+        b = d[5:5 + d[4]]
+        r = {"src": d[2], "connected": bool(b[1] & 1), "all": bool(b[1] & 2), "port": struct.unpack("<H", b[2:4])[0],
+             "connections": struct.unpack("<I", b[5:9])[0], "toClient": struct.unpack("<I", b[9:13])[0],
+             "toBus": struct.unpack("<I", b[13:17])[0]}
+        at = 25
+        r["client"] = b[at + 1:at + 1 + b[at]].decode()
+        at += 1 + b[at]
+        r["address"] = b[at + 1:at + 1 + b[at]].decode()
+        at += 1 + b[at]
+        r["channels"] = b[at]
+        out.append((time.monotonic(), r))
+    return out
+
+
 def ip(*args):
     subprocess.run(["ip", "link", *args], check=False, capture_output=True)
 
@@ -91,15 +117,27 @@ def main():
     bus.bind(("vcan1",))
     bus.settimeout(1)
 
+    status = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    status.bind(("127.0.0.1", STATUS_PORT))
     ip("del", "vcan7")  # missing at start
-    proc = subprocess.Popen([daemon, "--can", "vcan1,vcan7", "--port", str(PORT)],
+    proc = subprocess.Popen([daemon, "--can", "vcan1,vcan7", "--port", str(PORT), "--status-port", str(STATUS_PORT)],
                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
     time.sleep(0.3)
     try:
+        rs = reports(status, 1.3)
+        check("reports to aow-hatd, once a second, no terminal", 1 <= len(rs) <= 2 and not rs[-1][1]["connected"]
+              and rs[-1][1]["src"] == 0x81 and rs[-1][1]["port"] == PORT and rs[-1][1]["channels"] == 2
+              and not rs[-1][1]["all"], [r for _, r in rs])
+
         # Frames on the bus before anyone connects are not delivered later.
         bus.send(struct.pack("=IB3x8s", 0x18EF0001 | CAN_EFF, 1, b"\x01".ljust(8, b"\0")))
         time.sleep(0.1)
+        t0 = time.monotonic()
         c = Client()
+        rs = reports(status, 0.3)
+        check("a report at once when the terminal connects",
+              rs and rs[0][1]["connected"] and rs[0][1]["client"] == "link_probe" and rs[0][1]["address"] == "127.0.0.1"
+              and rs[0][1]["connections"] == 1 and rs[0][0] - t0 < 0.2, [(round(t - t0, 3), r) for t, r in rs])
         ms = c.messages(0.3)
         check("HELLO lists two channels", ms and ms[0][0] == HELLO and b"vcan1" in ms[0][1] and b"vcan7" in ms[0][1])
         st = [(b[0], b[1]) for t, b in ms if t == STATUS]
@@ -127,6 +165,9 @@ def main():
         except socket.timeout:
             pass
         check("two frames to the bus", got == [(0x0CE6FF26 | CAN_EFF, b"\x09\x08\x07"), (0x7FF, b"")], got)
+        c.messages(1.2)  # the link kept alive meanwhile; the reports wait in the socket
+        rs = reports(status, 0.05)
+        check("the report counts them", rs and rs[-1][1]["toClient"] == 2 and rs[-1][1]["toBus"] == 2, [r for _, r in rs])
 
         # The interface down and up: STATUS follows within about a second.
         ip("set", "vcan1", "down")
@@ -140,7 +181,11 @@ def main():
         ip("set", "vcan7", "up")
         ms = c.messages(1.5)
         check("vcan7 created: STATUS active", [b[1] for t, b in ms if t == STATUS and b[0] == 1][-1:] == [0])
+        reports(status, 0.01)  # what came before
         c.close()
+        rs = reports(status, 0.3)
+        check("a report at once when the terminal goes", rs and not rs[0][1]["connected"] and rs[0][1]["client"] == "",
+              [r for _, r in rs])
     finally:
         proc.terminate()
         out, _ = proc.communicate(timeout=3)

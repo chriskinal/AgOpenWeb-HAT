@@ -448,8 +448,9 @@ but stay separate processes.
     **151**): running, address claimed, implement connected, section count, tractor ECU
     state. A port of its own, so the app link's sender rule (only the app, only source 0x7F)
     stays as it is. 3 s without it: `/api/status` shows the task controller as not running.
-    The terminal's CAN gateway (`docs/PLAN_VT.md` section 2) reports on the same port when it is
-    built.
+    The terminal's CAN gateway (`docs/PLAN_VT.md` section 2) reports on the same port (PGN
+    153, source 0x81; built 0.2.25): the listener is in `aow-hatd`'s web thread
+    (`daemon/web_thread.cpp`, `HelperListener`), and PGN 151 goes there too.
 - **Restarts are systemd's.** `aow-tcd.service`: `Type=notify`, `WatchdogSec=5` with
   `sd_notify` pings from the ISOBUS loop (catches a hang as well as a crash), `Restart=always`,
   `RestartSec=1`, normal priority. `After=aow-hatd.service` only: no `Requires` or `BindsTo` in
@@ -465,8 +466,8 @@ but stay separate processes.
   `aow-hatd`, with its stop paths and tests. It would need its own address claim there, or
   commands carried to `aow-tcd`; decide when it is built.
 - **Order of work.**
-  1. In `aow-hatd`: the forwarding to 8890, the status PGN, the 8891 listener, unit tests for
-     each in `tests/test_app_link.cpp`.
+  1. In `aow-hatd`: the forwarding to 8890, the status PGN, unit tests for each in
+     `tests/test_app_link.cpp`; PGN 151 in the 8891 listener (built for the gateway's 153).
   2. `aow-tcd`: a `main` around the moved files, reading its PGNs from 8890 instead of
      `Shared`, the 2 s heartbeat rule with a test, `sd_notify`.
   3. The `/api/isobus` pass-through and the settings file move (the old `isobus` section in

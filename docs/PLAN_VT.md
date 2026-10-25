@@ -52,10 +52,16 @@ our own protocol, not GVRET; hello, heartbeat, bus status, the 1 s silence rule)
   `bench/aowlink_check.py` (all checks), its `bench/local.sh` with `GATEWAY=` (the bench and a
   1.5 s cut, in a container), and its Wi-Fi bench on the dev CM4 with the service (both example
   implements, Mac terminal: AgIsoStack-dotnet `docs/RESULTS.md`).
-- **Still to do:** status to `aow-hatd` on `127.0.0.1:8891` (running, client connected, frames,
-  bus state), shown on the ISOBUS page and in `/api/status`, and its on/off switch there: with
-  the 8891 listener, which `aow-tcd` needs too (`docs/PLAN.md` section 8). The tablets on the
-  bench through the service.
+- **Its status in `aow-hatd`** (0.2.25): PGN 153 from source 0x81 to `127.0.0.1:8891`
+  (`aow/helper_status.h`; 150 to 153 are free in AgOpenGPS's PGN list and unused by AgOpenWeb),
+  once a second and at once when a terminal connects or goes: listening where and on which
+  port, the terminal's name and address, frames both ways and lost since it connected, monitors,
+  each channel's interface, bitrate, state and error counters. `aow-hatd` listens in its web
+  thread, not the control thread, and only shows it: `linkGateway` in `/api/status` and
+  `/api/isobus`, a Virtual Terminal Gateway card on the ISOBUS page, a log line on each change.
+  3 s without a report: not running. On the CM4: off, idle, a terminal mid-upload, stopped.
+- **Still to do:** its on/off switch on the ISOBUS page (the page shows it, the installer sets
+  it). The tablets on the bench through the service.
 
 ## 3. Found on the bench, fixed here
 

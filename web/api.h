@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 
+#include "aow/helper_status.h"
 #include "aow/log.h"
 #include "aow/settings.h"
 #include "aow/status.h"
@@ -22,6 +23,8 @@ struct Backend {
     virtual bool applySettings(const Settings& s, std::string& error) = 0;
     virtual Status status() = 0;
     virtual IsobusStatus isobusStatus() { return {}; }
+    // The AOW link gateway's last report (aow-linkd), if one came within helper::kStaleMs.
+    virtual bool linkGateway(helper::LinkGateway&) { return false; }
     virtual void restart() = 0;  // restart the daemon (the firmware rebooted the Teensy)
 
     // The uploaded CAN brand file (the firmware's LittleFS /can_config.json). "" if none.

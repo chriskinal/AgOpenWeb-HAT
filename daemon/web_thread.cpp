@@ -22,6 +22,8 @@
 
 #include "api.h"
 #include "aow/gvret.h"
+#include "aow/helper_status.h"
+#include "aow/pgn.h"
 #include "aow/log.h"
 #include "linux_io.h"
 #include "server.h"
@@ -156,9 +158,65 @@ private:
     std::string out_;
 };
 
+// What the helper services report on 127.0.0.1:8891 (aow/helper_status.h). Shown, never acted on.
+// The web thread's own: polled in its loop and read by the API, which runs on it too.
+class HelperListener {
+public:
+    HelperListener() {
+        fd_ = socket(AF_INET, SOCK_DGRAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0);
+        sockaddr_in a{};
+        a.sin_family = AF_INET;
+        a.sin_port = htons(helper::kPort);
+        a.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+        if (fd_ < 0 || bind(fd_, reinterpret_cast<sockaddr*>(&a), sizeof a) < 0) {
+            LOG_WARNING(System, "Helper status: cannot listen on 127.0.0.1:%u: %s", helper::kPort, std::strerror(errno));
+            if (fd_ >= 0) close(fd_);
+            fd_ = -1;
+        }
+    }
+    ~HelperListener() { if (fd_ >= 0) close(fd_); }
+
+    void poll() {
+        if (fd_ < 0) return;
+        uint8_t buf[512];
+        ssize_t n;
+        while ((n = recv(fd_, buf, sizeof buf, 0)) > 0) {
+            pgn::Frame f;
+            if (!pgn::parse(buf, static_cast<size_t>(n), f)) continue;
+            if (f.src == helper::kSrcLinkGateway && f.pgn == helper::kPgnLinkGateway) {
+                helper::LinkGateway g;
+                if (!helper::decode(f.data, f.len, g)) continue;
+                if (!heard_ || g.clientConnected != link_.clientConnected) {
+                    if (g.clientConnected) LOG_INFO(Network, "AOW link gateway: terminal \"%s\" connected from %s", g.client, g.clientAddress);
+                    else LOG_INFO(Network, "AOW link gateway: running, no terminal connected");
+                }
+                link_ = g;
+                linkAt_ = Clock::now();
+                heard_ = true;
+            }
+        }
+        if (heard_ && Clock::now() - linkAt_ > std::chrono::milliseconds(helper::kStaleMs)) {
+            heard_ = false;
+            LOG_INFO(Network, "AOW link gateway: not running (no report for 3 s)");
+        }
+    }
+
+    bool linkGateway(helper::LinkGateway& g) const {
+        if (heard_) g = link_;
+        return heard_;
+    }
+
+private:
+    int fd_ = -1;
+    bool heard_ = false;
+    helper::LinkGateway link_;
+    Clock::time_point linkAt_;
+};
+
 class DaemonBackend : public web::Backend {
 public:
-    DaemonBackend(Shared& shared, const SettingsFile& file) : shared_(shared), file_(file) {}
+    DaemonBackend(Shared& shared, const SettingsFile& file, HelperListener& helpers)
+        : shared_(shared), file_(file), helpers_(helpers) {}
 
     Settings settings() override { return shared_.settings(); }
 
@@ -175,6 +233,7 @@ public:
 
     Status status() override { return shared_.status(); }
     IsobusStatus isobusStatus() override { return shared_.isobus(); }
+    bool linkGateway(helper::LinkGateway& g) override { return helpers_.linkGateway(g); }
 
     void restart() override {
         LOG_WARNING(System, "Restart requested from the web page");
@@ -278,6 +337,7 @@ private:
     std::string canPath() const { return file_.canConfigPath(); }
     Shared& shared_;
     const SettingsFile& file_;
+    HelperListener& helpers_;
 };
 
 }  // namespace
@@ -289,7 +349,8 @@ void WebThread::run() {
     pthread_setschedparam(pthread_self(), SCHED_OTHER, &normal);
     pthread_setname_np(pthread_self(), "aow-web");
 
-    DaemonBackend backend(shared_, opt_.settingsFile);
+    HelperListener helpers;
+    DaemonBackend backend(shared_, opt_.settingsFile, helpers);
     web::Server server;
     server.maxBody = web::kMaxUpdatePackage;  // an update package is the largest upload
     bool pages = false;
@@ -319,6 +380,7 @@ void WebThread::run() {
     while (!shared_.stop.load()) {
         server.poll(5);
         gvretServer.poll();
+        helpers.poll();
         if (Clock::now() >= nextNetworkCheck) {
             nextNetworkCheck = Clock::now() + std::chrono::seconds(1);
             bool up = false;

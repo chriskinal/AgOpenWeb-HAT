@@ -103,6 +103,17 @@ public:
 
     struct Counters { uint64_t toClient = 0, toBus = 0, heartbeats = 0, txDropped = 0, txRetries = 0; };
 
+    // The control client, for the gateway's status report: empty name and peer with none.
+    struct ControlInfo {
+        bool connected = false;
+        std::string name, peer;
+        Counters counters;
+        uint32_t txDropped = 0, rxDropped = 0;  // as its STATUS reports them, all channels summed
+    };
+    ControlInfo control() const;
+    size_t monitors() const;
+    uint32_t connections() const { return connections_; }  // control clients taken since the start
+
 private:
     struct Client {
         std::string peer;
@@ -135,6 +146,7 @@ private:
     ClientId control_ = -1;
     std::vector<std::vector<Pending>> tx_;
     uint64_t now_ = 0, nextStatus_ = 0;
+    uint32_t connections_ = 0;
 };
 
 }  // namespace aow::link

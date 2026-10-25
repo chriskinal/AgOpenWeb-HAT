@@ -77,6 +77,34 @@ void isobusStatusJson(const IsobusStatus& is, JsonObject iso) {
     iso["terminal"] = isobusTerminalName(is.terminal);
 }
 
+// The AOW link gateway (aow-linkd), for /api/status and the ISOBUS page. Not heard from: not running.
+void linkGatewayJson(Backend& b, JsonObject o) {
+    helper::LinkGateway g;
+    o["running"] = b.linkGateway(g);
+    if (!o["running"]) return;
+    o["port"] = g.port;
+    o["allNetworks"] = g.allNetworks;
+    o["clientConnected"] = g.clientConnected;
+    o["client"] = std::string(g.client);  // copied: the document outlives g
+    o["clientAddress"] = std::string(g.clientAddress);
+    o["monitors"] = g.monitors;
+    o["connections"] = g.connections;
+    o["framesToClient"] = g.toClient;
+    o["framesToBus"] = g.toBus;
+    o["txDropped"] = g.txDropped;
+    o["rxDropped"] = g.rxDropped;
+    JsonArray channels = o["channels"].to<JsonArray>();
+    for (uint8_t i = 0; i < g.channelCount; ++i) {
+        const helper::LinkGateway::Channel& c = g.channels[i];
+        JsonObject ch = channels.add<JsonObject>();
+        ch["interface"] = std::string(c.interface);
+        ch["bitrate"] = c.bitrate;
+        ch["state"] = helper::busStateName(c.state);
+        ch["txErrors"] = c.txErrors;
+        ch["rxErrors"] = c.rxErrors;
+    }
+}
+
 Response status(Backend& b, const char* version) {
     const Status st = b.status();
     JsonDocument doc;
@@ -166,6 +194,7 @@ Response status(Backend& b, const char* version) {
     loop["workMaxEverUs"] = st.loop.workMaxEverUs;
     loop["inputsMaxEverUs"] = st.loop.inputsMaxEverUs;
     isobusStatusJson(b.isobusStatus(), doc["isobus"].to<JsonObject>());  // AOW HAT: not in the firmware's status
+    linkGatewayJson(b, doc["linkGateway"].to<JsonObject>());               // AOW HAT: docs/PLAN_VT.md section 2
     static const char* const kColors[] = {"off", "red", "amber", "green", "blue"};
     JsonArray leds = doc["leds"].to<JsonArray>();
     for (uint8_t c : st.leds) leds.add(kColors[c < 5 ? c : 0]);
@@ -323,6 +352,7 @@ Response isobus(Backend& b, const Request& r) {
         doc["tractorEcu"] = s.isobus.tractorEcu;
         doc["terminal"] = s.isobus.terminal;
         isobusStatusJson(b.isobusStatus(), doc["status"].to<JsonObject>());
+        linkGatewayJson(b, doc["linkGateway"].to<JsonObject>());
         return Response::json(toString(doc));
     }
     if (r.method != "POST") return methodNotAllowed();
