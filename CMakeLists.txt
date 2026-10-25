@@ -14,10 +14,14 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # is repeatable, not to hold it back: move the pin to upstream HEAD before each package, then run
 # the unit tests and the three tests/isobus_*probe.py on vcan1. AOG-TaskController's file must
 # keep building unchanged.
-# Carried on top until upstream merges it: PR #793 (issue #656), a lock on the transmit queue's
-# push. The queue is single-producer and the stack's hardware thread and our aow-isobus thread
-# both send, so frames were lost (seen on the bench as a missing ETP data packet or DPO). Drop
-# the patch at the first pin move after #793 is merged.
+# Carried on top until upstream merges them; drop each at the first pin move after its merge:
+# - PR #793 (issue #656), a lock on the transmit queue's push. The queue is single-producer and
+#   the stack's hardware thread and our aow-isobus thread both send, so frames were lost (seen on
+#   the bench as a missing ETP data packet or DPO).
+# - PR #808 (issue #807), a TP/ETP session's first frame sent once. A transmit started on our
+#   aow-isobus thread while the hardware thread updates could send its RTS twice; the receiver
+#   answered twice and the transfer failed (seen on the bench as a repeated pool upload). Also a
+#   lock on ETP's session list.
 # Fetched before our warning flags are set, so they do not apply to it. Needs the network at
 # the first configure; -DAOW_ISOBUS=OFF builds the daemon without the stack.
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
@@ -27,9 +31,10 @@ if(AOW_ISOBUS)
   include(FetchContent)
   set(CAN_DRIVER "SocketCAN" CACHE STRING "" FORCE)
   FetchContent_Declare(isobus
-    URL https://github.com/Open-Agriculture/AgIsoStack-plus-plus/archive/3e37ba629b53b565fa80c63feaed027a9156d3b9.tar.gz
+    URL https://github.com/Open-Agriculture/AgIsoStack-plus-plus/archive/e932041f7b28a806bd0f3b63772390011875835d.tar.gz
     DOWNLOAD_EXTRACT_TIMESTAMP TRUE
-    PATCH_COMMAND git apply ${CMAKE_CURRENT_SOURCE_DIR}/third_party/agisostack-patches/pr793-transmit-queue.patch)
+    PATCH_COMMAND git apply ${CMAKE_CURRENT_SOURCE_DIR}/third_party/agisostack-patches/pr793-transmit-queue.patch
+                            ${CMAKE_CURRENT_SOURCE_DIR}/third_party/agisostack-patches/pr808-transport-first-frame.patch)
   FetchContent_MakeAvailable(isobus)
 endif()
 

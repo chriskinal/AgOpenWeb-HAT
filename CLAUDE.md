@@ -81,7 +81,8 @@ The Teensy firmware is not being rewritten and nothing is ported back to it.
   The stack's pin in `CMakeLists.txt` follows upstream HEAD: move it before each package (and
   run the ISOBUS probes); it is not tied to AOG-TaskController's pin. Upstream fixes not yet
   merged ride on the pin as patches in `third_party/agisostack-patches/` (now PR #793, the
-  transmit queue's lock): drop each at the first pin move after it is merged.
+  transmit queue's lock, and PR #808, a TP/ETP session's first frame sent once): drop each at the
+  first pin move after it is merged.
   `third_party/aog-taskcontroller/` is upstream's file **unmodified**: change the stand-in
   headers in `daemon/isobus_compat/` or `daemon/isobus.cpp` instead. Include the stack's
   headers before any `aow/` header and `#undef` its `LOG_*` macros, as `daemon/isobus.cpp` does.

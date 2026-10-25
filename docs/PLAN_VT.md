@@ -79,3 +79,10 @@ The Wi-Fi bench (2026-10-24, AgIsoStack-dotnet `docs/RESULTS.md`) found two `aow
 fixed in 0.2.23 (8bb10f1): the stack's transmit queue lost frames with two producers (upstream
 #656, PR #793 carried as `third_party/agisostack-patches/pr793-transmit-queue.patch`), and the
 VT client dropped a terminal whose upload ran past 10 s (`tests/isobus_vt_probe.py` step 7).
+
+A third, fixed in 0.2.27 (2026-10-25): now and then `aow-hatd` sent a transfer's request-to-send
+twice, back to back, and the terminal's answer to both made it abort; its status screen was
+uploaded again. Caught with a capture of the bus, and reproduced on vcan: a race in the stack
+between our aow-isobus thread starting a transfer and the hardware thread updating it (upstream
+issue #807, our PR #808, carried as `third_party/agisostack-patches/pr808-transport-first-frame.patch`
+with the pin moved to e932041). AgIsoStack-dotnet `docs/PLAN.md`, upstream gaps, has the detail.
