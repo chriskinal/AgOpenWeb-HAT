@@ -2,7 +2,8 @@
 //
 // AOW HAT: a new page, not from the firmware (the Teensy had no ISOBUS). It uses the firmware
 // pages' stylesheet and layout. Settings and live state come from /api/isobus, and with them the
-// AOW link gateway's (aow-linkd, docs/PLAN_VT.md section 2), shown here, not set.
+// AOW link gateway's (aow-linkd, docs/PLAN_VT.md section 2). Its switch acts at once through
+// /api/linkgateway (the service started or stopped), apart from Apply Changes.
 
 #ifndef ISOBUS_PAGE_H
 #define ISOBUS_PAGE_H
@@ -98,9 +99,16 @@ const char ISOBUS_PAGE[] PROGMEM = R"rawliteral(
             'error passive': ['Errors (passive)', 'warn'], 'bus-off': ['Bus off', 'bad'], 'down': ['Interface down', 'bad']
         };
 
+        let gwPending = false;   // a switch is on its way: the poll does not move the toggle meanwhile
+        let gwConnected = false;
+
         function showGateway(g) {
-            if (!g || !g.running) {
-                set('gw_state', 'Not running', 'idle');
+            g = g || {};
+            document.getElementById('gw_switch_row').style.display = g.installed ? 'flex' : 'none';
+            if (!gwPending) document.getElementById('gw_enabled').checked = !!g.enabled;
+            gwConnected = !!g.clientConnected;
+            if (!g.running) {
+                set('gw_state', !g.installed ? 'Not installed on this unit' : g.enabled ? 'On, not answering yet' : 'Off', g.enabled ? 'warn' : 'idle');
                 ['gw_terminal', 'gw_listen', 'gw_channel', 'gw_bus', 'gw_frames', 'gw_dropped'].forEach(id => set(id, '-'));
                 return;
             }
@@ -114,6 +122,29 @@ const char ISOBUS_PAGE[] PROGMEM = R"rawliteral(
             set('gw_frames', g.clientConnected ? g.framesToClient + ' to the terminal, ' + g.framesToBus + ' to the bus' : '-');
             const lost = g.rxDropped + g.txDropped;
             set('gw_dropped', g.clientConnected ? (lost ? g.rxDropped + ' from the bus, ' + g.txDropped + ' to it' : 'None') : '-', lost ? 'warn' : '');
+        }
+
+        function switchGateway(box) {
+            const on = box.checked;
+            if (!on && gwConnected && !confirm('AgOpenWeb has the implement\'s screens open through the gateway. Switching it off disconnects them. Switch off?')) {
+                box.checked = true;
+                return;
+            }
+            gwPending = true;
+            const msg = document.getElementById('gw_msg');
+            msg.innerHTML = '<div class="status">' + (on ? 'Switching on...' : 'Switching off...') + '</div>';
+            fetch('/api/linkgateway', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled: on }) })
+                .then(r => r.json())
+                .then(d => {
+                    if (d.status !== (on ? 'on' : 'off')) throw new Error(d.message || 'not switched');
+                    msg.innerHTML = '<div class="status success">' + (on ? 'On. It starts with the unit from now on.' : 'Off. It stays off when the unit restarts.') + '</div>';
+                    setTimeout(() => { msg.innerHTML = ''; }, 5000);
+                })
+                .catch(e => {
+                    box.checked = !on;
+                    msg.innerHTML = '<div class="status error">Error: ' + e.message + '</div>';
+                })
+                .finally(() => { setTimeout(() => { gwPending = false; }, 1500); });
         }
 
         function poll() {
@@ -257,9 +288,19 @@ const char ISOBUS_PAGE[] PROGMEM = R"rawliteral(
 
         <h2>Virtual Terminal Gateway</h2>
         <div class="card">
-            <div class="help-text" style="margin-bottom: 8px;">
-                Carries the implement bus to AgOpenWeb, which shows the implement's own screens. Off unless it was turned on when the HAT software was installed.
+            <div class="toggle-container" id="gw_switch_row" style="display: none;">
+                <div class="toggle-info">
+                    <label for="gw_enabled" class="toggle-label">Gateway On</label>
+                    <div class="help-text">
+                        Carries the implement bus to AgOpenWeb, which then shows the implement's own screens. Leave it off on a tractor whose own terminal shows them, or the implement sees two terminals. Takes effect at once; steering is not affected.
+                    </div>
+                </div>
+                <label class="toggle-switch">
+                    <input type="checkbox" id="gw_enabled" onchange="switchGateway(this)">
+                    <span class="toggle-slider"></span>
+                </label>
             </div>
+            <div id="gw_msg"></div>
             <div class="row"><span>Gateway</span><span id="gw_state">-</span></div>
             <div class="row"><span>Terminal</span><span id="gw_terminal">-</span></div>
             <div class="row"><span>Listening on</span><span id="gw_listen">-</span></div>

@@ -86,12 +86,13 @@ The Teensy firmware is not being rewritten and nothing is ported back to it.
   headers in `daemon/isobus_compat/` or `daemon/isobus.cpp` instead. Include the stack's
   headers before any `aow/` header and `#undef` its `LOG_*` macros, as `daemon/isobus.cpp` does.
 - **AOW link gateway (`aow-linkd`, docs/PLAN_VT.md section 2):** its own program and service,
-  off by default (`install.sh --hat --gateway`). Carries every frame of `hatcan2` to AgOpenWeb's
+  off by default (the ISOBUS page's switch, or `install.sh --hat --gateway`). Carries every frame of `hatcan2` to AgOpenWeb's
   virtual terminal over TCP 2323 (the protocol: AgIsoStack-dotnet `docs/TRANSPORT.md` section 5;
   `core/src/aow_link.cpp`, transport-free). Listens on loopback unless `/etc/aow-hat/linkd.env`
   says otherwise. It reports to `aow-hatd` (PGN 153 to `127.0.0.1:8891`, `aow/helper_status.h`),
-  which shows it (`/api/status` `linkGateway`, the ISOBUS page) and never acts on it. Its on/off
-  switch is the installer's (`--gateway`), not the page's yet.
+  which shows it (`/api/status` `linkGateway`, the ISOBUS page) and never acts on it. Switched on
+  and off on the ISOBUS page (`/api/linkgateway`: `systemctl enable|disable --now`) or by the
+  installer; nothing else restarts.
 - **CAN watch:** `daemon/can_watch.cpp` restarts a CAN interface that has frames queued and sends
   none with no bus error (seen once after a bus-off storm; `/api/status` `canRestarts`).
 - **Key monitor:** `deploy/aow-keymon.py`, its own service: key off for 3 s runs `poweroff`.

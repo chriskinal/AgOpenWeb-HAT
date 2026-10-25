@@ -29,6 +29,16 @@ struct FakeBackend : Backend {
     bool linkHeard = false;
     helper::LinkGateway link;
     bool linkGateway(helper::LinkGateway& g) override { g = link; return linkHeard; }
+    bool linkInstalled = false, linkEnabled = false, linkFail = false;
+    int linkSwitches = 0;
+    bool linkGatewayInstalled() override { return linkInstalled; }
+    bool linkGatewayEnabled() override { return linkEnabled; }
+    bool setLinkGatewayEnabled(bool on, std::string& err) override {
+        if (linkFail) { err = "systemctl failed"; return false; }
+        linkEnabled = on;
+        ++linkSwitches;
+        return true;
+    }
     void restart() override { ++restarts; }
     std::string updatePackage, updateJson;
     int reboots = 0;
@@ -101,6 +111,24 @@ int main() {
 
     // The AOW link gateway: not running until it reports; then its terminal, counts and channel.
     CHECK(d["linkGateway"]["running"] == false && d["linkGateway"]["client"].isNull());
+    CHECK(d["linkGateway"]["installed"] == false && d["linkGateway"]["enabled"] == false);
+
+    // Its switch: refused when it is not installed, bad input refused, on and off, a failure said.
+    std::string r0 = post(s, port, "/api/linkgateway", R"({"enabled":true})");
+    CHECK(r0.find(" 409 ") != std::string::npos && b.linkSwitches == 0);
+    b.linkInstalled = true;
+    r0 = post(s, port, "/api/linkgateway", R"({"enabled":"yes"})");
+    CHECK(r0.find(" 400 ") != std::string::npos && b.linkSwitches == 0);
+    CHECK(parse(post(s, port, "/api/linkgateway", R"({"enabled":true})"))["status"] == "on" && b.linkEnabled);
+    d = parse(request(s, port, "GET /api/status HTTP/1.1\r\n\r\n"));
+    CHECK(d["linkGateway"]["installed"] == true && d["linkGateway"]["enabled"] == true);
+    CHECK(parse(post(s, port, "/api/linkgateway", R"({"enabled":false})"))["status"] == "off" && !b.linkEnabled);
+    b.linkFail = true;
+    r0 = post(s, port, "/api/linkgateway", R"({"enabled":true})");
+    CHECK(r0.find(" 500 ") != std::string::npos && parse(r0)["message"] == "systemctl failed" && !b.linkEnabled);
+    b.linkFail = false;
+    CHECK(request(s, port, "GET /api/linkgateway HTTP/1.1\r\n\r\n").find(" 405 ") != std::string::npos);
+    CHECK(b.applied == 0);  // the switch saves no settings
     b.linkHeard = true;
     b.link.clientConnected = true;
     b.link.port = 2323;

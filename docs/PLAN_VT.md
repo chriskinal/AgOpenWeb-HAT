@@ -42,8 +42,8 @@ our own protocol, not GVRET; hello, heartbeat, bus status, the 1 s silence rule)
   rtnetlink need no privileges), normal priority, no dependency on `aow-hatd` either way.
   SocketCAN shares `hatcan2` with `aow-hatd`'s ISOBUS work: on the bench the task controller's
   own status screen (0xF7) reached the terminal through it.
-- **Off by default.** `install.sh --hat --gateway` enables it, `--no-gateway` disables it,
-  neither leaves it as it is (so an update keeps the choice). Per-unit options in
+- **Off by default.** The ISOBUS page's switch (below), or `install.sh --hat --gateway` /
+  `--no-gateway`; neither flag leaves it as it is (so an update keeps the choice). Per-unit options in
   `/etc/aow-hat/linkd.env` (`AOW_LINKD_OPTS`), kept across updates: `--listen 0.0.0.0` for a
   tablet on the unit's network (anyone who can reach the port can put frames on the bus).
 - **Packaged** in the `.aowpkg`; the updater refuses a package without it.
@@ -60,8 +60,15 @@ our own protocol, not GVRET; hello, heartbeat, bus status, the 1 s silence rule)
   thread, not the control thread, and only shows it: `linkGateway` in `/api/status` and
   `/api/isobus`, a Virtual Terminal Gateway card on the ISOBUS page, a log line on each change.
   3 s without a report: not running. On the CM4: off, idle, a terminal mid-upload, stopped.
-- **Still to do:** its on/off switch on the ISOBUS page (the page shows it, the installer sets
-  it). The tablets on the bench through the service.
+- **Its switch on the ISOBUS page** (0.2.26): a toggle on the gateway card, acting at once
+  (`POST /api/linkgateway {"enabled": bool}`: `aow-hatd`, root, runs `systemctl --no-block
+  enable --now` or `disable --now`), apart from Apply Changes: no settings saved, nothing else
+  restarted. On or off is systemd's enablement, read from its link (no `systemctl` for the
+  page's once-a-second poll), so the page, `install.sh --gateway` / `--no-gateway` and `systemctl`
+  all agree, and an update keeps it. Hidden where the gateway is not installed; switching off
+  with a terminal connected asks first. Where it listens stays in `linkd.env`. On the CM4: on,
+  reporting within 2 s; off, stopped and disabled within about 4 s.
+- **Still to do:** the tablets on the bench through the service.
 
 ## 3. Found on the bench, fixed here
 

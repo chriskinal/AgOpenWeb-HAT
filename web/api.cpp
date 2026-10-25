@@ -34,13 +34,17 @@ std::string toString(const JsonDocument& doc) {
 Response invalidJson() { return Response::json(R"({"status":"error","message":"Invalid JSON"})", 400); }
 Response methodNotAllowed() { return Response::text("Method Not Allowed", 405); }
 
+Response error500(const std::string& message) {
+    JsonDocument doc;
+    doc["status"] = "error";
+    doc["message"] = message;
+    return Response::json(toString(doc), 500);
+}
+
 Response saveOr500(Backend& b, const Settings& s, const char* okBody) {
     std::string err;
     if (b.applySettings(s, err)) return Response::json(okBody);
-    JsonDocument doc;
-    doc["status"] = "error";
-    doc["message"] = err;
-    return Response::json(toString(doc), 500);
+    return error500(err);
 }
 
 // A page: the firmware's PROGMEM strings, compiled in.
@@ -80,6 +84,8 @@ void isobusStatusJson(const IsobusStatus& is, JsonObject iso) {
 // The AOW link gateway (aow-linkd), for /api/status and the ISOBUS page. Not heard from: not running.
 void linkGatewayJson(Backend& b, JsonObject o) {
     helper::LinkGateway g;
+    o["installed"] = b.linkGatewayInstalled();
+    o["enabled"] = b.linkGatewayEnabled();
     o["running"] = b.linkGateway(g);
     if (!o["running"]) return;
     o["port"] = g.port;
@@ -372,6 +378,18 @@ Response isobus(Backend& b, const Request& r) {
                                    : R"({"status":"saved","restartRequired":false})");
 }
 
+// The AOW link gateway's switch on the ISOBUS page: {"enabled": true|false}. Acts at once.
+Response linkGatewaySwitch(Backend& b, const Request& r) {
+    if (r.method != "POST") return methodNotAllowed();
+    JsonDocument doc;
+    if (deserializeJson(doc, r.body) || !doc["enabled"].is<bool>()) return invalidJson();
+    if (!b.linkGatewayInstalled())
+        return Response::json(R"({"status":"error","message":"The gateway is not installed on this unit"})", 409);
+    std::string err;
+    if (!b.setLinkGatewayEnabled(doc["enabled"].as<bool>(), err)) return error500(err);
+    return Response::json(doc["enabled"].as<bool>() ? R"({"status":"on"})" : R"({"status":"off"})");
+}
+
 Response networkConfig(Backend& b, const Request& r) {
     if (r.method == "GET") {
         JsonDocument doc;
@@ -554,6 +572,7 @@ void addRoutes(Server& server, Backend& b, const char* version) {
     page(server, "/isobus", ISOBUS_PAGE);
     page(server, "/serial", SERIAL_PAGE);
     server.route("/api/isobus", [&b](const Request& r) { return isobus(b, r); });
+    server.route("/api/linkgateway", [&b](const Request& r) { return linkGatewaySwitch(b, r); });
     server.route("/api/serial", [&b](const Request& r) { return serial(b, r); });
     page(server, "/um98x-config", TOUCH_FRIENDLY_GPS_CONFIG_PAGE);
     page(server, "/gps", TOUCH_FRIENDLY_GPS_CONFIG_PAGE);

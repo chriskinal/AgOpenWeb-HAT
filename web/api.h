@@ -25,6 +25,11 @@ struct Backend {
     virtual IsobusStatus isobusStatus() { return {}; }
     // The AOW link gateway's last report (aow-linkd), if one came within helper::kStaleMs.
     virtual bool linkGateway(helper::LinkGateway&) { return false; }
+    // Its service: whether it is installed and switched on (enabled), and switching it, which
+    // starts or stops it at once. Nothing else restarts.
+    virtual bool linkGatewayInstalled() { return false; }
+    virtual bool linkGatewayEnabled() { return false; }
+    virtual bool setLinkGatewayEnabled(bool, std::string& error) { error = "not available"; return false; }
     virtual void restart() = 0;  // restart the daemon (the firmware rebooted the Teensy)
 
     // The uploaded CAN brand file (the firmware's LittleFS /can_config.json). "" if none.

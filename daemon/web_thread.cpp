@@ -35,6 +35,8 @@ namespace {
 using Clock = std::chrono::steady_clock;
 
 constexpr const char* kUpdateDir = "/var/lib/aow-hat/update";  // shared with deploy/aow-hat-update
+constexpr const char* kLinkdUnit = "/etc/systemd/system/aow-linkd.service";  // install.sh puts it there
+constexpr const char* kLinkdWanted = "/etc/systemd/system/multi-user.target.wants/aow-linkd.service";
 
 // Console: stderr, which systemd puts in the journal. Under systemd (JOURNAL_STREAM set) each
 // line starts with <N> so the journal records its priority; in a terminal, the firmware's format.
@@ -234,6 +236,26 @@ public:
     Status status() override { return shared_.status(); }
     IsobusStatus isobusStatus() override { return shared_.isobus(); }
     bool linkGateway(helper::LinkGateway& g) override { return helpers_.linkGateway(g); }
+
+    // The gateway's service (deploy/aow-linkd.service): installed by install.sh, switched on and
+    // off here as the installer's --gateway and --no-gateway do. Enabled is read from systemd's
+    // link, not by running systemctl: the ISOBUS page asks every second.
+    bool linkGatewayInstalled() override { return access(kLinkdUnit, F_OK) == 0; }
+    bool linkGatewayEnabled() override { return access(kLinkdWanted, F_OK) == 0; }
+    bool setLinkGatewayEnabled(bool on, std::string& error) override {
+        LOG_NOTICE(Network, "AOW link gateway switched %s from the ISOBUS page", on ? "on" : "off");
+        // --no-block: the start or stop is queued, not waited for; the page sees the result in
+        // the gateway's reports.
+        const char* cmd = on ? "systemctl --no-block enable --now aow-linkd.service >/dev/null 2>&1"
+                             : "systemctl --no-block disable --now aow-linkd.service >/dev/null 2>&1";
+        if (std::system(cmd) != 0) {
+            error = on ? "The gateway could not be switched on (systemctl failed)"
+                       : "The gateway could not be switched off (systemctl failed)";
+            LOG_ERROR(Network, "%s", error.c_str());
+            return false;
+        }
+        return true;
+    }
 
     void restart() override {
         LOG_WARNING(System, "Restart requested from the web page");

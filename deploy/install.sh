@@ -6,7 +6,8 @@
 #   sudo ./install.sh --no-hat   no HAT (existing AiO board over Ethernet): leave it disabled
 #
 # With --hat, the AOW link gateway (aow-linkd, AgOpenWeb's virtual terminal on the ISOBUS
-# channel) is installed too, and left as it was unless one of these is given:
+# channel) is installed too, and left as it was unless one of these is given (the ISOBUS page
+# has the same switch):
 #   --gateway      enable and start it
 #   --no-gateway   stop and disable it
 #
