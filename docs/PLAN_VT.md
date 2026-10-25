@@ -68,7 +68,10 @@ our own protocol, not GVRET; hello, heartbeat, bus status, the 1 s silence rule)
   all agree, and an update keeps it. Hidden where the gateway is not installed; switching off
   with a terminal connected asks first. Where it listens stays in `linkd.env`. On the CM4: on,
   reporting within 2 s; off, stopped and disabled within about 4 s.
-- **Still to do:** the tablets on the bench through the service.
+- **The tablets through the service** (2026-10-25, 0.2.26, switched on from the page): the iPad
+  and the Galaxy Tab pass with both example implements, link up throughout (AgIsoStack-dotnet
+  `docs/RESULTS.md`). One run showed `aow-hatd`'s status-screen RTS reaching the terminal twice,
+  as once before with the Python relay: its open observations say how to catch it.
 
 ## 3. Found on the bench, fixed here
 
