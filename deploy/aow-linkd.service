@@ -1,0 +1,22 @@
+[Unit]
+Description=AOW link gateway (the ISOBUS channel over TCP for AgOpenWeb's virtual terminal)
+# Off by default (install.sh --gateway): a tractor with its own terminal would otherwise see two.
+# Independent of aow-hatd on purpose: neither starts, stops nor restarts the other.
+After=network.target
+
+[Service]
+Type=notify
+# Options that belong to one unit (--listen, --can) are in /etc/aow-hat/linkd.env, which updates
+# never overwrite. This file is replaced by every update: do not edit it.
+EnvironmentFile=-/etc/aow-hat/linkd.env
+ExecStart=/usr/local/bin/aow-linkd --can hatcan2 $AOW_LINKD_OPTS
+Restart=always
+RestartSec=1
+# The poll loop pings every second: a hang is restarted like a crash.
+WatchdogSec=5
+# SocketCAN, rtnetlink and a port above 1024 need no privileges.
+DynamicUser=yes
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=multi-user.target

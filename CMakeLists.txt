@@ -49,6 +49,7 @@ add_library(aow_core
   core/src/steer.cpp
   core/src/motor.cpp
   core/src/gvret.cpp
+  core/src/aow_link.cpp
   core/src/um98x.cpp
   core/src/indicators.cpp
   core/src/imu.cpp
@@ -102,6 +103,12 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     target_link_libraries(aow-hatd PRIVATE isobus::Isobus isobus::HardwareIntegration isobus::Utility)
   endif()
   install(TARGETS aow-hatd RUNTIME DESTINATION bin)
+
+  # The AOW link gateway (docs/PLAN_VT.md section 2): its own program and service, off by default.
+  add_executable(aow-linkd daemon/aow_linkd.cpp)
+  target_compile_definitions(aow-linkd PRIVATE AOW_VERSION="${AOW_VERSION}")
+  target_link_libraries(aow-linkd PRIVATE aow_core)
+  install(TARGETS aow-linkd RUNTIME DESTINATION bin)
 endif()
 
 # A simulated ISOBUS implement, for tests/isobus_tc_probe.py. Built from the stack's example.
@@ -117,7 +124,7 @@ if(AOW_ISOBUS)
 endif()
 
 enable_testing()
-foreach(t pgn app_link gnss gnss_link imu port_monitor serial_detect log settings steer steer_motor can can_stall gvret um98x indicators loop_timing web_server web_api hat_leds)
+foreach(t pgn app_link aow_link gnss gnss_link imu port_monitor serial_detect log settings steer steer_motor can can_stall gvret um98x indicators loop_timing web_server web_api hat_leds)
   add_executable(test_${t} tests/test_${t}.cpp)
   target_link_libraries(test_${t} PRIVATE aow_web)
   target_include_directories(test_${t} PRIVATE boards/hat)

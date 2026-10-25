@@ -4,7 +4,7 @@ This file provides guidance to Claude Code when working with this repository.
 
 **Key documentation:**
 - **[docs/PLAN.md](docs/PLAN.md)** - Software plan: decisions, firmware-to-daemon mapping, safety rules, build phases
-- **[docs/PLAN_VT.md](docs/PLAN_VT.md)** - The virtual terminal (the implement's screens in AgOpenWeb): runs in the app on the AgIsoStack-dotnet wrapper; this repo's part is the CAN gateway, not built
+- **[docs/PLAN_VT.md](docs/PLAN_VT.md)** - The virtual terminal (the implement's screens in AgOpenWeb): runs in the app on the AgIsoStack-dotnet wrapper; this repo's part is the CAN gateway, `aow-linkd` (built; its status on the ISOBUS page is not)
 - **[hardware/hat/HARDWARE_HAT_DESIGN.md](hardware/hat/HARDWARE_HAT_DESIGN.md)** - What the board does and why: mechanical, power, circuits, pinouts
 - **[hardware/hat/HARDWARE_HAT_NETLIST.md](hardware/hat/HARDWARE_HAT_NETLIST.md)** - Every part and net
 - **[hardware/hat/HARDWARE_HAT_ISSUES.md](hardware/hat/HARDWARE_HAT_ISSUES.md)** - Open decisions (H#) and bench checks (B#)
@@ -85,6 +85,11 @@ The Teensy firmware is not being rewritten and nothing is ported back to it.
   `third_party/aog-taskcontroller/` is upstream's file **unmodified**: change the stand-in
   headers in `daemon/isobus_compat/` or `daemon/isobus.cpp` instead. Include the stack's
   headers before any `aow/` header and `#undef` its `LOG_*` macros, as `daemon/isobus.cpp` does.
+- **AOW link gateway (`aow-linkd`, docs/PLAN_VT.md section 2):** its own program and service,
+  off by default (`install.sh --hat --gateway`). Carries every frame of `hatcan2` to AgOpenWeb's
+  virtual terminal over TCP 2323 (the protocol: AgIsoStack-dotnet `docs/TRANSPORT.md` section 5;
+  `core/src/aow_link.cpp`, transport-free). Listens on loopback unless `/etc/aow-hat/linkd.env`
+  says otherwise. Its status to `aow-hatd` and the ISOBUS page: not yet.
 - **CAN watch:** `daemon/can_watch.cpp` restarts a CAN interface that has frames queued and sends
   none with no bus error (seen once after a bus-off storm; `/api/status` `canRestarts`).
 - **Key monitor:** `deploy/aow-keymon.py`, its own service: key off for 3 s runs `poweroff`.
@@ -152,6 +157,9 @@ scan, then PGN 254 at a set rate, checking every reply and timing the 253.
 `tests/imu_probe.py build/aow-hatd` runs an external IMU (BNO085 RVC) on a pty: hello as 121, IMU fields in PANDA.
 `tests/ports_probe.py build/aow-hatd` runs the serial ports on ptys: NMEA out (GGA at 5 Hz; the corrected position from PGN 100 and the fallback), RTCM out, and
 detection (a radio, unknown text, an IMU, a receiver taking over from a silent onboard one).
+`tests/link_probe.py build/aow-linkd [aowlink_check.py]` runs the AOW link gateway on vcan1 (and vcan7, made
+and removed): frames both ways, the drain on connect, STATUS following the interface; with the path
+to AgIsoStack-dotnet's `bench/aowlink_check.py`, the protocol checks too (root, for `ip link`).
 `tests/isobus_probe.py build/aow-hatd` checks the ISOBUS address claim and the tractor ECU role on
 vcan1 (stop the service first).
 `tests/isobus_tc_probe.py build/aow-hatd build/isobus_implement` runs section control against a

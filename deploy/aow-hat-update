@@ -53,7 +53,7 @@ main() {
 
   rm -rf "$stage"; mkdir -p "$stage"
   tar --no-same-owner -xzf "$work/bundle.tar.gz" -C "$stage" || fail "The package could not be unpacked."
-  [ -x "$stage/install.sh" ] && [ -x "$stage/aow-hatd" ] && [ -f "$stage/VERSION" ] || fail "The package is incomplete."
+  [ -x "$stage/install.sh" ] && [ -x "$stage/aow-hatd" ] && [ -x "$stage/aow-linkd" ] && [ -f "$stage/VERSION" ] || fail "The package is incomplete."
   grep -qx "arch=$(uname -m)" "$stage/VERSION" || fail "The package is for a different kind of computer."
   new="$(sed -n 's/^version=//p' "$stage/VERSION")"
 

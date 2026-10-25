@@ -5,6 +5,11 @@
 #   sudo ./install.sh --hat      HAT fitted: install and enable the daemon
 #   sudo ./install.sh --no-hat   no HAT (existing AiO board over Ethernet): leave it disabled
 #
+# With --hat, the AOW link gateway (aow-linkd, AgOpenWeb's virtual terminal on the ISOBUS
+# channel) is installed too, and left as it was unless one of these is given:
+#   --gateway      enable and start it
+#   --no-gateway   stop and disable it
+#
 # Run from a bundle (deploy/package.sh) or from the repo's deploy/ with a built aow-hatd beside
 # it. From a bundle, the bundle is kept in /usr/local/lib/aow-hat/current and the one before it
 # in .../previous, which is what the updater rolls back to. --no-record skips that (the
@@ -16,12 +21,15 @@ CONF=/etc/aow-hat.conf
 LIB=/usr/local/lib/aow-hat
 choice=""
 record=yes
+gateway=""
 
 for a in "$@"; do
   case "$a" in
     --hat) choice=yes ;;
     --no-hat) choice=no ;;
     --no-record) record=no ;;
+    --gateway) gateway=yes ;;
+    --no-gateway) gateway=no ;;
     *) echo "unknown option: $a" >&2; exit 2 ;;
   esac
 done
@@ -46,6 +54,9 @@ if [ "$choice" = yes ]; then
   [ -x "$HERE/aow-hatd" ] || { echo "aow-hatd binary not found next to install.sh" >&2; exit 1; }
   install -m 0755 "$HERE/aow-hatd" /usr/local/bin/aow-hatd
   install -m 0755 "$HERE/aow-hatctl" /usr/local/bin/aow-hatctl
+  [ -x "$HERE/aow-linkd" ] || { echo "aow-linkd binary not found next to install.sh" >&2; exit 1; }
+  install -m 0755 "$HERE/aow-linkd" /usr/local/bin/aow-linkd
+  install -m 0644 "$HERE/aow-linkd.service" /etc/systemd/system/aow-linkd.service
   install -m 0644 "$HERE/aow-hatd.service" /etc/systemd/system/aow-hatd.service
   install -m 0755 "$HERE/aow-keymon.py" /usr/local/bin/aow-keymon.py
   install -m 0644 "$HERE/aow-keymon.service" /etc/systemd/system/aow-keymon.service
@@ -64,6 +75,16 @@ if [ "$choice" = yes ]; then
 # Extra aow-hatd options for this unit. Kept across updates.
 # --adc-ref: the measured 5 V on J3 pin 3 (5V_MAIN), the ADC reference.
 AOW_HATD_OPTS=--adc-ref 5.0
+ENV
+  fi
+  if [ ! -f /etc/aow-hat/linkd.env ]; then
+    cat > /etc/aow-hat/linkd.env <<'ENV'
+# Extra aow-linkd options for this unit. Kept across updates.
+# It listens on 127.0.0.1 (AgOpenWeb on this unit) unless told otherwise. "--listen 0.0.0.0" lets
+# a tablet on the unit's network reach it: anyone who can reach port 2323 can then put frames on
+# the implement's bus, so only on a network that is the user's own.
+# "--can IF" if the ISOBUS channel is not CAN2 (hatcan2).
+AOW_LINKD_OPTS=
 ENV
   fi
 
@@ -107,6 +128,11 @@ ENV
   systemctl restart aow-keymon.service
   systemctl restart aow-hatd.service  # a reinstall must run the new binary
   echo "HAT daemon installed and started."
+  case "$gateway" in
+    yes) systemctl enable aow-linkd.service; systemctl restart aow-linkd.service; echo "AOW link gateway enabled and started." ;;
+    no) systemctl disable --now aow-linkd.service 2>/dev/null || true; echo "AOW link gateway disabled." ;;
+    *) systemctl try-restart aow-linkd.service ;;  # running: run the new binary
+  esac
   if [ "$reboot_needed" = yes ]; then
     touch /run/aow-hat-reboot-needed
     echo "Boot files changed: reboot to load the HAT overlays and the RT kernel."
@@ -120,6 +146,9 @@ ENV
 else
   if systemctl list-unit-files aow-hatd.service >/dev/null 2>&1; then
     systemctl disable --now aow-hatd.service 2>/dev/null || true
+  fi
+  if systemctl list-unit-files aow-linkd.service >/dev/null 2>&1; then
+    systemctl disable --now aow-linkd.service 2>/dev/null || true
   fi
   echo "No HAT: daemon left disabled. AgOpenWeb will use the AiO board on the network."
 fi

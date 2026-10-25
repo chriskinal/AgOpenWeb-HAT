@@ -2,7 +2,7 @@
 
 > The implement's screens in AgOpenWeb. Since 2026-10-24 the terminal runs **inside AgOpenWeb**,
 > on AgIsoStack++ through the **AgIsoStack-dotnet** wrapper, and is fed every CAN frame over TCP
-> by a gateway. This repo's part is that **gateway on the HAT**. Nothing here is built.
+> by a gateway. This repo's part is that **gateway on the HAT**: `aow-linkd`, built 2026-10-25.
 > The first plan (2026-10-13: an `aow-vtd` service here, drawing in a browser over a WebSocket)
 > is dropped; it is in git history before 17ad56e.
 
@@ -23,22 +23,39 @@ implement ── CAN2 (hatcan2) ── gateway service ── TCP (Wi-Fi, or loo
 (<https://github.com/chriskinal/isobus-implement-sim>, private) builds them. A real implement
 still comes before a release.
 
-## 2. The gateway service (not built)
+## 2. The gateway service, `aow-linkd` (built 2026-10-25, 0.2.24)
 
-Implements the protocol in AgIsoStack-dotnet's `docs/TRANSPORT.md` (still to be settled there:
-our own or GVRET with additions; hello, heartbeat, bus status, a stale-frame limit). The bench's
-Python relay in that repo is the working prototype.
+Implements the AOW link protocol, version 1 (AgIsoStack-dotnet's `docs/TRANSPORT.md` section 5:
+our own protocol, not GVRET; hello, heartbeat, bus status, the 1 s silence rule).
 
-- **Its own service beside `aow-hatd`**, like `aow-tcd` (`docs/PLAN.md` section 8): it parses
-  nothing, but restarts on its own and runs on a Linux box without the HAT too. SocketCAN lets it
-  share `hatcan2` with `aow-hatd`'s ISOBUS work. Normal priority: a saturated CAN2 left the
-  control loop's timing unchanged (`docs/PLAN.md` section 4).
-- **Not GVRET on TCP 23 as it stands:** `aow-hatd`'s GVRET is listen-only and carries the brand
-  CAN through the control loop's ring.
-- **Off by default.** A tractor with its own terminal would otherwise see two.
-- **Status** to `aow-hatd` on `127.0.0.1:8891` like `aow-tcd`: running, client connected, frames,
-  bus state; shown on the ISOBUS page and in `/api/status`.
-- **Packaging** in the `.aowpkg`, with an installer option and its settings.
+- **The protocol** is `core/src/aow_link.cpp` (`aow/aow_link.h`): transport-free like `gvret`,
+  bytes and frames in, bytes out, the time handed in. One control client, up to four monitors,
+  the bus drained when a control client connects, frames to the bus dropped after 100 ms, STATUS
+  every second and on a change. Unit tests: `tests/test_aow_link.cpp`.
+- **The program** is `daemon/aow_linkd.cpp`: one thread, one poll loop over the listener, the
+  CAN sockets (SocketCAN, kernel timestamps, the receive-overflow count) and the clients. Bus
+  state, error counters and bitrate from rtnetlink once a second; an interface missing at start
+  is looked for every second. `--can IF[,IF...]` (default `hatcan2`), `--listen` (default
+  127.0.0.1), `--port` (2323), `--name`.
+- **Its own service beside `aow-hatd`**, as planned: `deploy/aow-linkd.service`, `Type=notify`
+  with `WatchdogSec=5` (pinged from the loop), `Restart=always`, `DynamicUser` (SocketCAN and
+  rtnetlink need no privileges), normal priority, no dependency on `aow-hatd` either way.
+  SocketCAN shares `hatcan2` with `aow-hatd`'s ISOBUS work: on the bench the task controller's
+  own status screen (0xF7) reached the terminal through it.
+- **Off by default.** `install.sh --hat --gateway` enables it, `--no-gateway` disables it,
+  neither leaves it as it is (so an update keeps the choice). Per-unit options in
+  `/etc/aow-hat/linkd.env` (`AOW_LINKD_OPTS`), kept across updates: `--listen 0.0.0.0` for a
+  tablet on the unit's network (anyone who can reach the port can put frames on the bus).
+- **Packaged** in the `.aowpkg`; the updater refuses a package without it.
+- **Tested:** `tests/link_probe.py build/aow-linkd [aowlink_check.py]` on vcan (frames both ways,
+  the drain, STATUS following the interface down and up, a late interface); AgIsoStack-dotnet's
+  `bench/aowlink_check.py` (all checks), its `bench/local.sh` with `GATEWAY=` (the bench and a
+  1.5 s cut, in a container), and its Wi-Fi bench on the dev CM4 with the service (both example
+  implements, Mac terminal: AgIsoStack-dotnet `docs/RESULTS.md`).
+- **Still to do:** status to `aow-hatd` on `127.0.0.1:8891` (running, client connected, frames,
+  bus state), shown on the ISOBUS page and in `/api/status`, and its on/off switch there: with
+  the 8891 listener, which `aow-tcd` needs too (`docs/PLAN.md` section 8). The tablets on the
+  bench through the service.
 
 ## 3. Found on the bench, fixed here
 

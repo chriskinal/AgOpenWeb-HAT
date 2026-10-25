@@ -35,7 +35,7 @@ for tool in cmake dtc openssl; do command -v $tool >/dev/null || { echo "$tool n
 
 BUILD="${AOW_PACKAGE_BUILD:-$REPO/build-package}"  # deploy/dev.sh puts it in its build volume
 cmake -S "$REPO" -B "$BUILD" -DCMAKE_BUILD_TYPE=Release ${VERSION:+-DAOW_VERSION="$VERSION"} >/dev/null
-cmake --build "$BUILD" --target aow-hatd -j"$(nproc)" >/dev/null
+cmake --build "$BUILD" --target aow-hatd aow-linkd -j"$(nproc)" >/dev/null
 VERSION="$("$BUILD/aow-hatd" --version | awk '{print $2}')"
 
 STAGE="$(mktemp -d)"
@@ -44,9 +44,11 @@ B="$STAGE/bundle"
 mkdir -p "$B/can-config"
 install -m 0755 "$BUILD/aow-hatd" "$B/aow-hatd"
 strip "$B/aow-hatd" 2>/dev/null || true
+install -m 0755 "$BUILD/aow-linkd" "$B/aow-linkd"
+strip "$B/aow-linkd" 2>/dev/null || true
 dtc -@ -q -I dts -O dtb -o "$B/aow-hat.dtbo" "$REPO/boards/hat/aow-hat-overlay.dts"
 install -m 0755 "$HERE/install.sh" "$HERE/aow-hatctl" "$HERE/aow-keymon.py" "$HERE/aow-hat-update" "$B/"
-install -m 0644 "$HERE/aow-hatd.service" "$HERE/aow-keymon.service" "$HERE/aow-hat-update.service" \
+install -m 0644 "$HERE/aow-hatd.service" "$HERE/aow-linkd.service" "$HERE/aow-keymon.service" "$HERE/aow-hat-update.service" \
   "$HERE/80-aow-hat-can.rules" "$HERE/config.txt.hat" "$HERE/update-key.pem" "$B/"
 install -m 0644 "$HERE"/can-config/*.json "$B/can-config/"
 {
