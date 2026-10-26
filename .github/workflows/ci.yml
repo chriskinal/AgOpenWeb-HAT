@@ -1,0 +1,70 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 The AgOpenWeb-HAT contributors
+#
+# Builds aow-hatd, aow-linkd and the tests in the dev container's image (.devcontainer/Dockerfile:
+# Debian Trixie, the CM4's OS), from a clean tree, and runs the unit tests, the HAT's device tree
+# overlay through dtc, and the end-to-end probes (tests/ci_probes.sh): those on ptys and loopback,
+# then those on virtual CAN. On arm64 (the CM4's architecture) and x64. No package is made: that
+# needs the signing key (deploy/dev.sh package).
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: build and test (Trixie ${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: arm64, runner: ubuntu-24.04-arm }
+          - { arch: x64, runner: ubuntu-24.04 }
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+      - name: image
+        run: docker build -t aow-hat-dev .devcontainer
+      - name: build
+        # The checkout is owned by the runner's user; the container runs as root.
+        run: |
+          docker run --rm -v "$PWD:/src" aow-hat-dev bash -c '
+            cmake -S /src -B /src/build >/dev/null && cmake --build /src/build -j"$(nproc)"'
+      - name: unit tests
+        run: docker run --rm -v "$PWD:/src" aow-hat-dev ctest --test-dir /src/build --output-on-failure
+      - name: device tree overlay
+        run: docker run --rm -v "$PWD:/src" aow-hat-dev dtc -@ -q -I dts -O dtb -o /dev/null /src/boards/hat/aow-hat-overlay.dts
+      - name: probes on ptys and loopback
+        timeout-minutes: 15
+        run: docker run --rm -v "$PWD:/src" aow-hat-dev /src/tests/ci_probes.sh
+      - name: probes on virtual CAN
+        # vcan is in linux-modules-extra, not always on the runner's kernel, and that install has
+        # hung for minutes on these runners (SharpIsoTerm's CI). If it can't be had in time the
+        # CAN probes are skipped with a warning; a probe that runs and fails fails.
+        timeout-minutes: 20
+        run: |
+          APT="sudo apt-get -o DPkg::Lock::Timeout=60 -o Acquire::http::Timeout=30 -o Acquire::Retries=2"
+          if ! sudo modprobe vcan; then
+            if ! (timeout 150 $APT update -qq && timeout 150 $APT install -y -qq linux-modules-extra-$(uname -r) && sudo modprobe vcan); then
+              echo "::warning title=CAN probes skipped::vcan is not available on this runner (linux-modules-extra did not install in time)"
+              exit 0
+            fi
+          fi
+          docker run --rm --privileged -v "$PWD:/src" aow-hat-dev /src/tests/ci_probes.sh --can
+      - name: logs
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: logs-${{ matrix.arch }}
+          path: |
+            build/Testing/Temporary/LastTest.log
+            build/sim.log
+          if-no-files-found: ignore

@@ -118,7 +118,10 @@ def main():
     print("%d PANDA; last IMU fields: %s" % (len(panda), last[12:16]))
     if len(last) >= 16:
         heading, roll, pitch, rate = int(last[12]), int(last[13]), int(last[14]), float(last[15])
-        ok &= 0 <= heading < 3600 and abs(heading / 10.0 - (yaw - 0.1) % 360.0) < 1.0
+        # PANDA goes out on GGA, sent with every 10th IMU packet: the last one carries a heading
+        # from the packets around the last GGA, 0 to 1 deg behind the last one sent.
+        behind = ((yaw - 0.1) - heading / 10.0 + 180.0) % 360.0 - 180.0
+        ok &= 0 <= heading < 3600 and -0.15 < behind < 1.15
         ok &= roll == -22 or roll == -23  # -2.25 deg x10
         ok &= pitch in (1, 2)             # degrees
         ok &= abs(rate - 10.0) < 1.0
