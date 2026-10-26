@@ -4,8 +4,8 @@
 # Builds aow-hatd, aow-linkd and the tests in the dev container's image (.devcontainer/Dockerfile:
 # Debian Trixie, the CM4's OS), from a clean tree, and runs the unit tests, the HAT's device tree
 # overlay through dtc, and the end-to-end probes (tests/ci_probes.sh): those on ptys and loopback,
-# then those on virtual CAN. On arm64 (the CM4's architecture) and x64. No package is made: that
-# needs the signing key (deploy/dev.sh package).
+# then those on virtual CAN. On arm64 (the CM4's architecture) and x64. No package is made here:
+# release.yml runs this first, then packages and publishes.
 name: ci
 
 on:
@@ -13,9 +13,12 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+  workflow_call:  # release.yml, before it packages
 
+# Not github.workflow: called from release.yml that is release's name, and the two groups would
+# be one. The event keeps a nightly's run apart from a push's to the same branch.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ci-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:

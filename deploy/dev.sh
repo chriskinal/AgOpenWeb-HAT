@@ -20,7 +20,7 @@ set -euo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 IMAGE=aow-hat-dev
 VOLUME=aow-hat-build
-KEY="${AOW_HAT_SIGNING_KEY:-$HOME/.config/aow-hat/update-signing-key.pem}"
+KEY="${AOW_HAT_SIGNING_KEY:-$HOME/.config/aow-hat/release-signing-key.pem}"
 HOST="${AOW_HAT_HOST:-192.168.4.217}"
 
 image() {

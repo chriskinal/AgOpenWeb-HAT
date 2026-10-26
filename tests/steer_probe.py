@@ -68,8 +68,10 @@ def main():
             pass
         return last
 
-    # Gains: Kp 40, high 255, low 0, min 10, 30 counts/deg, offset 0, Ackermann 1.00.
-    kp = 40 + int(time.time()) % 20  # a value that differs from run to run, to see it saved
+    # Gains: Kp (below), high 255, low 0, min 10, 30 counts/deg, offset 0, Ackermann 1.00.
+    # A value that differs from run to run, to see it saved, and never the default (40): the daemon
+    # saves only what changed, so a fresh settings file would not be written at all.
+    kp = 41 + int(time.time()) % 19
     s.sendto(frame(252, [kp, 255, 0, 10, 30, 0, 0, 100]), dest)
     # Config: nothing inverted, no switch or button, min speed 0.3 km/h, no current sensor.
     s.sendto(frame(251, [0, 0, 3, 0, 0, 0, 0, 0]), dest)

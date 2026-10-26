@@ -5,7 +5,7 @@
 # Builds the AOW HAT update package. Run on Linux arm64 (the CM4, or an arm64 CI runner):
 # needs cmake, g++, dtc and OpenSSL 3.
 #
-#   deploy/package.sh [--version X.Y.Z] [--key private.pem] [--out DIR]
+#   deploy/package.sh [--version X.Y.Z] [--key private.pem] [--out DIR] [--accepted-by public.pem]
 #
 # Writes two files:
 #   aow-hat-<version>-linux-arm64.tar.gz   the bundle: unpack and run "sudo ./install.sh --hat"
@@ -14,21 +14,27 @@
 #
 # Package format: the tar.gz, then a 64-byte Ed25519 signature of it, then "AOWHAT1\n".
 # The signing key comes from --key, $AOW_HAT_SIGNING_KEY, or
-# ~/.config/aow-hat/update-signing-key.pem. Its public half is deploy/update-key.pem, which the
-# installer puts on the unit; a package signed with any other key is refused there.
+# ~/.config/aow-hat/release-signing-key.pem (CI: the AOW_HAT_SIGNING_KEY secret, release.yml). Its
+# public half is deploy/update-key.pem, which the installer puts on the unit; a package signed with
+# any other key is refused there, so the signature is checked against it before the package is
+# written. --accepted-by checks it against another public key instead: a handover package for
+# units that still trust an older key, signed with that key's private half, which installs the
+# new deploy/update-key.pem on them.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$HERE/.." && pwd)"
 VERSION=""
-KEY="${AOW_HAT_SIGNING_KEY:-$HOME/.config/aow-hat/update-signing-key.pem}"
+KEY="${AOW_HAT_SIGNING_KEY:-$HOME/.config/aow-hat/release-signing-key.pem}"
 OUT="$(pwd)"
+ACCEPTED="$HERE/update-key.pem"
 while [ $# -gt 0 ]; do
   case "$1" in
     --version) VERSION="$2"; shift 2 ;;
     --key) KEY="$2"; shift 2 ;;
     --out) OUT="$2"; shift 2 ;;
-    -h|--help) sed -n '2,16p' "$0"; exit 0 ;;
+    --accepted-by) ACCEPTED="$2"; shift 2 ;;
+    -h|--help) sed -n '5,22p' "$0"; exit 0 ;;
     *) echo "unknown option: $1" >&2; exit 2 ;;
   esac
 done
@@ -76,8 +82,8 @@ tar --sort=name --owner=0 --group=0 --numeric-owner -C "$B" -czf "$OUT/$NAME.tar
 openssl pkeyutl -sign -inkey "$KEY" -rawin -in "$OUT/$NAME.tar.gz" -out "$STAGE/sig"
 [ "$(stat -c %s "$STAGE/sig")" = 64 ] || { echo "signature is not 64 bytes: is the key Ed25519?" >&2; exit 1; }
 # The key must be the one units trust, or the package is useless.
-openssl pkeyutl -verify -pubin -inkey "$HERE/update-key.pem" -rawin -in "$OUT/$NAME.tar.gz" -sigfile "$STAGE/sig" >/dev/null \
-  || { echo "signed, but not with the key in deploy/update-key.pem" >&2; exit 1; }
+openssl pkeyutl -verify -pubin -inkey "$ACCEPTED" -rawin -in "$OUT/$NAME.tar.gz" -sigfile "$STAGE/sig" >/dev/null \
+  || { echo "signed, but not with the private half of $ACCEPTED" >&2; exit 1; }
 { cat "$OUT/$NAME.tar.gz" "$STAGE/sig"; printf 'AOWHAT1\n'; } > "$OUT/$NAME.aowpkg"
 
 echo "$OUT/$NAME.tar.gz"

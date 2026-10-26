@@ -111,7 +111,17 @@ The Teensy firmware is not being rewritten and nothing is ported back to it.
 - **Key monitor:** `deploy/aow-keymon.py`, its own service: key off for 3 s runs `poweroff`.
 - **Updates:** `deploy/package.sh` (on Linux arm64) builds a bundle and a signed `.aowpkg`; the
   System Update page (`/ota`) takes the `.aowpkg`, and `deploy/aow-hat-update`, a separate root
-  service, verifies, installs and rolls back. `deploy/update-key.pem` is a development key.
+  service, verifies, installs and rolls back. Packages are signed with the release key (Ed25519,
+  2026-10-26): its private half is the `AOW_HAT_SIGNING_KEY` secret and, for local packages,
+  `~/.config/aow-hat/release-signing-key.pem` (backed up offline); its public half is
+  `deploy/update-key.pem`, which install.sh puts on the unit. A unit still on the old development
+  key takes one handover package first, signed with that key and carrying the new one:
+  `AOW_HAT_SIGNING_KEY=<old key> deploy/dev.sh package --version V --accepted-by <old public key>`.
+  Releases come from `.github/workflows/release.yml`: a tag vX.Y.Z makes release vX.Y.Z; a
+  nightly (06:30 UTC, when main moved) replaces the `nightly` pre-release as
+  X.Y.Z-nightly.DATE.RUN, X.Y.Z the project version in CMakeLists.txt (the next release: move it
+  after each one). Each has the `.aowpkg`, the `.tar.gz` and SHA256SUMS. A tagged release fails
+  unless AgIsoStack++'s pin is upstream's HEAD (a nightly warns).
   Per-unit daemon options live in `/etc/aow-hat/daemon.env`, not in the service unit.
 - **Scope:** port every v26 firmware function the HAT hardware supports, web UI included
   (docs/PLAN.md section 2).
@@ -157,8 +167,8 @@ c++ -std=c++17 -Wall -Wextra -Icore/include -Ihal/include core/src/*.cpp tests/t
 # The daemon on the Mac: a Trixie arm64 container (the CM4's OS/arch; image in .devcontainer/,
 # builds kept in the Docker volume aow-hat-build). Needs OrbStack (or Docker Desktop) running.
 deploy/dev.sh test                          # build + ctest, incremental
-deploy/dev.sh package --version 0.2.20      # signed .aowpkg + .tar.gz into dist/
-deploy/dev.sh install dist/aow-hat-0.2.20-linux-arm64.aowpkg   # to the dev CM4's update page
+deploy/dev.sh package --version 0.3.0-rc.1  # signed .aowpkg + .tar.gz into dist/ (the release key)
+deploy/dev.sh install dist/aow-hat-0.3.0-rc.1-linux-arm64.aowpkg   # to the dev CM4's update page
 deploy/dev.sh shell                         # builds are in /build/main there, e.g. /build/main/aow-hatd
 # VS Code: "Reopen in Container" uses the same image and volume; clangd sees the Linux headers.
 ```
