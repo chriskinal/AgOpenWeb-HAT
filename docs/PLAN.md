@@ -388,7 +388,7 @@ channel does.
    has the certificates, so this covers unlocked tractors and open valves only: uncommon.
 4. Virtual terminal server (the implement's screen in AgOpenWeb): not part of this phase.
    Planned in `docs/PLAN_VT.md`: since 2026-10-24 the terminal runs in AgOpenWeb on the
-   AgIsoStack-dotnet wrapper, and this repo provides a CAN gateway to it: `aow-linkd`, built
+   SharpIsoTerm wrapper, and this repo provides a CAN gateway to it: `aow-linkd`, built
    2026-10-25 (0.2.24).
 
 **Source.** AOG-TaskController (AgOpenGPS-Official, GPL-3, `/Users/chris/Code/AOG-TaskController`)

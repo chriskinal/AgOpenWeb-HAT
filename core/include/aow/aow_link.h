@@ -1,5 +1,5 @@
 // The gateway end of the AOW link protocol, version 1: CAN frames between the HAT's channels and
-// the virtual terminal in AgOpenWeb, over TCP. The specification is AgIsoStack-dotnet's
+// the virtual terminal in AgOpenWeb, over TCP. The specification is SharpIsoTerm's
 // docs/TRANSPORT.md section 5; its bench/aowlink_check.py tests a running gateway against it.
 //
 // Transport-free, like gvret.h: the program around it (daemon/aow_linkd.cpp) owns the sockets,

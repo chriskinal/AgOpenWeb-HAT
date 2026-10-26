@@ -1,6 +1,6 @@
 // aow-linkd: the AOW link gateway (docs/PLAN_VT.md section 2). Carries every frame of the HAT's
 // ISOBUS channel to the virtual terminal in AgOpenWeb, and the terminal's frames to the bus, over
-// TCP. The protocol is AgIsoStack-dotnet's docs/TRANSPORT.md section 5 (core/src/aow_link.cpp).
+// TCP. The protocol is SharpIsoTerm's docs/TRANSPORT.md section 5 (core/src/aow_link.cpp).
 //
 // Its own program beside aow-hatd: it parses nothing, so it cannot take steering down, and it runs
 // on a Linux box without the HAT too. One thread, one poll loop: the listener, the CAN sockets and
