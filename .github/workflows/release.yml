@@ -1,0 +1,139 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 The AgOpenWeb-HAT contributors
+#
+# Releases the AOW HAT software: ci.yml first (build, unit tests, probes), then the update package
+# built on arm64 in the dev container's image (deploy/package.sh), signed with the release key
+# (the AOW_HAT_SIGNING_KEY secret; its public half is deploy/update-key.pem), then published:
+#   - a tag vX.Y.Z: release vX.Y.Z, version X.Y.Z;
+#   - nightly, at 06:30 UTC when main has moved since the last one (or by hand: Actions, release,
+#     Run workflow): the `nightly` pre-release is replaced, version X.Y.Z-nightly.DATE.RUN with
+#     X.Y.Z the project version in CMakeLists.txt (the next release).
+# Each has the signed .aowpkg (the System Update page), the .tar.gz (a first install:
+# sudo ./install.sh --hat) and SHA256SUMS. AgIsoStack++'s pin must be upstream's HEAD for a tagged
+# release (CLAUDE.md); a nightly only warns.
+name: release
+
+on:
+  push:
+    tags: ['v*']
+  schedule:
+    - cron: '30 6 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: release-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # Nightly: nothing to do when the nightly release is already of main's head.
+  changed:
+    name: anything new
+    runs-on: ubuntu-24.04
+    outputs:
+      go: ${{ steps.check.outputs.go }}
+    steps:
+      - id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          go=true
+          if [ "$GITHUB_EVENT_NAME" = schedule ]; then
+            last=$(gh api repos/$GITHUB_REPOSITORY/git/ref/tags/nightly -q .object.sha 2>/dev/null || true)
+            if [ "$last" = "$GITHUB_SHA" ]; then go=false; echo "nightly is already $GITHUB_SHA"; fi
+          fi
+          echo "go=$go" >> "$GITHUB_OUTPUT"
+
+  ci:
+    needs: changed
+    if: needs.changed.outputs.go == 'true'
+    uses: ./.github/workflows/ci.yml
+
+  package:
+    name: package (arm64)
+    needs: ci
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+      - name: version
+        run: |
+          V=$(sed -n 's/^project(aow-hatd VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)
+          case "$GITHUB_REF" in
+            refs/tags/v*)
+              T=${GITHUB_REF#refs/tags/v}
+              [ "$T" = "$V" ] || echo "::warning title=version::tag v$T, CMakeLists.txt says $V (the tag wins; set the next version there)"
+              V=$T ;;
+            *) V=$V-nightly.$(date -u +%Y%m%d).$GITHUB_RUN_NUMBER ;;
+          esac
+          echo "VERSION=$V" >> "$GITHUB_ENV"
+          echo "$V"
+      - name: AgIsoStack++ pin is upstream's HEAD
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          pin=$(grep -o 'AgIsoStack-plus-plus/archive/[0-9a-f]*' CMakeLists.txt | sed 's:.*/::')
+          head=$(gh api repos/Open-Agriculture/AgIsoStack-plus-plus/commits/main -q .sha)
+          if [ "$pin" = "$head" ]; then echo "pin $pin is upstream's HEAD"; exit 0; fi
+          msg="AgIsoStack++ is pinned at ${pin::7}, upstream's HEAD is ${head::7}: move the pin (CLAUDE.md)"
+          case "$GITHUB_REF" in
+            refs/tags/v*) echo "::error title=AgIsoStack++ pin::$msg"; exit 1 ;;
+            *) echo "::warning title=AgIsoStack++ pin::$msg" ;;
+          esac
+      - name: image
+        run: docker build -t aow-hat-dev .devcontainer
+      - name: package
+        env:
+          KEY: ${{ secrets.AOW_HAT_SIGNING_KEY }}
+        run: |
+          [ -n "$KEY" ] || { echo "::error::the AOW_HAT_SIGNING_KEY secret is not set"; exit 1; }
+          umask 077
+          printf '%s\n' "$KEY" > "$RUNNER_TEMP/key.pem"
+          docker run --rm -v "$PWD:/src" -v "$RUNNER_TEMP/key.pem:/key.pem:ro" aow-hat-dev \
+            /src/deploy/package.sh --version "$VERSION" --key /key.pem --out /src/dist
+          rm -f "$RUNNER_TEMP/key.pem"
+          ls -l dist
+      - uses: actions/upload-artifact@v7
+        with:
+          name: aow-hat-${{ env.VERSION }}
+          path: dist/aow-hat-*
+          if-no-files-found: error
+
+  # Nightly replaces the `nightly' pre-release and its tag (moved to this commit); a tag vX.Y.Z
+  # makes release vX.Y.Z.
+  release:
+    name: release
+    needs: package
+    if: >-
+      startsWith(github.ref, 'refs/tags/v') ||
+      ((github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main')
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: aow-hat-*
+          path: release
+          merge-multiple: true
+      - name: assets
+        run: |
+          (cd release && sha256sum * > SHA256SUMS && cat SHA256SUMS)
+          V=$(ls release/*.aowpkg | sed 's:.*/aow-hat-\(.*\)-linux-arm64\.aowpkg:\1:')
+          echo "VERSION=$V" >> "$GITHUB_ENV"
+      - name: nightly
+        if: "!startsWith(github.ref, 'refs/tags/v')"
+        run: |
+          gh release delete nightly --cleanup-tag --yes 2>/dev/null || true
+          git push -q origin "$GITHUB_SHA:refs/tags/nightly"
+          gh release create nightly release/* --prerelease --verify-tag --title "Nightly $VERSION" \
+            --notes "Built from main at $GITHUB_SHA ($(git log -1 --format=%cs)). Replaced each night main has moved. Not a release: for testing.
+
+          Install: the .aowpkg on the unit's System Update page; a new unit: unpack the .tar.gz and run sudo ./install.sh --hat.
+
+          $(git log -1 --format='Last change: %s')"
+      - name: tagged
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: gh release create "$GITHUB_REF_NAME" release/* --verify-tag --title "AOW HAT $VERSION" --generate-notes

@@ -2,7 +2,7 @@
 # Copyright (c) 2026 The AgOpenWeb-HAT contributors
 
 cmake_minimum_required(VERSION 3.18)
-project(aow-hatd VERSION 0.1.0 LANGUAGES CXX)
+project(aow-hatd VERSION 0.3.0 LANGUAGES CXX)  # the next release: nightlies are X.Y.Z-nightly.DATE.RUN (release.yml)
 
 # Optimised unless told otherwise: an unoptimised ISOBUS stack is several times slower.
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
