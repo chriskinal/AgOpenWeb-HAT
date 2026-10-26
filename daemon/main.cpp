@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (c) 2026 The AgOpenWeb-HAT contributors
+// Ported from Firmware_Teensy_AiO-New-Dawn, copyright 2025 by the AOG Group.
+//
 // aow-hatd: hardware daemon for the AOW HAT.
 //
 // Two threads. The control thread (this one, real-time under systemd) runs one poll loop: the

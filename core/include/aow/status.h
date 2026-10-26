@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 The AgOpenWeb-HAT contributors
+//
 // A snapshot of the daemon's state, published by the control loop for the web pages and the
 // telemetry stream. Plain data: copied under a lock, never shared by reference.
 #pragma once

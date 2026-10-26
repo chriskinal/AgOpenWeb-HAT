@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 The AgOpenWeb-HAT contributors
+//
 // The web thread: pages and API on HTTP, telemetry and log WebSockets, and the log outputs
 // (journal, UDP syslog). Runs at normal priority and never touches hardware.
 #pragma once

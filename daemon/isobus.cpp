@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 The AgOpenWeb-HAT contributors
+//
 // The stack's headers come first: can_stack_logger.hpp defines LOG_ERROR and friends, which are
 // the daemon's logging macros too. Drop the stack's before aow/log.h defines ours.
 #if AOW_ISOBUS

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 The AgOpenWeb-HAT contributors
+
 #include <cstdio>
 #include <filesystem>
 #include <fstream>

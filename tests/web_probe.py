@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 The AgOpenWeb-HAT contributors
+
 """Checks a running aow-hatd's web side: every page and API, the telemetry WebSocket (8082)
 and the log WebSocket (8083). Standard library only.
 

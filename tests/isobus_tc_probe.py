@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 The AgOpenWeb-HAT contributors
+
 """ISOBUS section control end to end on virtual CAN: aow-hatd as the task controller on CAN2
 (vcan1), a simulated implement beside it, and this script as the app.
 

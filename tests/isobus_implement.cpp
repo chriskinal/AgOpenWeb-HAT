@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 The AgOpenWeb-HAT contributors
+//
 // A simulated ISOBUS implement for tests/isobus_tc_probe.py: a section control client that
 // connects to a task controller and prints its section states whenever they change.
 //

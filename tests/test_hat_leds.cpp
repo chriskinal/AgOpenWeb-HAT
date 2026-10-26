@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 The AgOpenWeb-HAT contributors
+//
 // The SK6812 frame the HAT's LED driver loads into the PCM FIFO.
 #include <cstdio>
 

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 The AgOpenWeb-HAT contributors
+//
 // What the firmware's CAN files (CANConfigParser, CANProtocolEngine, TractorCANDriver) used
 // from the Teensy build, reimplemented so they port near-verbatim:
 //   CAN_message_t (FlexCAN_T4), millis(), constrain(), globalCAN1..3, MessageBuilder,

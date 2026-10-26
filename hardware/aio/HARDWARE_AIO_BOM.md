@@ -1,3 +1,6 @@
+<!-- SPDX-License-Identifier: CERN-OHL-P-2.0 -->
+<!-- Copyright (c) 2026 The AgOpenWeb-HAT contributors -->
+
 # AgOpenWeb AiO Board — BOM (as-built, 2026-09-14)
 
 > Bill of materials generated from `Netlists From EasyEDA/Full-board_2026-09-14.net`: **151 netlist

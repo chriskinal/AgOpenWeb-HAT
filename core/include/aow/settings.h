@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (c) 2026 The AgOpenWeb-HAT contributors
+// Ported from Firmware_Teensy_AiO-New-Dawn, copyright 2025 by the AOG Group.
+//
 // Persisted settings: the firmware's ConfigManager/EEPROM fields that apply to the HAT, with
 // the firmware's defaults. Stored as JSON; a missing key keeps its default, so old files load.
 #pragma once

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 The AgOpenWeb-HAT contributors
+//
 // ISOBUS on one of the HAT's CAN channels (docs/PLAN.md section 8), on AgIsoStack++.
 //
 // The stack runs on its own normal-priority threads and opens its channel itself. The control

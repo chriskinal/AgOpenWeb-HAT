@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 The AgOpenWeb-HAT contributors
+#
 # AOW HAT updater: verifies a signed package, installs it, and puts the previous version back if
 # the new daemon does not stay up. Run as root by aow-hat-update.service (started by the daemon
 # when a package is uploaded on the System Update page), or by hand:

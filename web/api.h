@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (c) 2026 The AgOpenWeb-HAT contributors
+// Ported from Firmware_Teensy_AiO-New-Dawn, copyright 2025 by the AOG Group.
+//
 // The firmware's web API (SimpleWebManager) on top of aow::web::Server. Request and response
 // fields keep the firmware's names so its pages work unchanged.
 #pragma once

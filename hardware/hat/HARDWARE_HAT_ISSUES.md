@@ -1,3 +1,6 @@
+<!-- SPDX-License-Identifier: CERN-OHL-P-2.0 -->
+<!-- Copyright (c) 2026 The AgOpenWeb-HAT contributors -->
+
 # AgOpenWeb HAT — Issues and Checks
 
 > Open decisions, checks still to do, and results so far.

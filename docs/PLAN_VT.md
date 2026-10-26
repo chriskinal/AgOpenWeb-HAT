@@ -1,3 +1,6 @@
+<!-- SPDX-License-Identifier: MIT -->
+<!-- Copyright (c) 2026 The AgOpenWeb-HAT contributors -->
+
 # Plan: virtual terminal
 
 > The implement's screens in AgOpenWeb. Since 2026-10-24 the terminal runs **inside AgOpenWeb**,

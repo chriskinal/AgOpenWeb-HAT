@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (c) 2026 The AgOpenWeb-HAT contributors
+// Ported from Firmware_Teensy_AiO-New-Dawn, copyright 2025 by the AOG Group.
+//
 // Motor drivers as the autosteer sees them: the firmware's MotorDriverInterface plus the
 // TractorCANDriver queries AutosteerProcessor made.
 //

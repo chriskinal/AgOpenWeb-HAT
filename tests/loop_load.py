@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 The AgOpenWeb-HAT contributors
+
 """Control-loop timing under CAN and CPU load, on the dev CM4 (CAN2 and CAN3 linked).
 
 Phases of SECS seconds each: baseline; CAN3 flooding CAN2 at bus rate; the flood plus one

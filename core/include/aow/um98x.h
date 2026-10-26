@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (c) 2026 The AgOpenWeb-HAT contributors
+// Ported from Firmware_Teensy_AiO-New-Dawn, copyright 2025 by the AOG Group.
+//
 // UM981/UM982 receiver setup over the GNSS serial port, ported from the firmware's
 // UM98xManager: read the receiver's CONFIG, MODE and log list, or write them and SAVECONFIG.
 //

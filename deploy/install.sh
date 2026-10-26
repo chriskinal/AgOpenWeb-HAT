@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 The AgOpenWeb-HAT contributors
+#
 # Installs the AOW HAT daemon. Asks once whether a HAT is fitted.
 #
 #   sudo ./install.sh            ask

@@ -1,3 +1,6 @@
+<!-- SPDX-License-Identifier: CERN-OHL-P-2.0 -->
+<!-- Copyright (c) 2026 The AgOpenWeb-HAT contributors -->
+
 # AgOpenWeb HAT — Netlist
 
 Each section lists its parts (designator + LCSC part number), then every net and the pins it

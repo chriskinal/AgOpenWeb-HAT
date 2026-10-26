@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 The AgOpenWeb-HAT contributors
+//
 // Receiver to app, and corrections to receiver. Reads the GNSS serial stream, sends a PANDA
 // or PAOGI to the app after every position sentence (as the firmware does), and writes
 // RTCM from the app straight to the receiver.

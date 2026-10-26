@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 The AgOpenWeb-HAT contributors
+
 import re,sys,collections
 sys.path.insert(0,'.')
 from sch import load_sch

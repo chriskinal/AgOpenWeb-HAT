@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 The AgOpenWeb-HAT contributors
+//
 // Drives aow::web::Server over real loopback sockets, in one thread.
 #include "server.h"
 

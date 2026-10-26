@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (c) 2026 The AgOpenWeb-HAT contributors
+// Ported from Firmware_Teensy_AiO-New-Dawn, copyright 2025 by the AOG Group.
+//
 // Autosteer: arming, kickouts, timeouts and the motor command. Ported from the firmware's
 // AutosteerProcessor, KickoutMonitor and ADProcessor (WAS, current, switches).
 //

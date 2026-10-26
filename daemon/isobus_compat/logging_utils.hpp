@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 The AgOpenWeb-HAT contributors
+//
 // Stands in for AOG-TaskController's logging_utils.hpp, which third_party/aog-taskcontroller
 // includes: log() returns a stream, and a line ends at std::endl.
 //

@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (c) 2026 The AgOpenWeb-HAT contributors
+// Ported from Firmware_Teensy_AiO-New-Dawn, copyright 2025 by the AOG Group.
+//
 // Steer-module PGN payloads: what the app sends (254) and what a steer module answers (253,
 // hello, scan reply). Layouts follow the Teensy firmware's AutosteerProcessor.
 #pragma once

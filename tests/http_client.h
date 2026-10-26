@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 The AgOpenWeb-HAT contributors
+//
 // Loopback client helpers for the web tests: the server under test runs in the same thread,
 // so every wait pumps it.
 #pragma once

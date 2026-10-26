@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 The AgOpenWeb-HAT contributors
+//
 // What is coming in on a serial port, for the Serial Communications page: the first characters
 // of the last few lines, and the RTCM message numbers seen lately. Fed every byte read from the
 // port, whatever it is used for. Fixed size, no allocation: it runs on the control thread.

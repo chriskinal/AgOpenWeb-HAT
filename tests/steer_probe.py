@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 The AgOpenWeb-HAT contributors
+
 """Closed-loop steering test against aow-hatd running with --board sim.
 
 Plays the app: sends steer settings (252) and config (251), engages at 5 km/h, asks for a

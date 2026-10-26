@@ -1,3 +1,6 @@
+<!-- SPDX-License-Identifier: CERN-OHL-P-2.0 -->
+<!-- Copyright (c) 2026 The AgOpenWeb-HAT contributors -->
+
 # AgOpenWeb AiO Board — Issue lists
 
 > **⚠ The AiO board is PARKED (2026-09-23).** The prototype is a separate CM4 IO Board + HAT design

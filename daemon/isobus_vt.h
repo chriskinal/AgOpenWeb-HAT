@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 The AgOpenWeb-HAT contributors
+//
 // The task controller's status screen on a tractor's terminal (an ISOBUS virtual terminal).
 //
 // The screen is AOG-TaskController's object pool, third_party/aog-taskcontroller/AOG_TC.iop,

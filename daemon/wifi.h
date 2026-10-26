@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 The AgOpenWeb-HAT contributors
+//
 // The CM4's Wi-Fi through NetworkManager (nmcli): client or the cab's access point
 // (core/include/aow/wifi.h). nmcli takes tens of milliseconds a call, so it runs on a thread of
 // its own, never on the web thread: that thread keeps the state the page reads, carries out a

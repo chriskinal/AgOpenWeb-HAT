@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 The AgOpenWeb-HAT contributors
+//
 // The daemon's side of the PGN conversation with the app. Answers as the steer (126) and
 // GPS (120) modules, and the IMU (121) while one is connected: hello and scan replies, and a
 // PGN 253 for every PGN 254.

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 The AgOpenWeb-HAT contributors
+//
 // EasyEDA Pro extension — "Color nets by IC"
 //
 // ⚠ SUPERSEDED (2026-09-14): board work moved to EasyEDA Standard, which can't run Pro extensions,

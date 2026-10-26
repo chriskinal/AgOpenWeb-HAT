@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 The AgOpenWeb-HAT contributors
+//
 // Works out what is plugged into a serial port from what it sends: NMEA (or Unicore ASCII)
 // sentences with good checksums make it a GNSS receiver (a base sends RTCM too, and a port first
 // taken for a radio becomes one), IMU packets (BNO085 RVC, TM171) an IMU, RTCM 3 frames with

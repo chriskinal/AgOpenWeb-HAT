@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (c) 2026 The AgOpenWeb-HAT contributors
+// Ported from Firmware_Teensy_AiO-New-Dawn, copyright 2025 by the AOG Group.
+//
 // GNSS receiver sentences to a navigation state. Ported from the Teensy firmware's
 // GNSSProcessor: GGA, GNS, VTG, HPR, KSXT, and Unicore INSPVAA / INSPVAXA.
 #pragma once

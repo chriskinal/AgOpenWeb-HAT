@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 The AgOpenWeb-HAT contributors
+
 cmake_minimum_required(VERSION 3.18)
 project(aow-hatd VERSION 0.1.0 LANGUAGES CXX)
 

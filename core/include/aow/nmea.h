@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 The AgOpenWeb-HAT contributors
+//
 // Sentence framing for the GNSS receiver's text output.
 //
 //   $...*hh          NMEA: XOR of the bytes between '$' and '*'

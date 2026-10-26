@@ -1,3 +1,6 @@
+<!-- SPDX-License-Identifier: CERN-OHL-P-2.0 -->
+<!-- Copyright (c) 2026 The AgOpenWeb-HAT contributors -->
+
 # AgOpenWeb AiO Board — Netlist (as-built, 2026-09-14)
 
 > Human-readable wiring reference generated from the **full-board EasyEDA Standard export**

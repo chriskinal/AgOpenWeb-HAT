@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 The AgOpenWeb-HAT contributors
+
 """End-to-end test of the serial port settings with no hardware: pseudo-terminals stand in for
 the GNSS receiver and the two RS-232 ports.
 

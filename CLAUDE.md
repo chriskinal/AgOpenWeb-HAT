@@ -255,4 +255,12 @@ on D2/D5/D15-D17/TV1/TV2 `.A`/`.K` and "J8 not in schematic" are pin-naming only
 
 ## Licence
 
-GPL-3.0-or-later. The daemon ports code from the GPL v3 Teensy firmware, so this is not optional.
+Three, one per file (LICENSE, LICENSES/). Every new file starts with its SPDX line and
+`Copyright (c) 2026 The AgOpenWeb-HAT contributors`:
+- **MIT** for code written here (C++ `//`, scripts `#` after the shebang, Markdown in `<!-- -->`).
+- **GPL-3.0-or-later** for anything ported or copied from the Teensy firmware (add
+  `Ported from Firmware_Teensy_AiO-New-Dawn, copyright 2025 by the AOG Group.`), and for the
+  firmware's own files, which keep their notice. Code moved from a GPL file into a new one stays
+  GPL. `aow-hatd` as built is GPL-3.0-or-later as a whole.
+- **CERN-OHL-P-2.0** for `hardware/` designs; `hardware/tools/` is MIT.
+- `deploy/config.txt.hat` has no header: install.sh compares its block line for line.

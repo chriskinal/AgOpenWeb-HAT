@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 The AgOpenWeb-HAT contributors
+
 """AOW HAT key monitor. Separate from the daemon so an app or daemon crash cannot stop a
 shutdown (design doc section 7). Reads KEY_SENSE (ADC128S102 IN4 on /dev/spidev0.3):
 0.0758 x V_key, so on above about 8 V (0.61 V), off below about 4 V (0.30 V). Key off for

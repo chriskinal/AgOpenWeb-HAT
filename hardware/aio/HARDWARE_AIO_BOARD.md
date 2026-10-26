@@ -1,3 +1,6 @@
+<!-- SPDX-License-Identifier: CERN-OHL-P-2.0 -->
+<!-- Copyright (c) 2026 The AgOpenWeb-HAT contributors -->
+
 # AgOpenWeb AiO Board — Design Reference
 
 > Design notes for a single-board AiO (all-in-one) carrier for a Raspberry Pi **Compute Module 4**:

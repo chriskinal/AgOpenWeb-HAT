@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 The AgOpenWeb-HAT contributors
+
 """Read all 8 channels of the HAT's ADC128S102 through /dev/spidev0.3 (no IIO driver).
 
 Frame: 16 bits per conversion; the host sends the *next* channel in bits 13:11 (ADD2..0) of

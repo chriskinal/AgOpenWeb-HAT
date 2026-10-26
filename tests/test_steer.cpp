@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 The AgOpenWeb-HAT contributors
+//
 // Autosteer: every path that stops the motor, then the controller itself.
 #include "aow/steer.h"
 

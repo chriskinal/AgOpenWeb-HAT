@@ -1,3 +1,6 @@
+<!-- SPDX-License-Identifier: CERN-OHL-P-2.0 -->
+<!-- Copyright (c) 2026 The AgOpenWeb-HAT contributors -->
+
 # AgOpenWeb HAT — Design Reference
 
 > **The AOW HAT:** a 40-pin HAT for the official Raspberry Pi **CM4 IO Board**. It carries everything

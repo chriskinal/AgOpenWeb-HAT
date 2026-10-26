@@ -1,3 +1,6 @@
+<!-- SPDX-License-Identifier: MIT -->
+<!-- Copyright (c) 2026 The AgOpenWeb-HAT contributors -->
+
 # HAT audit scripts
 
 Python scripts that read the EasyEDA Standard JSON exports of the AOW HAT and check them.

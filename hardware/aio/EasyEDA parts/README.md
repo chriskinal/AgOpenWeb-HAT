@@ -1,3 +1,6 @@
+<!-- SPDX-License-Identifier: CERN-OHL-P-2.0 -->
+<!-- Copyright (c) 2026 The AgOpenWeb-HAT contributors -->
+
 # EasyEDA parts — CM4 mezzanine connectors (S12b)
 
 Generated 2026-09-17 from this project's own exports, so no geometry or pin data was retyped:
