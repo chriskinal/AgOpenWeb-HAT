@@ -86,6 +86,11 @@ void linkGatewayJson(Backend& b, JsonObject o) {
     helper::LinkGateway g;
     o["installed"] = b.linkGatewayInstalled();
     o["enabled"] = b.linkGatewayEnabled();
+    const Backend::LinkGatewaySettings s = b.linkGatewaySettings();
+    o["name"] = s.name;
+    o["defaultName"] = b.linkGatewayDefaultName();
+    o["network"] = s.network;
+    o["announced"] = b.linkGatewayAnnounced();
     o["running"] = b.linkGateway(g);
     if (!o["running"]) return;
     o["port"] = g.port;
@@ -378,14 +383,29 @@ Response isobus(Backend& b, const Request& r) {
                                    : R"({"status":"saved","restartRequired":false})");
 }
 
-// The AOW link gateway's switch on the ISOBUS page: {"enabled": true|false}. Acts at once.
+// The AOW link gateway on the ISOBUS page: its switch, {"enabled": true|false}, acting at once; or
+// its settings, {"name": "...", "network": true|false}, saved and taken by a restart if it runs.
 Response linkGatewaySwitch(Backend& b, const Request& r) {
     if (r.method != "POST") return methodNotAllowed();
     JsonDocument doc;
-    if (deserializeJson(doc, r.body) || !doc["enabled"].is<bool>()) return invalidJson();
+    if (deserializeJson(doc, r.body)) return invalidJson();
+    const bool settings = doc["name"].is<const char*>() && doc["network"].is<bool>();
+    if (!settings && !doc["enabled"].is<bool>()) return invalidJson();
     if (!b.linkGatewayInstalled())
         return Response::json(R"({"status":"error","message":"The gateway is not installed on this unit"})", 409);
     std::string err;
+    if (settings) {
+        Backend::LinkGatewaySettings s;
+        s.name = doc["name"].as<std::string>();
+        s.network = doc["network"].as<bool>();
+        if (!b.setLinkGatewaySettings(s, err)) {
+            JsonDocument reply;
+            reply["status"] = "error";
+            reply["message"] = err;
+            return Response::json(toString(reply), 400);
+        }
+        return Response::json(R"({"status":"saved"})");
+    }
     if (!b.setLinkGatewayEnabled(doc["enabled"].as<bool>(), err)) return error500(err);
     return Response::json(doc["enabled"].as<bool>() ? R"({"status":"on"})" : R"({"status":"off"})");
 }

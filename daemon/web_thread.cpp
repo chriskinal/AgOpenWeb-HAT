@@ -37,6 +37,11 @@ using Clock = std::chrono::steady_clock;
 constexpr const char* kUpdateDir = "/var/lib/aow-hat/update";  // shared with deploy/aow-hat-update
 constexpr const char* kLinkdUnit = "/etc/systemd/system/aow-linkd.service";  // install.sh puts it there
 constexpr const char* kLinkdWanted = "/etc/systemd/system/multi-user.target.wants/aow-linkd.service";
+constexpr const char* kLinkdConf = "/etc/aow-hat/linkd.conf";  // read by aow-linkd (its --config)
+// The gateway's DNS-SD announcement (_aowlink._tcp), a static avahi service: there while the
+// gateway is on and listens on the network, so tablets find it by name. Avahi notices the file.
+constexpr const char* kAvahiDir = "/etc/avahi/services";
+constexpr const char* kAvahiService = "/etc/avahi/services/aow-linkd.service";
 
 // Console: stderr, which systemd puts in the journal. Under systemd (JOURNAL_STREAM set) each
 // line starts with <N> so the journal records its priority; in a terminal, the firmware's format.
@@ -218,7 +223,9 @@ private:
 class DaemonBackend : public web::Backend {
 public:
     DaemonBackend(Shared& shared, const SettingsFile& file, HelperListener& helpers)
-        : shared_(shared), file_(file), helpers_(helpers) {}
+        : shared_(shared), file_(file), helpers_(helpers) {
+        syncAnnouncement(linkGatewayEnabled());  // after an update or a hand edit
+    }
 
     Settings settings() override { return shared_.settings(); }
 
@@ -254,6 +261,51 @@ public:
             LOG_ERROR(Network, "%s", error.c_str());
             return false;
         }
+        syncAnnouncement(on);
+        return true;
+    }
+
+    LinkGatewaySettings linkGatewaySettings() override {
+        LinkGatewaySettings s;
+        std::ifstream in(kLinkdConf);
+        std::string line;
+        while (std::getline(in, line)) {
+            const size_t eq = line.find('=');
+            if (eq == std::string::npos) continue;
+            if (line.compare(0, eq, "name") == 0) s.name = line.substr(eq + 1);
+            else if (line.compare(0, eq, "network") == 0) s.network = line.substr(eq + 1) == "1";
+        }
+        return s;
+    }
+
+    std::string linkGatewayDefaultName() override {
+        char host[64] = {};
+        gethostname(host, sizeof host - 1);
+        return std::string("AOW HAT ") + host;
+    }
+
+    bool linkGatewayAnnounced() override { return access(kAvahiService, F_OK) == 0; }
+
+    bool setLinkGatewaySettings(const LinkGatewaySettings& in, std::string& error) override {
+        // One DNS label (at most 63 bytes), printable, no line breaks: it goes into a key=value
+        // file, an XML file and the gateway's HELLO.
+        std::string name;
+        for (char c : in.name)
+            if (static_cast<unsigned char>(c) >= 0x20 && c != 0x7F) name += c;
+        while (!name.empty() && name.back() == ' ') name.pop_back();
+        while (!name.empty() && name.front() == ' ') name.erase(0, 1);
+        if (name.size() > 63) {
+            error = "The name is too long (at most 63 characters)";
+            return false;
+        }
+        if (!writeFileAtomically(kLinkdConf, "name=" + name + "\nnetwork=" + (in.network ? "1" : "0") + "\n", error))
+            return false;
+        LOG_NOTICE(Network, "AOW link gateway: name \"%s\", %s", name.empty() ? linkGatewayDefaultName().c_str() : name.c_str(),
+                   in.network ? "tablets on the network may connect" : "this unit only");
+        syncAnnouncement(linkGatewayEnabled());
+        // Running: restarted to take them (a connected terminal is back within about a second).
+        if (std::system("systemctl --no-block try-restart aow-linkd.service >/dev/null 2>&1") != 0)
+            LOG_WARNING(Network, "AOW link gateway not restarted (systemctl failed); its new settings apply at its next start");
         return true;
     }
 
@@ -332,6 +384,49 @@ public:
     }
 
 private:
+    static std::string xmlEscape(const std::string& s) {
+        std::string out;
+        for (char c : s) {
+            switch (c) {
+            case '&': out += "&amp;"; break;
+            case '<': out += "&lt;"; break;
+            case '>': out += "&gt;"; break;
+            case '"': out += "&quot;"; break;
+            default: out += c;
+            }
+        }
+        return out;
+    }
+
+    // The announcement follows the gateway: there while it is on and listens on the network.
+    // Without avahi on the unit there is nothing to announce through, and nothing is written.
+    void syncAnnouncement(bool enabled) {
+        if (!linkGatewayInstalled() || access(kAvahiDir, F_OK) != 0) return;
+        const LinkGatewaySettings s = linkGatewaySettings();
+        if (!enabled || !s.network) {
+            if (unlink(kAvahiService) == 0) LOG_INFO(Network, "AOW link gateway no longer announced on the network");
+            return;
+        }
+        const std::string name = s.name.empty() ? linkGatewayDefaultName() : s.name;
+        const std::string xml =
+            "<?xml version=\"1.0\" standalone='no'?>\n"
+            "<!DOCTYPE service-group SYSTEM \"avahi-service.dtd\">\n"
+            "<!-- Written by aow-hatd from the ISOBUS page: the AOW link gateway (aow-linkd). -->\n"
+            "<service-group>\n"
+            "  <name>" + xmlEscape(name) + "</name>\n"
+            "  <service>\n"
+            "    <type>_aowlink._tcp</type>\n"
+            "    <port>2323</port>\n"
+            "    <txt-record>v=1</txt-record>\n"
+            "  </service>\n"
+            "</service-group>\n";
+        std::string error;
+        if (writeFileAtomically(kAvahiService, xml, error))
+            LOG_INFO(Network, "AOW link gateway announced on the network as \"%s\"", name.c_str());
+        else
+            LOG_WARNING(Network, "AOW link gateway not announced: %s", error.c_str());
+    }
+
     // Borrows the GNSS port from the control thread for one UM98x operation.
     template <typename Fn>
     bool withReceiver(std::string& error, Fn fn) {

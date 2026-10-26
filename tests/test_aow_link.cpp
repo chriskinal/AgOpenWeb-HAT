@@ -157,6 +157,8 @@ int main() {
     send(g, 2, hello(1, Control), t + 100);
     auto closing = g.takeClosing();
     CHECK(closed(closing, 2) == Busy);
+    // ... saying who has it: the holder's name from its HELLO.
+    CHECK(closing.size() == 1 && closing[0].second.find("in use by AgOpenWeb test") != std::string::npos);
     g.accepted(3, "10.0.0.4", t + 100);
     send(g, 3, hello(1, Monitor, "logger"), t + 100);
     m = take(g, 3);

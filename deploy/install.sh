@@ -131,7 +131,9 @@ ENV
   echo "HAT daemon installed and started."
   case "$gateway" in
     yes) systemctl enable aow-linkd.service; systemctl restart aow-linkd.service; echo "AOW link gateway enabled and started." ;;
-    no) systemctl disable --now aow-linkd.service 2>/dev/null || true; echo "AOW link gateway disabled." ;;
+    no) systemctl disable --now aow-linkd.service 2>/dev/null || true
+        rm -f /etc/avahi/services/aow-linkd.service  # its announcement (aow-hatd writes it)
+        echo "AOW link gateway disabled." ;;
     *) systemctl try-restart aow-linkd.service ;;  # running: run the new binary
   esac
   if [ "$reboot_needed" = yes ]; then
@@ -151,6 +153,7 @@ else
   if systemctl list-unit-files aow-linkd.service >/dev/null 2>&1; then
     systemctl disable --now aow-linkd.service 2>/dev/null || true
   fi
+  rm -f /etc/avahi/services/aow-linkd.service
   echo "No HAT: daemon left disabled. AgOpenWeb will use the AiO board on the network."
 fi
 echo "Choice saved in $CONF. Run this script again to change it."
