@@ -4,7 +4,7 @@ FROM debian:trixie
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
         g++ make cmake python3 git ca-certificates \
-        device-tree-compiler openssl file \
+        device-tree-compiler openssl file iproute2 \
         clangd gdb rsync openssh-client curl \
     && rm -rf /var/lib/apt/lists/*
 
