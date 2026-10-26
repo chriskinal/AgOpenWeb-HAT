@@ -116,7 +116,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
   include(FetchContent)
   set(AOW_LINKD_VERSION "${AOW_VERSION}" CACHE STRING "" FORCE)
   FetchContent_Declare(sharpisoterm
-    URL https://github.com/chriskinal/SharpIsoTerm/archive/2e5ac9ca603d0f0bfcfd2a15530376ea530af9cb.tar.gz
+    URL https://github.com/chriskinal/SharpIsoTerm/archive/356997c2e194ed66a3013ca7913cf505a25a2b8d.tar.gz
     DOWNLOAD_EXTRACT_TIMESTAMP TRUE
     SOURCE_SUBDIR gateway/linux)
   FetchContent_MakeAvailable(sharpisoterm)
