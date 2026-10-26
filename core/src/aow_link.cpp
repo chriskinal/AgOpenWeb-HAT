@@ -180,7 +180,9 @@ bool Gateway::handle(ClientId id, Client& c, uint8_t type, const std::string& bo
             return false;
         }
         if (role == Control && control_ >= 0) {
-            drop(id, "busy", Busy, "another control client is connected");
+            // Said by name, so the second terminal can tell the operator who has the bus.
+            const Client& holder = clients_.at(control_);
+            drop(id, "busy", Busy, "in use by " + (holder.name.empty() ? holder.peer : holder.name));
             return false;
         }
         if (role == Monitor) {

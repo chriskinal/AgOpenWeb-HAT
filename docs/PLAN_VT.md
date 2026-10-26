@@ -43,9 +43,9 @@ our own protocol, not GVRET; hello, heartbeat, bus status, the 1 s silence rule)
   SocketCAN shares `hatcan2` with `aow-hatd`'s ISOBUS work: on the bench the task controller's
   own status screen (0xF7) reached the terminal through it.
 - **Off by default.** The ISOBUS page's switch (below), or `install.sh --hat --gateway` /
-  `--no-gateway`; neither flag leaves it as it is (so an update keeps the choice). Per-unit options in
-  `/etc/aow-hat/linkd.env` (`AOW_LINKD_OPTS`), kept across updates: `--listen 0.0.0.0` for a
-  tablet on the unit's network (anyone who can reach the port can put frames on the bus).
+  `--no-gateway`; neither flag leaves it as it is (so an update keeps the choice). Its name and
+  where it listens are set on the ISOBUS page (below, 0.2.28). Per-unit options in
+  `/etc/aow-hat/linkd.env` (`AOW_LINKD_OPTS`), kept across updates, still win over the page.
 - **Packaged** in the `.aowpkg`; the updater refuses a package without it.
 - **Tested:** `tests/link_probe.py build/aow-linkd [aowlink_check.py]` on vcan (frames both ways,
   the drain, STATUS following the interface down and up, a late interface); AgIsoStack-dotnet's
@@ -66,8 +66,21 @@ our own protocol, not GVRET; hello, heartbeat, bus status, the 1 s silence rule)
   restarted. On or off is systemd's enablement, read from its link (no `systemctl` for the
   page's once-a-second poll), so the page, `install.sh --gateway` / `--no-gateway` and `systemctl`
   all agree, and an update keeps it. Hidden where the gateway is not installed; switching off
-  with a terminal connected asks first. Where it listens stays in `linkd.env`. On the CM4: on,
-  reporting within 2 s; off, stopped and disabled within about 4 s.
+  with a terminal connected asks first. On the CM4: on, reporting within 2 s; off, stopped and
+  disabled within about 4 s.
+- **Its name and the network, and finding it** (0.2.28; AgOpenWeb `Plans/ISOBUS_VT_TRANSPORTS.md`
+  step 2): on the gateway card, a name ("Gateway Name", default "AOW HAT" and the host name) and
+  "Tablets on the Network" (off: loopback only; on: every network, `0.0.0.0`), saved with their
+  own button (`POST /api/linkgateway {"name", "network"}`): `aow-hatd` writes
+  `/etc/aow-hat/linkd.conf` (`name=`, `network=`; `aow-linkd --config` reads it before its other
+  options) and restarts the gateway if it runs. While the gateway is on and listens on the network,
+  `aow-hatd` keeps an avahi service file, `/etc/avahi/services/aow-linkd.service`, announcing it
+  by DNS-SD as `_aowlink._tcp` with that name (TXT `v=1`): AgOpenWeb's VT card lists it by name
+  (AgIsoStack-dotnet `AowLinkBrowser`). The file follows the switch and the settings, and is put
+  right when `aow-hatd` starts. The name also goes in the gateway's HELLO. No pairing code: the
+  machine network is trusted, as for the steer PGNs (AgIsoStack-dotnet `docs/TRANSPORT.md`,
+  Security); the help text says to use it on the tractor's own network. A second terminal is
+  refused with CLOSE busy "in use by" the first one's name, for the card to show.
 - **The tablets through the service** (2026-10-25, 0.2.26, switched on from the page): the iPad
   and the Galaxy Tab pass with both example implements, link up throughout (AgIsoStack-dotnet
   `docs/RESULTS.md`). One run showed `aow-hatd`'s status-screen RTS reaching the terminal twice,

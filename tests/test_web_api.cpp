@@ -39,6 +39,17 @@ struct FakeBackend : Backend {
         ++linkSwitches;
         return true;
     }
+    LinkGatewaySettings linkSettings;
+    int linkSettingsSaved = 0;
+    LinkGatewaySettings linkGatewaySettings() override { return linkSettings; }
+    std::string linkGatewayDefaultName() override { return "AOW HAT agopenweb"; }
+    bool linkGatewayAnnounced() override { return linkEnabled && linkSettings.network; }
+    bool setLinkGatewaySettings(const LinkGatewaySettings& in, std::string& err) override {
+        if (in.name.size() > 63) { err = "The name is too long (at most 63 characters)"; return false; }
+        linkSettings = in;
+        ++linkSettingsSaved;
+        return true;
+    }
     void restart() override { ++restarts; }
     std::string updatePackage, updateJson;
     int reboots = 0;
@@ -129,6 +140,23 @@ int main() {
     b.linkFail = false;
     CHECK(request(s, port, "GET /api/linkgateway HTTP/1.1\r\n\r\n").find(" 405 ") != std::string::npos);
     CHECK(b.applied == 0);  // the switch saves no settings
+
+    // Its settings: the name and the network, together; refused with the reason; shown with
+    // the default name and whether it is announced.
+    d = parse(request(s, port, "GET /api/status HTTP/1.1\r\n\r\n"));
+    CHECK(d["linkGateway"]["name"] == "" && d["linkGateway"]["defaultName"] == "AOW HAT agopenweb");
+    CHECK(d["linkGateway"]["network"] == false && d["linkGateway"]["announced"] == false);
+    CHECK(parse(post(s, port, "/api/linkgateway", R"({"name":"Sprayer cab","network":true})"))["status"] == "saved");
+    CHECK(b.linkSettingsSaved == 1 && b.linkSettings.name == "Sprayer cab" && b.linkSettings.network && b.linkSwitches == 2);
+    r0 = post(s, port, "/api/linkgateway", R"({"name":"Sprayer cab"})");  // half of it
+    CHECK(r0.find(" 400 ") != std::string::npos && b.linkSettingsSaved == 1);
+    r0 = post(s, port, "/api/linkgateway", R"({"name":")" + std::string(64, 'x') + R"(","network":true})");
+    CHECK(r0.find(" 400 ") != std::string::npos && parse(r0)["message"] == "The name is too long (at most 63 characters)");
+    b.linkEnabled = true;
+    d = parse(request(s, port, "GET /api/status HTTP/1.1\r\n\r\n"));
+    CHECK(d["linkGateway"]["name"] == "Sprayer cab" && d["linkGateway"]["network"] == true && d["linkGateway"]["announced"] == true);
+    b.linkEnabled = false;
+    CHECK(b.applied == 0);  // nor do they
     b.linkHeard = true;
     b.link.clientConnected = true;
     b.link.port = 2323;

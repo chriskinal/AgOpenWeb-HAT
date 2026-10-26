@@ -30,6 +30,14 @@ struct Backend {
     virtual bool linkGatewayInstalled() { return false; }
     virtual bool linkGatewayEnabled() { return false; }
     virtual bool setLinkGatewayEnabled(bool, std::string& error) { error = "not available"; return false; }
+    // Its settings on the ISOBUS page: the name it gives itself (its HELLO and its announcement on
+    // the network; empty: the default) and whether tablets on the network may connect (it listens
+    // beyond loopback, and announces itself by DNS-SD while it is on). Saving restarts it if it runs.
+    struct LinkGatewaySettings { std::string name; bool network = false; };
+    virtual LinkGatewaySettings linkGatewaySettings() { return {}; }
+    virtual std::string linkGatewayDefaultName() { return ""; }
+    virtual bool linkGatewayAnnounced() { return false; }
+    virtual bool setLinkGatewaySettings(const LinkGatewaySettings&, std::string& error) { error = "not available"; return false; }
     virtual void restart() = 0;  // restart the daemon (the firmware rebooted the Teensy)
 
     // The uploaded CAN brand file (the firmware's LittleFS /can_config.json). "" if none.

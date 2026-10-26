@@ -30,6 +30,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <deque>
+#include <fstream>
 #include <map>
 #include <string>
 #include <vector>
@@ -285,6 +286,10 @@ private:
     std::deque<CanChannel>& channels_;
 };
 
+// The ISOBUS page's gateway settings, written by aow-hatd (web_thread.cpp). The options in
+// /etc/aow-hat/linkd.env come after them on the command line, so they win.
+constexpr const char* kConfig = "/etc/aow-hat/linkd.conf";
+
 struct Options {
     std::vector<std::string> can{"hatcan2"};
     std::string listen = "127.0.0.1";
@@ -300,9 +305,11 @@ struct Options {
         "  --listen ADDR      address to listen on (default 127.0.0.1; 0.0.0.0 for every network)\n"
         "  --port N           TCP port (default %u)\n"
         "  --name TEXT        the gateway's name in its HELLO (default: host name and interfaces)\n"
+        "  --config FILE      the ISOBUS page's settings, read first (default %s):\n"
+        "                     name=TEXT, network=1 (listen on every network, as --listen 0.0.0.0)\n"
         "  --status-port N    report to aow-hatd on 127.0.0.1:N (default %u; 0 = off)\n"
         "  --version\n",
-        kVersion, aow::link::kDefaultPort, aow::helper::kPort);
+        kVersion, aow::link::kDefaultPort, kConfig, aow::helper::kPort);
     std::exit(code);
 }
 
@@ -319,8 +326,25 @@ std::vector<std::string> split(const std::string& s) {
     return out;
 }
 
+// name=TEXT and network=0|1, one a line; anything else is ignored. A missing file changes nothing.
+void readConfig(const std::string& path, Options& o) {
+    std::ifstream in(path);
+    std::string line;
+    while (std::getline(in, line)) {
+        const size_t eq = line.find('=');
+        if (eq == std::string::npos) continue;
+        const std::string key = line.substr(0, eq), value = line.substr(eq + 1);
+        if (key == "name") o.name = value;
+        else if (key == "network") o.listen = value == "1" ? "0.0.0.0" : "127.0.0.1";
+    }
+}
+
 Options parse(int argc, char** argv) {
     Options o;
+    std::string config = kConfig;
+    for (int i = 1; i + 1 < argc; ++i)
+        if (std::string(argv[i]) == "--config") config = argv[i + 1];
+    readConfig(config, o);
     for (int i = 1; i < argc; ++i) {
         const std::string a = argv[i];
         const bool hasValue = i + 1 < argc;
@@ -328,6 +352,7 @@ Options parse(int argc, char** argv) {
         else if (a == "--listen" && hasValue) o.listen = argv[++i];
         else if (a == "--port" && hasValue) o.port = static_cast<uint16_t>(std::atoi(argv[++i]));
         else if (a == "--name" && hasValue) o.name = argv[++i];
+        else if (a == "--config" && hasValue) ++i;  // read above
         else if (a == "--status-port" && hasValue) o.statusPort = static_cast<uint16_t>(std::atoi(argv[++i]));
         else if (a == "--version") { std::printf("aow-linkd %s\n", kVersion); std::exit(0); }
         else if (a == "--help" || a == "-h") usage(0);

@@ -105,6 +105,8 @@ const char ISOBUS_PAGE[] PROGMEM = R"rawliteral(
         function showGateway(g) {
             g = g || {};
             document.getElementById('gw_switch_row').style.display = g.installed ? 'flex' : 'none';
+            document.getElementById('gw_settings').style.display = g.installed ? 'block' : 'none';
+            set('gw_announced', g.announced ? (g.name || g.defaultName) : g.network ? 'Not while the gateway is off' : 'Not announced (this unit only)');
             if (!gwPending) document.getElementById('gw_enabled').checked = !!g.enabled;
             gwConnected = !!g.clientConnected;
             if (!g.running) {
@@ -147,6 +149,31 @@ const char ISOBUS_PAGE[] PROGMEM = R"rawliteral(
                 .finally(() => { setTimeout(() => { gwPending = false; }, 1500); });
         }
 
+        // The name and the network, filled once when the page opens (the poll does not overwrite typing).
+        function loadGateway(g) {
+            g = g || {};
+            const name = document.getElementById('gw_name');
+            name.value = g.name || '';
+            name.placeholder = g.defaultName || '';
+            document.getElementById('gw_network').checked = !!g.network;
+        }
+
+        function saveGateway() {
+            const network = document.getElementById('gw_network').checked;
+            if (gwConnected && !confirm('Saving restarts the gateway: AgOpenWeb reconnects within about a second. Save?')) return;
+            const msg = document.getElementById('gw_msg');
+            msg.innerHTML = '<div class="status">Saving...</div>';
+            fetch('/api/linkgateway', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: document.getElementById('gw_name').value.trim(), network: network }) })
+                .then(r => r.json())
+                .then(d => {
+                    if (d.status !== 'saved') throw new Error(d.message || 'not saved');
+                    msg.innerHTML = '<div class="status success">Saved.' + (network ? ' Tablets on this unit\'s network can find the gateway while it is on.' : ' Only AgOpenWeb on this unit can use it.') + '</div>';
+                    setTimeout(() => { msg.innerHTML = ''; }, 6000);
+                })
+                .catch(e => { msg.innerHTML = '<div class="status error">Error: ' + e.message + '</div>'; });
+        }
+
         function poll() {
             fetch('/api/isobus').then(r => r.json()).then(d => { showStatus(d.status); showGateway(d.linkGateway); })
                 .catch(() => set('state', 'No answer from the daemon', 'bad'));
@@ -160,6 +187,7 @@ const char ISOBUS_PAGE[] PROGMEM = R"rawliteral(
                 document.getElementById('terminal').checked = d.terminal;
                 showStatus(d.status);
                 showGateway(d.linkGateway);
+                loadGateway(d.linkGateway);
             });
         }
 
@@ -300,8 +328,31 @@ const char ISOBUS_PAGE[] PROGMEM = R"rawliteral(
                     <span class="toggle-slider"></span>
                 </label>
             </div>
+            <div id="gw_settings" style="display: none;">
+                <div class="form-group">
+                    <label for="gw_name">Gateway Name:</label>
+                    <input type="text" id="gw_name" maxlength="63" autocomplete="off">
+                    <div class="help-text">
+                        The name tablets show when they look for gateways. Give each tractor its own, for example "Fendt 724" or "Sprayer cab".
+                    </div>
+                </div>
+                <div class="toggle-container" style="border-bottom: none;">
+                    <div class="toggle-info">
+                        <label for="gw_network" class="toggle-label">Tablets on the Network</label>
+                        <div class="help-text">
+                            Off: only AgOpenWeb on this unit uses the gateway. On: a tablet running AgOpenWeb on this unit's network finds it by name and connects. Anyone on that network can then reach the implement bus, as they can the steering: use it on the tractor's own network, not a farm or office network.
+                        </div>
+                    </div>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="gw_network">
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+                <button type="button" class="touch-button" onclick="saveGateway()">Save Gateway Settings</button>
+            </div>
             <div id="gw_msg"></div>
             <div class="row"><span>Gateway</span><span id="gw_state">-</span></div>
+            <div class="row"><span>Announced as</span><span id="gw_announced">-</span></div>
             <div class="row"><span>Terminal</span><span id="gw_terminal">-</span></div>
             <div class="row"><span>Listening on</span><span id="gw_listen">-</span></div>
             <div class="row"><span>Channel</span><span id="gw_channel">-</span></div>

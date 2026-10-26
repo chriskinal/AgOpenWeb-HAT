@@ -89,8 +89,12 @@ The Teensy firmware is not being rewritten and nothing is ported back to it.
 - **AOW link gateway (`aow-linkd`, docs/PLAN_VT.md section 2):** its own program and service,
   off by default (the ISOBUS page's switch, or `install.sh --hat --gateway`). Carries every frame of `hatcan2` to AgOpenWeb's
   virtual terminal over TCP 2323 (the protocol: AgIsoStack-dotnet `docs/TRANSPORT.md` section 5;
-  `core/src/aow_link.cpp`, transport-free). Listens on loopback unless `/etc/aow-hat/linkd.env`
-  says otherwise. It reports to `aow-hatd` (PGN 153 to `127.0.0.1:8891`, `aow/helper_status.h`),
+  `core/src/aow_link.cpp`, transport-free). Its name and whether tablets on the network may
+  connect are set on the ISOBUS page: `aow-hatd` writes `/etc/aow-hat/linkd.conf` (read by
+  `aow-linkd --config`; `linkd.env` options still win) and, while the gateway is on and listens on
+  the network, an avahi service file announcing it as `_aowlink._tcp`
+  (`/etc/avahi/services/aow-linkd.service`), so AgOpenWeb's card lists it by name. Saving them
+  restarts the gateway. A second terminal is refused as "in use by" the first one's name. It reports to `aow-hatd` (PGN 153 to `127.0.0.1:8891`, `aow/helper_status.h`),
   which shows it (`/api/status` `linkGateway`, the ISOBUS page) and never acts on it. Switched on
   and off on the ISOBUS page (`/api/linkgateway`: `systemctl enable|disable --now`) or by the
   installer; nothing else restarts.
