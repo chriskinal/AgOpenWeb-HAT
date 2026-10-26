@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 The AgOpenWeb-HAT contributors
+#
 # The end-to-end probes CI runs, against a build in BUILD (default build/). Runs as root in the
 # Trixie container (.devcontainer/Dockerfile): the daemon's web pages are on port 80.
 #
