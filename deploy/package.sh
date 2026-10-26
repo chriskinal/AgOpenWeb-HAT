@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 The AgOpenWeb-HAT contributors
+#
 # Builds the AOW HAT update package. Run on Linux arm64 (the CM4, or an arm64 CI runner):
 # needs cmake, g++, dtc and OpenSSL 3.
 #
@@ -51,6 +54,15 @@ install -m 0755 "$HERE/install.sh" "$HERE/aow-hatctl" "$HERE/aow-keymon.py" "$HE
 install -m 0644 "$HERE/aow-hatd.service" "$HERE/aow-linkd.service" "$HERE/aow-keymon.service" "$HERE/aow-hat-update.service" \
   "$HERE/80-aow-hat-can.rules" "$HERE/config.txt.hat" "$HERE/update-key.pem" "$B/"
 install -m 0644 "$HERE"/can-config/*.json "$B/can-config/"
+# The licences (LICENSE says which file is under which), and those of what is built in:
+# AgIsoStack++ and ArduinoJson in aow-hatd, SharpIsoTerm's gateway as aow-linkd.
+mkdir -p "$B/LICENSES"
+install -m 0644 "$REPO/LICENSE" "$B/"
+install -m 0644 "$REPO"/LICENSES/*.txt "$B/LICENSES/"
+install -m 0644 "$REPO/third_party/ArduinoJson/LICENSE.txt" "$B/LICENSES/ArduinoJson.txt"
+install -m 0644 "$REPO/third_party/aog-taskcontroller/README.md" "$B/LICENSES/AOG-TaskController.md"
+[ -f "$BUILD/_deps/isobus-src/LICENSE" ] && install -m 0644 "$BUILD/_deps/isobus-src/LICENSE" "$B/LICENSES/AgIsoStack++.txt"
+install -m 0644 "$BUILD/_deps/sharpisoterm-src/LICENSE" "$B/LICENSES/SharpIsoTerm.txt"
 {
   echo "version=$VERSION"
   echo "arch=$(uname -m)"

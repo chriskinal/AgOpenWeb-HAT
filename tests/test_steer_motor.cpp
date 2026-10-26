@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 The AgOpenWeb-HAT contributors
+//
 // The autosteer with CAN and Keya motors: readiness gating, the app-button handshake, motor
 // errors, CAN engage buttons, CAN kickout, CAN wheel angle. Plus the Keya serial protocol.
 #include <deque>

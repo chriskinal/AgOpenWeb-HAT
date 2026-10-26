@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 The AgOpenWeb-HAT contributors
+//
 // ===== AgOpenWeb — Color nets by IC (paste into EasyEDA Pro "Run Script") =====
 // ⚠ SUPERSEDED (2026-09-14): board work moved to EasyEDA Standard (no Pro scripting), and these net
 // names are from the July CM4+STM32 netlist — most no longer exist. Kept for history.

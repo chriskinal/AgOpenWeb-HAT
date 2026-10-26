@@ -1,3 +1,6 @@
+<!-- SPDX-License-Identifier: MIT -->
+<!-- Copyright (c) 2026 The AgOpenWeb-HAT contributors -->
+
 # Plan
 
 > Decisions, scope and build order for `aow-hatd`. Written 2026-09-28.

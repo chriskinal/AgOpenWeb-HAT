@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 The AgOpenWeb-HAT contributors
+//
 // A mutex with priority inheritance, for locks the real-time control thread shares with the
 // normal-priority web thread. While the web thread holds one, it runs at the control thread's
 // priority, so the control loop never waits behind unrelated work. Use with std::lock_guard.

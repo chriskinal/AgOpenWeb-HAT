@@ -1,3 +1,6 @@
+<!-- SPDX-License-Identifier: CERN-OHL-P-2.0 -->
+<!-- Copyright (c) 2026 The AgOpenWeb-HAT contributors -->
+
 # IMU Breakout — ST LSM6DSK320X
 
 > A small breakout board for evaluating the **ST LSM6DSK320X** 6-axis IMU (gyro + low-g and high-g

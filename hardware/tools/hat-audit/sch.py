@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 The AgOpenWeb-HAT contributors
+
 import json,collections,re,os
 SCH=os.environ.get('HAT_SCH',os.path.expanduser('~/Downloads/SCH_AOW-HAT_2026-09-26.json'))
 def load_sch():

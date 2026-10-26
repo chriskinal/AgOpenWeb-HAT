@@ -1,4 +1,5 @@
-// AgOpenWeb HAT. GPL-3.0-or-later.
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (c) 2026 The AgOpenWeb-HAT contributors
 //
 // AOW HAT: a new page, not from the firmware (the Teensy's serial ports were fixed). What is
 // plugged in is found from what it sends (a GNSS receiver, RTK radio or IMU), so only the

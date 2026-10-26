@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 The AgOpenWeb-HAT contributors
+//
 // A stand-in ISOBUS virtual terminal with no display, for tests/isobus_vt_probe.py: it takes an
 // object pool from a client (the daemon's status screen), and prints what a terminal would show.
 //

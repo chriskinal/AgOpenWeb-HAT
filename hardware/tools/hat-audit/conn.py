@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 The AgOpenWeb-HAT contributors
+
 import sys,math,collections,re,json
 sys.path.insert(0,'.')
 from pcb import load_pcb

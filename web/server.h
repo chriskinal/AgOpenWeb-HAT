@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 The AgOpenWeb-HAT contributors
+//
 // A small HTTP/1.1 + WebSocket server, the transport under the firmware's web pages
 // (the firmware's SimpleHTTPServer + SimpleWebSocket, rebuilt on POSIX sockets).
 //

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 The AgOpenWeb-HAT contributors
+//
 // Every serial port the daemon uses, and what is on it (the Serial Communications page).
 //
 // The onboard receiver (--gnss) is always the receiver there. The two RS-232 ports (--rs232)

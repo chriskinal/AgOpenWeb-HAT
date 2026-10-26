@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 The AgOpenWeb-HAT contributors
+
 """Tractor CAN end to end on virtual CAN: starts aow-hatd with Valtra/MF steering on CAN3 and
 plays both the app (UDP) and the steering valve (vcan2).
 

@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 The AgOpenWeb-HAT contributors
+#
 # The build environment: Debian Trixie arm64, the same OS and architecture as the CM4 (Pi OS
 # Trixie). Used by deploy/dev.sh and by VS Code's Dev Containers (devcontainer.json).
 FROM debian:trixie

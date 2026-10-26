@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 The AgOpenWeb-HAT contributors
+//
 // External IMU: BNO085 RVC and TM171 packets, detection, the yaw rate, and the IMU fields in
 // PANDA and PAOGI.
 #include <cmath>

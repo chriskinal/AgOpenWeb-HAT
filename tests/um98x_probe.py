@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 The AgOpenWeb-HAT contributors
+
 """UM98x setup page and RTK radio end to end, with pseudo-terminals as the receiver and radio.
 
 The fake UM982 streams GGA at 10 Hz and answers UNLOGALL, CONFIG, MODE, UNILOGLIST and

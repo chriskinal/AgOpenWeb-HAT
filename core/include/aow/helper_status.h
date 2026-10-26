@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 The AgOpenWeb-HAT contributors
+//
 // What the helper services tell aow-hatd about themselves (docs/PLAN.md section 8, "the link"):
 // datagrams over UDP to 127.0.0.1:8891, once a second. aow-hatd only shows them, on /api/status
 // and its pages, and never acts on them; a helper not heard from for 3 s shows as not running.

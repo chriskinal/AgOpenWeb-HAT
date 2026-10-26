@@ -1,3 +1,6 @@
+<!-- SPDX-License-Identifier: CERN-OHL-P-2.0 -->
+<!-- Copyright (c) 2026 The AgOpenWeb-HAT contributors -->
+
 # CM4 connector stencil (J_CM_A / J_CM_B only)
 
 A **small stencil covering only the two DF40 pad arrays**, so it can sit flat on a board that already has

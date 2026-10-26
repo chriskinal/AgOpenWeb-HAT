@@ -1,3 +1,6 @@
+<!-- SPDX-License-Identifier: MIT -->
+<!-- Copyright (c) 2026 The AgOpenWeb-HAT contributors -->
+
 # AgOpenWeb HAT
 
 The **AOW HAT** board design and its hardware daemon, `aow-hatd`.
@@ -61,4 +64,13 @@ python3 tests/gnss_probe.py build/aow-hatd   # GNSS end to end, a pty playing th
 
 ## Licence
 
-GPL-3.0-or-later. Parts are ported from the AgOpenGPS Teensy AiO firmware, which is GPL v3.
+Three licences, one per file (its `SPDX-License-Identifier` line); see [LICENSE](LICENSE) and
+[LICENSES/](LICENSES/):
+
+- **MIT** for what was written here: most of the daemon, the tests, the deploy scripts, the docs
+  and the hardware tools.
+- **GPL-3.0-or-later** for what is ported or copied from the AgOpenGPS Teensy AiO firmware (the
+  CAN files, the autosteer, GNSS and IMU code, the web pages and their API, and others), and for
+  AOG-TaskController in `third_party/`. `aow-hatd` as built includes them, so the program as a
+  whole is GPL-3.0-or-later.
+- **CERN-OHL-P-2.0** for the hardware designs in `hardware/` (not `hardware/tools/`).

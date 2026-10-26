@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 The AgOpenWeb-HAT contributors
+
 """The status screen on a tractor's terminal, on virtual CAN: aow-hatd on CAN2 (vcan1), a
 stand-in virtual terminal (build/isobus_vt) and a simulated implement beside it, and this script
 as the app.

@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 The AgOpenWeb-HAT contributors
+
 """Bench driver for aow-hatd --board hat with a pot as the WAS and a meter on the motor outputs.
 
 Plays the app: sends gains (252) and config (251), then PGN 254 at 100 Hz with guidance on and

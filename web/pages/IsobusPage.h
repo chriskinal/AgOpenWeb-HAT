@@ -1,4 +1,5 @@
-// AgOpenWeb HAT. GPL-3.0-or-later.
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (c) 2026 The AgOpenWeb-HAT contributors
 //
 // AOW HAT: a new page, not from the firmware (the Teensy had no ISOBUS). It uses the firmware
 // pages' stylesheet and layout. Settings and live state come from /api/isobus, and with them the

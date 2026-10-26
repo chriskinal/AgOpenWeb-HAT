@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 The AgOpenWeb-HAT contributors
+//
 // The HAT's four SK6812 status LEDs (D19-D22) on GPIO21, clocked out by the PCM block.
 //
 // The PCM bit clock runs at 3 MHz and each LED bit is four PCM bits: 1000 for a 0 (0.33 us

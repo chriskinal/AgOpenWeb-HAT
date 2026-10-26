@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 The AgOpenWeb-HAT contributors
+
 import json,sys,math,re
 import matplotlib; matplotlib.use('Agg'); import matplotlib.pyplot as plt
 d=json.load(open(sys.argv[1])); out=sys.argv[2]

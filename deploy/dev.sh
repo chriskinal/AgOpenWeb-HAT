@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 The AgOpenWeb-HAT contributors
+#
 # Build, test and package aow-hatd on the Mac, in a Debian Trixie arm64 container (the CM4's OS
 # and architecture), and install a package on a unit through its System Update page.
 #

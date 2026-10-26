@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 The AgOpenWeb-HAT contributors
+//
 // How well the control loop keeps its 100 Hz tick: how late each tick starts against its
 // schedule, how long its work takes, how long reading the board's inputs takes (the ADC on
 // SPI0, which the CAN controllers share), and ticks missed outright. Plain numbers for

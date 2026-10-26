@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (c) 2026 The AgOpenWeb-HAT contributors
+// Ported from Firmware_Teensy_AiO-New-Dawn, copyright 2025 by the AOG Group.
+//
 // GVRET, SavvyCAN's protocol, ported from the firmware's GVRETServer: the device answers
 // SavvyCAN's queries and streams mirrored CAN frames in binary mode. As in the firmware, frames
 // sent from SavvyCAN (BUILD_CAN_FRAME) are parsed and dropped. Transport-free: bytes in, bytes out.

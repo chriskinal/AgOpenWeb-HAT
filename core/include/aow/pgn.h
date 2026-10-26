@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 The AgOpenWeb-HAT contributors
+//
 // AgOpenGPS PGN framing over UDP.
 //
 // Frame: 0x80 0x81 <src> <pgn> <len> <data[len]> <crc>

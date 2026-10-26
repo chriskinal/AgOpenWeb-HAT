@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 The AgOpenWeb-HAT contributors
+//
 // The ported tractor CAN driver against known frames: Keya, legacy Valtra and Fendt, and the
 // JSON protocol engine with the firmware's own Valtra/MF brand file.
 #include "aow/can/TractorCANDriver.h"

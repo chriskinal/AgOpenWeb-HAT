@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 The AgOpenWeb-HAT contributors
+
 """End-to-end GNSS test with no receiver: a pseudo-terminal stands in for it.
 
 Starts aow-hatd with --gnss on the pty, plays GGA/VTG (then HPR) sentences into it, and

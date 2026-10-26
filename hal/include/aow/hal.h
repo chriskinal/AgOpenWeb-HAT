@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 The AgOpenWeb-HAT contributors
+//
 // Hardware interfaces. Core logic talks to hardware only through these, so it can be
 // tested on a desktop with fakes. The HAT implementations live in boards/hat.
 #pragma once

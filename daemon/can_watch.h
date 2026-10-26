@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 The AgOpenWeb-HAT contributors
+//
 // Watches the HAT's CAN channels for one that has stopped sending for no reason the bus explains
 // (aow/can_stall.h) and takes its interface down and up. Its own normal-priority thread: it runs
 // "ip" and "tc", which no other thread should wait for.

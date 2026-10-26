@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 The AgOpenWeb-HAT contributors
+
 import re,sys,collections
 import os
 DOC=os.path.join(os.path.dirname(os.path.abspath(__file__)),'..','..','hat','HARDWARE_HAT_NETLIST.md')

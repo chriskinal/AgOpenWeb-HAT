@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 The AgOpenWeb-HAT contributors
+//
 // The AOW HAT as the daemon's Board: ADC128S102 over spidev, switches and the motor's DIR/EN
 // through the GPIO character device, PWM0 through sysfs, the STWD100 watchdog lines.
 // The four SK6812 LEDs are in hat_leds, the piezo in hat_piezo. Pins: hat_pins.h.

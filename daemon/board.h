@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 The AgOpenWeb-HAT contributors
+//
 // The hardware the control loop reads and drives. One implementation per board: the HAT
 // (boards/hat/hat_board.h) and a simulator for a CM4 with no HAT.
 #pragma once

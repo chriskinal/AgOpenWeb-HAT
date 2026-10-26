@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (c) 2026 The AgOpenWeb-HAT contributors
+// Ported from Firmware_Teensy_AiO-New-Dawn, copyright 2025 by the AOG Group.
+//
 // An external IMU on a serial port (on the HAT, an RS-232 port): a BNO085 in RVC mode or a SYD
 // TM171, told apart by their packets as the firmware's IMUProcessor does. Ported from the
 // firmware's BNOAiOParser, TM171AiOParser and IMUProcessor, with these changes (AOW HAT):

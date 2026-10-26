@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 The AgOpenWeb-HAT contributors
+//
 // The HAT's piezo (BZ1, through Q10) on GPIO23: a square wave toggled by a background thread,
 // so the control thread only hands over the tone list.
 #pragma once

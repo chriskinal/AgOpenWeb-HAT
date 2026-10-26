@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (c) 2026 The AgOpenWeb-HAT contributors
+// Ported from Firmware_Teensy_AiO-New-Dawn, copyright 2025 by the AOG Group.
+//
 // The navigation sentences the app accepts: $PANDA (single antenna) and $PAOGI (dual
 // antenna or INS). Ported from the Teensy firmware's NAVProcessor. The IMU fields come from an
 // external IMU (aow/imu.h) when one is sending, else the firmware's "no IMU" values.

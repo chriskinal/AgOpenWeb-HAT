@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 The AgOpenWeb-HAT contributors
+//
 // The CM4's Wi-Fi on the Network page: a client of the networks the unit knows (as set up by
 // Raspberry Pi Imager, or added here), or an access point of its own for the cab, which the
 // tablets join to reach AgOpenWeb and the AOW link gateway. NetworkManager does the work; this is

@@ -1,3 +1,6 @@
+<!-- SPDX-License-Identifier: CERN-OHL-P-2.0 -->
+<!-- Copyright (c) 2026 The AgOpenWeb-HAT contributors -->
+
 # AiO board — PCB layout guide
 
 > Layout constraints for the AgOpenWeb AiO board (**CM4-only carrier, 2026-09-14 netlist**).

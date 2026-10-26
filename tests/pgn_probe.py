@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 The AgOpenWeb-HAT contributors
+
 """Stand in for the app against a running aow-hatd: send hello, scan and PGN 254 frames
 and check the replies.
 

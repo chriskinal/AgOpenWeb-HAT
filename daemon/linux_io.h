@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 The AgOpenWeb-HAT contributors
+//
 // Linux implementations of the hal interfaces that are not HAT hardware: the clock and the
 // UDP link to the app.
 #pragma once

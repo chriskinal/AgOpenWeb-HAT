@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (c) 2026 The AgOpenWeb-HAT contributors
+// Ported from Firmware_Teensy_AiO-New-Dawn, copyright 2025 by the AOG Group.
+//
 // Event logger, ported from the firmware's EventLogger: syslog severities, the same sources,
 // the same per-severity rate limits, a 100-entry history for the web viewer.
 //

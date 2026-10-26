@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 The AgOpenWeb-HAT contributors
+//
 // AOW HAT device tree overlay: SPI0 with four chip selects (three MCP251863 CAN FD controllers
 // and the ADC128S102 as spidev), and the fixed 40 MHz CAN clock. Pin numbers follow
 // hardware/hat/HARDWARE_HAT_DESIGN.md section 7 and boards/hat/hat_pins.h.

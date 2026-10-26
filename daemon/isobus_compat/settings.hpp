@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 The AgOpenWeb-HAT contributors
+//
 // Stands in for AOG-TaskController's settings.hpp. third_party/aog-taskcontroller uses one thing
 // from it: where to keep the device descriptions (DDOPs) implements upload.
 #pragma once

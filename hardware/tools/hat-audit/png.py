@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 The AgOpenWeb-HAT contributors
+
 import sys,math,pickle
 sys.path.insert(0,'.')
 import matplotlib; matplotlib.use('Agg')

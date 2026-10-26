@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 The AgOpenWeb-HAT contributors
+//
 // Spots a CAN channel that has stopped sending for no reason the bus explains.
 //
 // Seen on the HAT (docs/PLAN.md section 8, real CAN record): after a burst of bus-off restarts

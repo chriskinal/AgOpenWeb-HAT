@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 The AgOpenWeb-HAT contributors
+
 """ISOBUS address claims and the tractor ECU role on virtual CAN: starts aow-hatd with ISOBUS on
 CAN2 (vcan1) and plays the other control functions on the bus, and the app for its speed.
 

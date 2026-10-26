@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 The AgOpenWeb-HAT contributors
+//
 // AOW HAT pin map (BCM GPIO numbers).
 // Source: hardware/hat/HARDWARE_HAT_DESIGN.md section 7. Change both together.
 #pragma once

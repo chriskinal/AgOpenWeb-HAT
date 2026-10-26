@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 The AgOpenWeb-HAT contributors
+
 import json,collections,os
 PCB=os.environ.get('HAT_PCB',os.path.expanduser('~/Downloads/PCB_PCB_AOW-HAT_2026-09-26.json'))
 U=0.254

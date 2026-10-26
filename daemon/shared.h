@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 The AgOpenWeb-HAT contributors
+//
 // State the control thread and the web thread both see. Each accessor copies under the lock;
 // nothing is held across I/O.
 #pragma once

@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (c) 2026 The AgOpenWeb-HAT contributors
+# Ported from Firmware_Teensy_AiO-New-Dawn, copyright 2025 by the AOG Group.
+#
 # aow-hatctl: the firmware's serial console (CommandHandler), as commands against the running
 # daemon's local API. Needs curl and python3.
 #
