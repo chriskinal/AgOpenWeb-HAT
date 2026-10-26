@@ -56,7 +56,7 @@ and rates. Line counts are the firmware's (.h + .cpp).
 | Firmware | Replaced by |
 |---|---|
 | `SimpleScheduler`, `main.cpp` loop | the daemon's poll loop and timerfd |
-| QNEthernet, `QNetworkBase`, `QNEthernetUDPHandler` | sockets; the HAT talks to the app on loopback. The Network page shows the CM4's addresses; PGN 201 subnet change does not apply |
+| QNEthernet, `QNetworkBase`, `QNEthernetUDPHandler` | sockets; the HAT talks to the app on loopback. The Network page shows the CM4's addresses; PGN 201 subnet change does not apply. It also sets the CM4's Wi-Fi through NetworkManager (`daemon/wifi.cpp`, `core/wifi`): a client of known networks, or the cab's access point (`aow-ap`, WPA2, 10.42.0.1/24 with NetworkManager's DHCP) that the tablets join for AgOpenWeb and the AOW link gateway. A switch runs after the page's reply and goes back to the connection before it if it fails; in client mode the access point comes up as a fallback when no known network is found 90 s after boot |
 | DHCP server (DHCPLite) | NetworkManager shared mode on `eth0`, set up by the installer, if machine modules hang off the CM4's Ethernet |
 | `SimpleOTAHandler` (Intel-HEX to flash) | an update page that takes a release package (later) |
 | `CANGlobals`, `CANManager` (FlexCAN) | SocketCAN `can0`-`can2` |

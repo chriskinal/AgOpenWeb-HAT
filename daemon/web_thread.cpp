@@ -27,6 +27,7 @@
 #include "aow/log.h"
 #include "linux_io.h"
 #include "server.h"
+#include "wifi.h"
 
 namespace aow {
 
@@ -309,6 +310,14 @@ public:
         return true;
     }
 
+    bool wifiState(wifi::State& s) override {
+        s = wifi_.state();
+        return true;
+    }
+    std::vector<wifi::Seen> wifiSeen() override { return wifi_.seen(); }
+    bool setWifi(const wifi::Request& r, bool activate, std::string& error) override { return wifi_.apply(r, activate, error); }
+    bool setWifiFallback(bool on, std::string& error) override { return wifi_.setFallback(on, error); }
+
     void restart() override {
         LOG_WARNING(System, "Restart requested from the web page");
         // systemd's Restart=always brings the daemon back.
@@ -455,6 +464,7 @@ private:
     Shared& shared_;
     const SettingsFile& file_;
     HelperListener& helpers_;
+    WifiControl wifi_;
 };
 
 }  // namespace

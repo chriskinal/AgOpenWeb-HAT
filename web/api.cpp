@@ -410,6 +410,73 @@ Response linkGatewaySwitch(Backend& b, const Request& r) {
     return Response::json(doc["enabled"].as<bool>() ? R"({"status":"on"})" : R"({"status":"off"})");
 }
 
+// AOW HAT: the Network page's Wi-Fi section. GET: the state; POST {"fallback": bool}, or a switch:
+// {"mode": "client", "ssid", "password"} or {"mode": "ap", "ssid", "password", "band": "2.4"|"5",
+// "channel", "activate": false to save the access point without switching to it}.
+Response wifiConfig(Backend& b, const Request& r) {
+    wifi::State st;
+    const bool have = b.wifiState(st);
+    if (r.method == "GET") {
+        JsonDocument doc;
+        doc["available"] = have && st.available;
+        doc["unavailable"] = have ? st.unavailable : std::string("Wi-Fi is not managed on this unit");
+        doc["mode"] = wifi::modeName(st.mode);
+        doc["fallback"] = st.fallback;
+        doc["fallbackActive"] = st.fallbackActive;
+        doc["connected"] = st.connected;
+        doc["apActive"] = st.apActive;
+        doc["ssid"] = st.ssid;
+        doc["ip"] = st.ip;
+        JsonObject ap = doc["ap"].to<JsonObject>();
+        ap["exists"] = st.apExists;
+        ap["ssid"] = st.apExists ? st.apSsid : wifi::defaultApSsid(st.hostname);
+        ap["band"] = st.apBand5 ? "5" : "2.4";
+        ap["channel"] = st.apChannel ? st.apChannel : 6;
+        ap["address"] = wifi::kApAddress;
+        JsonArray known = doc["known"].to<JsonArray>();
+        for (const auto& k : st.known) known.add(k);
+        JsonArray seen = doc["seen"].to<JsonArray>();
+        for (const auto& n : b.wifiSeen()) {
+            JsonObject o = seen.add<JsonObject>();
+            o["ssid"] = n.ssid;
+            o["signal"] = n.signal;
+            o["security"] = n.security;
+        }
+        doc["country"] = st.country;
+        doc["hostname"] = st.hostname;
+        doc["job"] = st.job;
+        doc["message"] = st.message;
+        return Response::json(toString(doc));
+    }
+    if (r.method != "POST") return methodNotAllowed();
+    JsonDocument doc;
+    if (deserializeJson(doc, r.body) || !doc.is<JsonObject>()) return invalidJson();
+    std::string err;
+    auto refused = [&err]() {
+        JsonDocument e;
+        e["status"] = "error";
+        e["message"] = err;
+        return Response::json(toString(e), 400);
+    };
+    if (doc["fallback"].is<bool>() && doc["mode"].isNull()) {
+        if (!b.setWifiFallback(doc["fallback"].as<bool>(), err)) return error500(err);
+        return Response::json(R"({"status":"saved"})");
+    }
+    const std::string mode = doc["mode"] | "";
+    if (mode != "client" && mode != "ap") return invalidJson();
+    wifi::Request q;
+    q.mode = mode == "ap" ? wifi::Mode::AccessPoint : wifi::Mode::Client;
+    q.ssid = doc["ssid"] | "";
+    q.password = doc["password"] | "";
+    q.band5 = std::string(doc["band"] | "2.4") == "5";
+    const int channel = doc["channel"].is<int>() ? doc["channel"].as<int>() : (q.band5 ? 36 : 6);
+    q.channel = static_cast<uint8_t>(channel >= 0 && channel <= 255 ? channel : 0);  // 0: refused
+    const bool activate = doc["activate"] | true;
+    if (!b.setWifi(q, activate, err)) return refused();
+    LOG_NOTICE(Network, "Wi-Fi: %s \"%s\" from the Network page", !activate ? "saving access point" : q.mode == wifi::Mode::AccessPoint ? "switching to access point" : "joining", q.ssid.c_str());
+    return Response::json(activate ? R"({"status":"switching"})" : R"({"status":"saving"})");
+}
+
 Response networkConfig(Backend& b, const Request& r) {
     if (r.method == "GET") {
         JsonDocument doc;
@@ -619,6 +686,7 @@ void addRoutes(Server& server, Backend& b, const char* version) {
     server.route("/api/logs/data", [](const Request&) { return logData(); });
     server.route("/api/device/settings", [&b](const Request& r) { return deviceSettings(b, r); });
     server.route("/api/network/config", [&b](const Request& r) { return networkConfig(b, r); });
+    server.route("/api/wifi", [&b](const Request& r) { return wifiConfig(b, r); });
 }
 
 std::string telemetryPacket(const Status& s) {

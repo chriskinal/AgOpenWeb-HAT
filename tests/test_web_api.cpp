@@ -50,6 +50,23 @@ struct FakeBackend : Backend {
         ++linkSettingsSaved;
         return true;
     }
+    bool wifiManaged = false;
+    wifi::State wifiSt;
+    std::vector<wifi::Seen> wifiNear;
+    wifi::Request wifiReq;
+    bool wifiActivate = false;
+    int wifiSwitches = 0, wifiFallbacks = 0;
+    bool wifiState(wifi::State& st) override { st = wifiSt; return wifiManaged; }
+    std::vector<wifi::Seen> wifiSeen() override { return wifiNear; }
+    bool setWifi(const wifi::Request& q, bool activate, std::string& err) override {
+        err = wifi::requestError(q, q.mode == wifi::Mode::AccessPoint && wifiSt.apExists, wifiSt.country);
+        if (!err.empty()) return false;
+        wifiReq = q;
+        wifiActivate = activate;
+        ++wifiSwitches;
+        return true;
+    }
+    bool setWifiFallback(bool on, std::string&) override { wifiSt.fallback = on; ++wifiFallbacks; return true; }
     void restart() override { ++restarts; }
     std::string updatePackage, updateJson;
     int reboots = 0;
@@ -352,6 +369,40 @@ int main() {
     b.updateJson = R"({"state":"done","version":"9.9.9"})";
     CHECK(parse(request(s, port, "GET /api/ota/status HTTP/1.1\r\n\r\n"))["version"] == "9.9.9");
     CHECK(parse(post(s, port, "/api/ota/reboot", ""))["status"] == "rebooting" && b.reboots == 1);
+
+    // Wi-Fi: not managed (a desktop build) says so; then the state, a switch each way, refusals.
+    r = request(s, port, "GET /network HTTP/1.1\r\n\r\n");
+    CHECK(r.find("/api/wifi") != std::string::npos && r.find("Access point (in-cab)") != std::string::npos);
+    d = parse(request(s, port, "GET /api/wifi HTTP/1.1\r\n\r\n"));
+    CHECK(d["available"] == false && d["unavailable"] == "Wi-Fi is not managed on this unit");
+    b.wifiManaged = true;
+    b.wifiSt.available = true;
+    b.wifiSt.connected = true;
+    b.wifiSt.ssid = "Dry-Kreek";
+    b.wifiSt.ip = "192.168.4.217";
+    b.wifiSt.known = {"Dry-Kreek"};
+    b.wifiSt.hostname = "agopenweb";
+    b.wifiSt.country = "US";
+    b.wifiNear = {{"Dry-Kreek", "WPA2", 71}};
+    d = parse(request(s, port, "GET /api/wifi HTTP/1.1\r\n\r\n"));
+    CHECK(d["available"] == true && d["mode"] == "client" && d["ssid"] == "Dry-Kreek" && d["ip"] == "192.168.4.217");
+    CHECK(d["ap"]["exists"] == false && d["ap"]["ssid"] == "AgOpenWeb-agopenweb" && d["ap"]["address"] == "10.42.0.1");
+    CHECK(d["ap"]["band"] == "2.4" && d["ap"]["channel"] == 6 && d["job"] == "idle");
+    CHECK(d["known"][0] == "Dry-Kreek" && d["seen"][0]["signal"] == 71 && d["seen"][0]["security"] == "WPA2");
+    r0 = post(s, port, "/api/wifi", R"({"mode":"ap","ssid":"AgOpenWeb-cab"})");
+    CHECK(r0.find(" 400 ") != std::string::npos && parse(r0)["message"] == "Set a password for the access point (8 to 63 characters)");
+    r0 = post(s, port, "/api/wifi", R"({"mode":"ap","ssid":"AgOpenWeb-cab","password":"tractor123","channel":300})");
+    CHECK(r0.find(" 400 ") != std::string::npos && b.wifiSwitches == 0);
+    r0 = post(s, port, "/api/wifi", R"({"mode":"mesh","ssid":"x"})");
+    CHECK(r0.find(" 400 ") != std::string::npos && b.wifiSwitches == 0);
+    CHECK(parse(post(s, port, "/api/wifi", R"({"mode":"ap","ssid":"AgOpenWeb-cab","password":"tractor123","band":"5","channel":40})"))["status"] == "switching");
+    CHECK(b.wifiReq.mode == wifi::Mode::AccessPoint && b.wifiReq.band5 && b.wifiReq.channel == 40 && b.wifiActivate);
+    CHECK(parse(post(s, port, "/api/wifi", R"({"mode":"ap","ssid":"AgOpenWeb-cab","password":"tractor123","activate":false})"))["status"] == "saving");
+    CHECK(!b.wifiActivate && !b.wifiReq.band5 && b.wifiReq.channel == 6);
+    CHECK(parse(post(s, port, "/api/wifi", R"({"mode":"client","ssid":"Dry-Kreek"})"))["status"] == "switching");
+    CHECK(b.wifiReq.mode == wifi::Mode::Client && b.wifiReq.password.empty() && b.wifiSwitches == 3);
+    CHECK(parse(post(s, port, "/api/wifi", R"({"fallback":false})"))["status"] == "saved" && !b.wifiSt.fallback);
+    CHECK(b.wifiFallbacks == 1 && b.wifiSwitches == 3);
 
     return finish("web_api");
 }

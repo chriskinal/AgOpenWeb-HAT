@@ -82,6 +82,8 @@ def main():
     st = json.loads(http(base, "/api/status")[2])
     check("version" in st and st["moduleId"] == 126,
           "/api/status: version %s, uptime %d ms, ip %s" % (st["version"], st["uptime"], st["network"]["ip"]))
+    wifi = json.loads(http(base, "/api/wifi")[2])
+    check("mode" in wifi and "ap" in wifi, "/api/wifi: %s, %s" % (wifi["mode"], (wifi["ssid"] or "not connected") if wifi["available"] else wifi["unavailable"]))
     dev = json.loads(http(base, "/api/device/settings")[2])
     check("softStartDuration" in dev, "/api/device/settings: %s" % dev)
     ev = json.loads(http(base, "/api/eventlogger/config")[2])

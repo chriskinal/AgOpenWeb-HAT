@@ -62,6 +62,7 @@ add_library(aow_core
   core/src/port_monitor.cpp
   core/src/serial_detect.cpp
   core/src/loop_timing.cpp
+  core/src/wifi.cpp
   core/src/can/teensy_compat.cpp
   core/src/can/CANConfigParser.cpp
   core/src/can/CANProtocolEngine.cpp
@@ -81,7 +82,7 @@ find_package(Threads REQUIRED)
 # daemon: Linux only (the HAT drivers need spidev, SocketCAN, termios).
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
   add_executable(aow-hatd daemon/main.cpp daemon/linux_io.cpp daemon/shared.cpp daemon/web_thread.cpp
-    daemon/isobus.cpp daemon/can_watch.cpp daemon/serial_hub.cpp
+    daemon/isobus.cpp daemon/can_watch.cpp daemon/serial_hub.cpp daemon/wifi.cpp
     boards/hat/hat_board.cpp boards/hat/hat_leds.cpp boards/hat/hat_piezo.cpp)
   target_include_directories(aow-hatd PRIVATE boards/hat daemon)
   set(AOW_VERSION "${PROJECT_VERSION}" CACHE STRING "Version reported by aow-hatd and stamped on update packages")
@@ -130,7 +131,7 @@ if(AOW_ISOBUS)
 endif()
 
 enable_testing()
-foreach(t pgn app_link aow_link helper_status gnss gnss_link imu port_monitor serial_detect log settings steer steer_motor can can_stall gvret um98x indicators loop_timing web_server web_api hat_leds)
+foreach(t pgn wifi app_link aow_link helper_status gnss gnss_link imu port_monitor serial_detect log settings steer steer_motor can can_stall gvret um98x indicators loop_timing web_server web_api hat_leds)
   add_executable(test_${t} tests/test_${t}.cpp)
   target_link_libraries(test_${t} PRIVATE aow_web)
   target_include_directories(test_${t} PRIVATE boards/hat)
