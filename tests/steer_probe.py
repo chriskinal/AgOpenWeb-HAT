@@ -68,7 +68,7 @@ def main():
             pass
         return last
 
-    # Gains: Kp 40, high 255, low 0, min 10, 30 counts/deg, offset 0, Ackermann 1.00.
+    # Gains: Kp (below), high 255, low 0, min 10, 30 counts/deg, offset 0, Ackermann 1.00.
     # A value that differs from run to run, to see it saved, and never the default (40): the daemon
     # saves only what changed, so a fresh settings file would not be written at all.
     kp = 41 + int(time.time()) % 19
