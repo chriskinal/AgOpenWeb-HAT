@@ -98,6 +98,13 @@ The Teensy firmware is not being rewritten and nothing is ported back to it.
   which shows it (`/api/status` `linkGateway`, the ISOBUS page) and never acts on it. Switched on
   and off on the ISOBUS page (`/api/linkgateway`: `systemctl enable|disable --now`) or by the
   installer; nothing else restarts.
+- **Wi-Fi (Network page, `/api/wifi`):** client of known networks or the cab's access point
+  (`aow-ap`, 10.42.0.1), through nmcli on a thread of its own (`daemon/wifi.cpp`; arguments and
+  checks in `core/wifi`, no shell). A failed switch goes back; in client mode the access point
+  is the fallback 90 s after boot when no known network is found (`/etc/aow-hat/wifi.conf`).
+  On the dev CM4 (2026-10-26) client to access point and back worked from the page (up in 6 s,
+  back on the home network in 13 s); the fallback after boot is not tried yet. A switch cuts
+  the SSH session.
 - **CAN watch:** `daemon/can_watch.cpp` restarts a CAN interface that has frames queued and sends
   none with no bus error (seen once after a bus-off storm; `/api/status` `canRestarts`).
 - **Key monitor:** `deploy/aow-keymon.py`, its own service: key off for 3 s runs `poweroff`.

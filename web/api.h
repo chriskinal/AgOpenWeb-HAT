@@ -11,6 +11,7 @@
 #include "aow/settings.h"
 #include "aow/status.h"
 #include "aow/um98x.h"
+#include "aow/wifi.h"
 #include "server.h"
 
 namespace aow::web {
@@ -38,6 +39,12 @@ struct Backend {
     virtual std::string linkGatewayDefaultName() { return ""; }
     virtual bool linkGatewayAnnounced() { return false; }
     virtual bool setLinkGatewaySettings(const LinkGatewaySettings&, std::string& error) { error = "not available"; return false; }
+    // The CM4's Wi-Fi on the Network page: a client of known networks or the cab's access point
+    // (aow/wifi.h). A switch is queued and carried out after the reply; the state says how it went.
+    virtual bool wifiState(wifi::State&) { return false; }
+    virtual std::vector<wifi::Seen> wifiSeen() { return {}; }
+    virtual bool setWifi(const wifi::Request&, bool /*activate*/, std::string& error) { error = "not available"; return false; }
+    virtual bool setWifiFallback(bool, std::string& error) { error = "not available"; return false; }
     virtual void restart() = 0;  // restart the daemon (the firmware rebooted the Teensy)
 
     // The uploaded CAN brand file (the firmware's LittleFS /can_config.json). "" if none.
