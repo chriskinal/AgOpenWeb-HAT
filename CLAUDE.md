@@ -163,7 +163,7 @@ deploy/dev.sh shell                         # builds are in /build/main there, e
 # VS Code: "Reopen in Container" uses the same image and volume; clangd sees the Linux headers.
 ```
 
-CI (`.github/workflows/ci.yml`, on pushes to main and on PRs): the same image on x64, a clean
+CI (`.github/workflows/ci.yml`, on pushes to main and on PRs): the same image on arm64 and x64, a clean
 build, ctest, the overlay through dtc, and `tests/ci_probes.sh` (the probes on ptys and loopback,
 then with `--can` the CAN and ISOBUS probes on vcan). Locally:
 `docker run --rm --privileged -v "$PWD":/src -v aow-hat-build:/build -e BUILD=/build/main aow-hat-dev /src/tests/ci_probes.sh [--can]`.

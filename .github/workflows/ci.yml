@@ -4,9 +4,8 @@
 # Builds aow-hatd, aow-linkd and the tests in the dev container's image (.devcontainer/Dockerfile:
 # Debian Trixie, the CM4's OS), from a clean tree, and runs the unit tests, the HAT's device tree
 # overlay through dtc, and the end-to-end probes (tests/ci_probes.sh): those on ptys and loopback,
-# then those on virtual CAN. x64, not the CM4's arm64: the code is the same and the arm64 runners
-# are not offered to private repos. No package is made: that needs the signing key
-# (deploy/dev.sh package).
+# then those on virtual CAN. On arm64 (the CM4's architecture) and x64. No package is made: that
+# needs the signing key (deploy/dev.sh package).
 name: ci
 
 on:
@@ -21,8 +20,14 @@ concurrency:
 
 jobs:
   build:
-    name: build and test (Trixie x64)
-    runs-on: ubuntu-24.04
+    name: build and test (Trixie ${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: arm64, runner: ubuntu-24.04-arm }
+          - { arch: x64, runner: ubuntu-24.04 }
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v7
@@ -58,7 +63,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: logs
+          name: logs-${{ matrix.arch }}
           path: |
             build/Testing/Temporary/LastTest.log
             build/sim.log
