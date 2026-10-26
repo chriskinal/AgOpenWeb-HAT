@@ -88,13 +88,14 @@ The Teensy firmware is not being rewritten and nothing is ported back to it.
   headers before any `aow/` header and `#undef` its `LOG_*` macros, as `daemon/isobus.cpp` does.
 - **AOW link gateway (`aow-linkd`, docs/PLAN_VT.md section 2):** its own program and service,
   off by default (the ISOBUS page's switch, or `install.sh --hat --gateway`). Carries every frame of `hatcan2` to AgOpenWeb's
-  virtual terminal over TCP 2323 (the protocol: SharpIsoTerm `docs/TRANSPORT.md` section 5;
-  `core/src/aow_link.cpp`, transport-free). Its name and whether tablets on the network may
+  virtual terminal over TCP 2323 (the protocol: SharpIsoTerm `docs/TRANSPORT.md` section 5).
+  Its code lives in SharpIsoTerm (`gateway/linux`, MIT), fetched by CMake at a pinned commit that
+  follows SharpIsoTerm's main; this repo has its unit, settings and status. Its name and whether tablets on the network may
   connect are set on the ISOBUS page: `aow-hatd` writes `/etc/aow-hat/linkd.conf` (read by
   `aow-linkd --config`; `linkd.env` options still win) and, while the gateway is on and listens on
   the network, an avahi service file announcing it as `_aowlink._tcp`
   (`/etc/avahi/services/aow-linkd.service`), so AgOpenWeb's card lists it by name. Saving them
-  restarts the gateway. A second terminal is refused as "in use by" the first one's name. It reports to `aow-hatd` (PGN 153 to `127.0.0.1:8891`, `aow/helper_status.h`),
+  restarts the gateway. A second terminal is refused as "in use by" the first one's name. It reports to `aow-hatd` (`--status 127.0.0.1:8891`, JSON, `aow/helper_status.h`),
   which shows it (`/api/status` `linkGateway`, the ISOBUS page) and never acts on it. Switched on
   and off on the ISOBUS page (`/api/linkgateway`: `systemctl enable|disable --now`) or by the
   installer; nothing else restarts.
@@ -172,10 +173,8 @@ scan, then PGN 254 at a set rate, checking every reply and timing the 253.
 `tests/imu_probe.py build/aow-hatd` runs an external IMU (BNO085 RVC) on a pty: hello as 121, IMU fields in PANDA.
 `tests/ports_probe.py build/aow-hatd` runs the serial ports on ptys: NMEA out (GGA at 5 Hz; the corrected position from PGN 100 and the fallback), RTCM out, and
 detection (a radio, unknown text, an IMU, a receiver taking over from a silent onboard one).
-`tests/link_probe.py build/aow-linkd [aowlink_check.py]` runs the AOW link gateway on vcan1 (and vcan7, made
-and removed): frames both ways, the drain on connect, STATUS following the interface, its reports to
-`aow-hatd` (on 18891); with the path
-to SharpIsoTerm's `bench/aowlink_check.py`, the protocol checks too (root, for `ip link`).
+The AOW link gateway's own tests (unit, and a vcan probe with the protocol checks) are in
+SharpIsoTerm (`gateway/linux/tests`) and run in its CI.
 `tests/isobus_probe.py build/aow-hatd` checks the ISOBUS address claim and the tractor ECU role on
 vcan1 (stop the service first).
 `tests/isobus_tc_probe.py build/aow-hatd build/isobus_implement` runs section control against a

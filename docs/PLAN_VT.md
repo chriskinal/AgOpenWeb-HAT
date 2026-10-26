@@ -28,15 +28,21 @@ still comes before a release.
 Implements the AOW link protocol, version 1 (SharpIsoTerm's `docs/TRANSPORT.md` section 5:
 our own protocol, not GVRET; hello, heartbeat, bus status, the 1 s silence rule).
 
-- **The protocol** is `core/src/aow_link.cpp` (`aow/aow_link.h`): transport-free like `gvret`,
-  bytes and frames in, bytes out, the time handed in. One control client, up to four monitors,
-  the bus drained when a control client connects, frames to the bus dropped after 100 ms, STATUS
-  every second and on a change. Unit tests: `tests/test_aow_link.cpp`.
-- **The program** is `daemon/aow_linkd.cpp`: one thread, one poll loop over the listener, the
+- **It lives in SharpIsoTerm** since 2026-10-26: `gateway/linux` there (MIT; all the user's code,
+  moved from here), its `gateway/README.md`, its unit tests and vcan probe, run by that repo's CI.
+  The CMake build here fetches it at a pinned commit (`CMakeLists.txt`, the `sharpisoterm` fetch)
+  and builds `aow-linkd` with this package's version; the pin follows SharpIsoTerm's main.
+  What is the HAT's stays here: the unit, the settings page, the status shown.
+- **The protocol** is SharpIsoTerm's `gateway/linux/aow_link.cpp`: transport-free, bytes and
+  frames in, bytes out, the time handed in. One control client, up to four monitors, the bus
+  drained when a control client connects, frames to the bus dropped after 100 ms, STATUS every
+  second and on a change.
+- **The program** is its `aow_linkd.cpp`: one thread, one poll loop over the listener, the
   CAN sockets (SocketCAN, kernel timestamps, the receive-overflow count) and the clients. Bus
   state, error counters and bitrate from rtnetlink once a second; an interface missing at start
-  is looked for every second. `--can IF[,IF...]` (default `hatcan2`), `--listen` (default
-  127.0.0.1), `--port` (2323), `--name`.
+  is looked for every second. `--can IF[,IF...]` (the unit gives `hatcan2`), `--listen` (default
+  127.0.0.1), `--port` (2323), `--name`, `--config` (the unit gives the page's
+  `/etc/aow-hat/linkd.conf`), `--status` (the unit gives `127.0.0.1:8891`).
 - **Its own service beside `aow-hatd`**, as planned: `deploy/aow-linkd.service`, `Type=notify`
   with `WatchdogSec=5` (pinged from the loop), `Restart=always`, `DynamicUser` (SocketCAN and
   rtnetlink need no privileges), normal priority, no dependency on `aow-hatd` either way.
@@ -47,14 +53,15 @@ our own protocol, not GVRET; hello, heartbeat, bus status, the 1 s silence rule)
   where it listens are set on the ISOBUS page (below, 0.2.28). Per-unit options in
   `/etc/aow-hat/linkd.env` (`AOW_LINKD_OPTS`), kept across updates, still win over the page.
 - **Packaged** in the `.aowpkg`; the updater refuses a package without it.
-- **Tested:** `tests/link_probe.py build/aow-linkd [aowlink_check.py]` on vcan (frames both ways,
-  the drain, STATUS following the interface down and up, a late interface); SharpIsoTerm's
+- **Tested:** SharpIsoTerm's `gateway/linux/tests/link_probe.py` on vcan (frames both ways,
+  the drain, STATUS following the interface down and up, a late interface, the reports), in its
+  CI for x64 and arm64; SharpIsoTerm's
   `bench/aowlink_check.py` (all checks), its `bench/local.sh` with `GATEWAY=` (the bench and a
   1.5 s cut, in a container), and its Wi-Fi bench on the dev CM4 with the service (both example
   implements, Mac terminal: SharpIsoTerm `docs/RESULTS.md`).
-- **Its status in `aow-hatd`** (0.2.25): PGN 153 from source 0x81 to `127.0.0.1:8891`
-  (`aow/helper_status.h`; 150 to 153 are free in AgOpenGPS's PGN list and unused by AgOpenWeb),
-  once a second and at once when a terminal connects or goes: listening where and on which
+- **Its status in `aow-hatd`** (0.2.25; JSON since the move, it was PGN 153): `aow-linkd
+  --status 127.0.0.1:8891`, one JSON datagram (SharpIsoTerm `gateway/README.md`; read by
+  `helper::decodeLinkGateway`, `aow/helper_status.h`), once a second and at once when a terminal connects or goes: listening where and on which
   port, the terminal's name and address, frames both ways and lost since it connected, monitors,
   each channel's interface, bitrate, state and error counters. `aow-hatd` listens in its web
   thread, not the control thread, and only shows it: `linkGateway` in `/api/status` and

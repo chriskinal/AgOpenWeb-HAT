@@ -23,7 +23,6 @@
 #include "api.h"
 #include "aow/gvret.h"
 #include "aow/helper_status.h"
-#include "aow/pgn.h"
 #include "aow/log.h"
 #include "linux_io.h"
 #include "server.h"
@@ -186,14 +185,11 @@ public:
 
     void poll() {
         if (fd_ < 0) return;
-        uint8_t buf[512];
+        char buf[4096];
         ssize_t n;
         while ((n = recv(fd_, buf, sizeof buf, 0)) > 0) {
-            pgn::Frame f;
-            if (!pgn::parse(buf, static_cast<size_t>(n), f)) continue;
-            if (f.src == helper::kSrcLinkGateway && f.pgn == helper::kPgnLinkGateway) {
-                helper::LinkGateway g;
-                if (!helper::decode(f.data, f.len, g)) continue;
+            helper::LinkGateway g;
+            if (helper::decodeLinkGateway(buf, static_cast<size_t>(n), g)) {
                 if (!heard_ || g.clientConnected != link_.clientConnected) {
                     if (g.clientConnected) LOG_INFO(Network, "AOW link gateway: terminal \"%s\" connected from %s", g.client, g.clientAddress);
                     else LOG_INFO(Network, "AOW link gateway: running, no terminal connected");
