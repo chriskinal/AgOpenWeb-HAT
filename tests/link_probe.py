@@ -2,7 +2,7 @@
 """The AOW link gateway on virtual CAN: starts aow-linkd on vcan1 and checks the parts that need a
 real interface: frames both ways (ids, flags, data, kernel timestamps), the bus drained when a
 control client connects, STATUS following the interface down and up, an interface that is
-missing at start found when it appears, and its reports to aow-hatd (PGN 153, here on 18891). The protocol itself is checked by AgIsoStack-dotnet's
+missing at start found when it appears, and its reports to aow-hatd (PGN 153, here on 18891). The protocol itself is checked by SharpIsoTerm's
 bench/aowlink_check.py: give its path as a second argument to run it here too.
 
     sudo modprobe vcan; sudo ip link add vcan1 type vcan; sudo ip link set vcan1 up

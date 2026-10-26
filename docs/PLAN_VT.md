@@ -1,7 +1,7 @@
 # Plan: virtual terminal
 
 > The implement's screens in AgOpenWeb. Since 2026-10-24 the terminal runs **inside AgOpenWeb**,
-> on AgIsoStack++ through the **AgIsoStack-dotnet** wrapper, and is fed every CAN frame over TCP
+> on AgIsoStack++ through the **SharpIsoTerm** library, and is fed every CAN frame over TCP
 > by a gateway. This repo's part is that **gateway on the HAT**: `aow-linkd`, built 2026-10-25.
 > The first plan (2026-10-13: an `aow-vtd` service here, drawing in a browser over a WebSocket)
 > is dropped; it is in git history before 17ad56e.
@@ -10,7 +10,7 @@
 
 | Repo | What |
 |---|---|
-| AgIsoStack-dotnet (`/Users/chris/Code/AgIsoStack-dotnet`, <https://github.com/chriskinal/AgIsoStack-dotnet>, private, MIT) | The wrapper, its tests, the Wi-Fi bench, and the **transport**: the gateway protocol (`docs/TRANSPORT.md`), the bench setup on this repo's dev CM4 (`docs/BENCH.md`), every measurement (`docs/RESULTS.md`), the terminal's rules, the drawing design and the upstream VT server gaps (`docs/PLAN.md`) |
+| SharpIsoTerm (`/Users/chris/Code/SharpIsoTerm`, <https://github.com/chriskinal/SharpIsoTerm>, private, MIT) | The wrapper, its tests, the Wi-Fi bench, and the **transport**: the gateway protocol (`docs/TRANSPORT.md`), the bench setup on this repo's dev CM4 (`docs/BENCH.md`), every measurement (`docs/RESULTS.md`), the terminal's rules, the drawing design and the upstream VT server gaps (`docs/PLAN.md`) |
 | AgOpenWeb | The terminal in the app: hosting the server, drawing, input, stored pools. Its plan is not written yet |
 | AgOpenWeb-HAT (here) | The gateway service on the CM4 (section 2) |
 | isobus-implement-sim | Implements to test against (step −1) |
@@ -25,7 +25,7 @@ still comes before a release.
 
 ## 2. The gateway service, `aow-linkd` (built 2026-10-25, 0.2.24)
 
-Implements the AOW link protocol, version 1 (AgIsoStack-dotnet's `docs/TRANSPORT.md` section 5:
+Implements the AOW link protocol, version 1 (SharpIsoTerm's `docs/TRANSPORT.md` section 5:
 our own protocol, not GVRET; hello, heartbeat, bus status, the 1 s silence rule).
 
 - **The protocol** is `core/src/aow_link.cpp` (`aow/aow_link.h`): transport-free like `gvret`,
@@ -48,10 +48,10 @@ our own protocol, not GVRET; hello, heartbeat, bus status, the 1 s silence rule)
   `/etc/aow-hat/linkd.env` (`AOW_LINKD_OPTS`), kept across updates, still win over the page.
 - **Packaged** in the `.aowpkg`; the updater refuses a package without it.
 - **Tested:** `tests/link_probe.py build/aow-linkd [aowlink_check.py]` on vcan (frames both ways,
-  the drain, STATUS following the interface down and up, a late interface); AgIsoStack-dotnet's
+  the drain, STATUS following the interface down and up, a late interface); SharpIsoTerm's
   `bench/aowlink_check.py` (all checks), its `bench/local.sh` with `GATEWAY=` (the bench and a
   1.5 s cut, in a container), and its Wi-Fi bench on the dev CM4 with the service (both example
-  implements, Mac terminal: AgIsoStack-dotnet `docs/RESULTS.md`).
+  implements, Mac terminal: SharpIsoTerm `docs/RESULTS.md`).
 - **Its status in `aow-hatd`** (0.2.25): PGN 153 from source 0x81 to `127.0.0.1:8891`
   (`aow/helper_status.h`; 150 to 153 are free in AgOpenGPS's PGN list and unused by AgOpenWeb),
   once a second and at once when a terminal connects or goes: listening where and on which
@@ -76,19 +76,19 @@ our own protocol, not GVRET; hello, heartbeat, bus status, the 1 s silence rule)
   options) and restarts the gateway if it runs. While the gateway is on and listens on the network,
   `aow-hatd` keeps an avahi service file, `/etc/avahi/services/aow-linkd.service`, announcing it
   by DNS-SD as `_aowlink._tcp` with that name (TXT `v=1`): AgOpenWeb's VT card lists it by name
-  (AgIsoStack-dotnet `AowLinkBrowser`). The file follows the switch and the settings, and is put
+  (SharpIsoTerm `AowLinkBrowser`). The file follows the switch and the settings, and is put
   right when `aow-hatd` starts. The name also goes in the gateway's HELLO. No pairing code: the
-  machine network is trusted, as for the steer PGNs (AgIsoStack-dotnet `docs/TRANSPORT.md`,
+  machine network is trusted, as for the steer PGNs (SharpIsoTerm `docs/TRANSPORT.md`,
   Security); the help text says to use it on the tractor's own network. A second terminal is
   refused with CLOSE busy "in use by" the first one's name, for the card to show.
 - **The tablets through the service** (2026-10-25, 0.2.26, switched on from the page): the iPad
-  and the Galaxy Tab pass with both example implements, link up throughout (AgIsoStack-dotnet
+  and the Galaxy Tab pass with both example implements, link up throughout (SharpIsoTerm
   `docs/RESULTS.md`). One run showed `aow-hatd`'s status-screen RTS reaching the terminal twice,
   as once before with the Python relay: its open observations say how to catch it.
 
 ## 3. Found on the bench, fixed here
 
-The Wi-Fi bench (2026-10-24, AgIsoStack-dotnet `docs/RESULTS.md`) found two `aow-hatd` bugs,
+The Wi-Fi bench (2026-10-24, SharpIsoTerm `docs/RESULTS.md`) found two `aow-hatd` bugs,
 fixed in 0.2.23 (8bb10f1): the stack's transmit queue lost frames with two producers (upstream
 #656, PR #793 carried as `third_party/agisostack-patches/pr793-transmit-queue.patch`), and the
 VT client dropped a terminal whose upload ran past 10 s (`tests/isobus_vt_probe.py` step 7).
@@ -98,4 +98,4 @@ twice, back to back, and the terminal's answer to both made it abort; its status
 uploaded again. Caught with a capture of the bus, and reproduced on vcan: a race in the stack
 between our aow-isobus thread starting a transfer and the hardware thread updating it (upstream
 issue #807, our PR #808, carried as `third_party/agisostack-patches/pr808-transport-first-frame.patch`
-with the pin moved to e932041). AgIsoStack-dotnet `docs/PLAN.md`, upstream gaps, has the detail.
+with the pin moved to e932041). SharpIsoTerm `docs/PLAN.md`, upstream gaps, has the detail.

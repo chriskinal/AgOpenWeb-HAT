@@ -4,7 +4,7 @@ This file provides guidance to Claude Code when working with this repository.
 
 **Key documentation:**
 - **[docs/PLAN.md](docs/PLAN.md)** - Software plan: decisions, firmware-to-daemon mapping, safety rules, build phases
-- **[docs/PLAN_VT.md](docs/PLAN_VT.md)** - The virtual terminal (the implement's screens in AgOpenWeb): runs in the app on the AgIsoStack-dotnet wrapper; this repo's part is the CAN gateway, `aow-linkd` (built, its status shown on the ISOBUS page)
+- **[docs/PLAN_VT.md](docs/PLAN_VT.md)** - The virtual terminal (the implement's screens in AgOpenWeb): runs in the app on SharpIsoTerm, its ISOBUS terminal library; this repo's part is the CAN gateway, `aow-linkd` (built, its status shown on the ISOBUS page)
 - **[hardware/hat/HARDWARE_HAT_DESIGN.md](hardware/hat/HARDWARE_HAT_DESIGN.md)** - What the board does and why: mechanical, power, circuits, pinouts
 - **[hardware/hat/HARDWARE_HAT_NETLIST.md](hardware/hat/HARDWARE_HAT_NETLIST.md)** - Every part and net
 - **[hardware/hat/HARDWARE_HAT_ISSUES.md](hardware/hat/HARDWARE_HAT_ISSUES.md)** - Open decisions (H#) and bench checks (B#)
@@ -88,7 +88,7 @@ The Teensy firmware is not being rewritten and nothing is ported back to it.
   headers before any `aow/` header and `#undef` its `LOG_*` macros, as `daemon/isobus.cpp` does.
 - **AOW link gateway (`aow-linkd`, docs/PLAN_VT.md section 2):** its own program and service,
   off by default (the ISOBUS page's switch, or `install.sh --hat --gateway`). Carries every frame of `hatcan2` to AgOpenWeb's
-  virtual terminal over TCP 2323 (the protocol: AgIsoStack-dotnet `docs/TRANSPORT.md` section 5;
+  virtual terminal over TCP 2323 (the protocol: SharpIsoTerm `docs/TRANSPORT.md` section 5;
   `core/src/aow_link.cpp`, transport-free). Its name and whether tablets on the network may
   connect are set on the ISOBUS page: `aow-hatd` writes `/etc/aow-hat/linkd.conf` (read by
   `aow-linkd --config`; `linkd.env` options still win) and, while the gateway is on and listens on
@@ -175,7 +175,7 @@ detection (a radio, unknown text, an IMU, a receiver taking over from a silent o
 `tests/link_probe.py build/aow-linkd [aowlink_check.py]` runs the AOW link gateway on vcan1 (and vcan7, made
 and removed): frames both ways, the drain on connect, STATUS following the interface, its reports to
 `aow-hatd` (on 18891); with the path
-to AgIsoStack-dotnet's `bench/aowlink_check.py`, the protocol checks too (root, for `ip link`).
+to SharpIsoTerm's `bench/aowlink_check.py`, the protocol checks too (root, for `ip link`).
 `tests/isobus_probe.py build/aow-hatd` checks the ISOBUS address claim and the tractor ECU role on
 vcan1 (stop the service first).
 `tests/isobus_tc_probe.py build/aow-hatd build/isobus_implement` runs section control against a
