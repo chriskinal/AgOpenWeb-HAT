@@ -9,7 +9,9 @@ Type=notify
 # Options that belong to one unit (--listen, --can) are in /etc/aow-hat/linkd.env, which updates
 # never overwrite. This file is replaced by every update: do not edit it.
 EnvironmentFile=-/etc/aow-hat/linkd.env
-ExecStart=/usr/local/bin/aow-linkd --can hatcan2 $AOW_LINKD_OPTS
+# The ISOBUS page's settings (name, network) first, then the unit's own options, which win; its
+# status to aow-hatd, for the page.
+ExecStart=/usr/local/bin/aow-linkd --can hatcan2 --config /etc/aow-hat/linkd.conf --status 127.0.0.1:8891 $AOW_LINKD_OPTS
 Restart=always
 RestartSec=1
 # The poll loop pings every second: a hang is restarted like a crash.
