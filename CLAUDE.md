@@ -41,8 +41,9 @@ The Teensy firmware is not being rewritten and nothing is ported back to it.
 
 ## Status
 
-- **Board:** built. Assembled boards arrived 2026-10-09 and one is fitted to the dev CM4's IO
-  board with a UM982EB on J7. The power latch and every peripheral passed on the bench
+- **Board:** built. Two assembled boards arrived 2026-10-09 and one is fitted to the dev CM4's IO
+  board with a UM982EB on J7. One erratum, cosmetic: the status LEDs face 180° from where they
+  were meant to (issues H16), fixed in the PCB file. The power latch and every peripheral passed on the bench
   (issues doc section 2; docs/PLAN.md phase 1 record). What is left needs a vehicle or a load.
   4 layers: Top, Inner1 GND plane, Inner2 signal with a GND pour, Bottom. Rules 0.2 mm track and
   clearance, 0.5 mm power. Routed with EasyEDA's JLCPCB router, GND skipped; GND vias placed by
