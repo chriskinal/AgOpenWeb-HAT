@@ -9,7 +9,10 @@
 // HAT changes: the file is a signed update package (.aowpkg, deploy/package.sh), sent as bytes,
 // not a Teensy .hex; after the upload the page follows /api/ota/status while a separate service
 // verifies, installs and checks the new version (and restores the old one if it fails); a
-// restart button when the boot files changed; wording. Layout and styles are the firmware's.
+// restart button when the boot files changed; wording. A package can carry AgOpenWeb too (the HAT
+// software and the app as a matched set): the page shows the AgOpenWeb installed
+// (/api/ota/versions), and says so when it is not the one the installed package carried; the wait
+// for a result is 5 minutes, not 3. Layout and styles are the firmware's.
 
 // TouchFriendlyOTAPage.h
 // Touch-optimized system update page
@@ -179,7 +182,7 @@ const char TOUCH_FRIENDLY_OTA_PAGE[] PROGMEM = R"rawliteral(
         let startVersion = '';
         
         function loadVersion() {
-            fetch('/api/status')
+            fetch('/api/ota/versions')
             .then(response => response.json())
             .then(data => {
                 if (data.version) {
@@ -188,6 +191,10 @@ const char TOUCH_FRIENDLY_OTA_PAGE[] PROGMEM = R"rawliteral(
                 } else {
                     document.getElementById('currentVersion').textContent = 'Unknown';
                 }
+                let app = data.agopenweb || 'Not installed';
+                if (data.agopenwebPackaged && data.agopenweb && data.agopenweb !== data.agopenwebPackaged)
+                    app += ' (not the one in the installed package, ' + data.agopenwebPackaged + ')';
+                document.getElementById('appVersion').textContent = app;
             })
             .catch(error => {
                 console.error('Error loading version:', error);
@@ -249,8 +256,8 @@ const char TOUCH_FRIENDLY_OTA_PAGE[] PROGMEM = R"rawliteral(
             
             function poll() {
                 const elapsed = Math.round((Date.now() - started) / 1000);
-                if (elapsed > 180) {
-                    setProgress(100, 'No result after 3 minutes', 'failed');
+                if (elapsed > 300) {
+                    setProgress(100, 'No result after 5 minutes', 'failed');
                     log('The unit did not report a result. Reload this page to see its state.');
                     finish();
                     return;
@@ -411,13 +418,14 @@ const char TOUCH_FRIENDLY_OTA_PAGE[] PROGMEM = R"rawliteral(
         <div class="board-info">
             <div>Board Type: CM4 + AgOpenWeb HAT</div>
             <div>Current Version: <span id="currentVersion">Loading...</span></div>
+            <div>AgOpenWeb: <span id="appVersion">Loading...</span></div>
         </div>
         
         <div class="warning-box">
             <strong>Before you update</strong>
-            Disengage steering first: the HAT software restarts during the update. Only signed
-            AgOpenWeb HAT update files (.aowpkg) are accepted. If the new version does not start,
-            the previous one is put back.
+            Disengage steering first: the HAT software restarts during the update, and AgOpenWeb
+            too when the package has a new one. Only signed AgOpenWeb HAT update files (.aowpkg)
+            are accepted. If the new version does not start, the previous one is put back.
         </div>
         
     </div>

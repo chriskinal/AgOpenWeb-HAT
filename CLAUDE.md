@@ -118,11 +118,19 @@ The Teensy firmware is not being rewritten and nothing is ported back to it.
   `deploy/update-key.pem`, which install.sh puts on the unit. A unit still on the old development
   key takes one handover package first, signed with that key and carrying the new one:
   `AOW_HAT_SIGNING_KEY=<old key> deploy/dev.sh package --version V --accepted-by <old public key>`.
-  Releases come from `.github/workflows/release.yml`: a tag vX.Y.Z makes release vX.Y.Z; a
-  nightly (06:30 UTC, when main moved) replaces the `nightly` pre-release as
-  X.Y.Z-nightly.DATE.RUN, X.Y.Z the project version in CMakeLists.txt (the next release: move it
-  after each one). Each has the `.aowpkg`, the `.tar.gz` and SHA256SUMS. A tagged release fails
-  unless AgIsoStack++'s pin is upstream's HEAD (a nightly warns).
+  A release package carries AgOpenWeb too, as a matched set (`package.sh --agopenweb`, its
+  headless linux-arm64 tarball as it came; `dev.sh package --agopenweb beta`): install.sh
+  installs it with AgOpenWeb's own installer only when its files differ from `/opt/agopenweb`
+  (`deploy/aow-hat-app-tree`), the updater checks it starts (port 5174) and rolls the set back
+  together, and the update page shows the AgOpenWeb installed (`/api/ota/versions`). Uploads
+  are written to disk as they arrive (`Server::uploadRoute`, up to 256 MB): the daemon locks its
+  memory, so a package must not be held in it.
+  Releases come from `.github/workflows/release.yml`: a tag vX.Y.Z makes release vX.Y.Z with the
+  AgOpenWeb build in `deploy/agopenweb.pin` (it fails unless AgOpenWeb's Beta is that build); a
+  nightly, checked hourly, replaces the `nightly` pre-release when main or AgOpenWeb's Beta moved,
+  as X.Y.Z-nightly.DATE.RUN with the Beta, X.Y.Z the project version in CMakeLists.txt (the next
+  release: move it after each one). Each has the `.aowpkg`, the `.tar.gz` and SHA256SUMS. A
+  tagged release also fails unless AgIsoStack++'s pin is upstream's HEAD (a nightly warns).
   Per-unit daemon options live in `/etc/aow-hat/daemon.env`, not in the service unit.
 - **Scope:** port every v26 firmware function the HAT hardware supports, web UI included
   (docs/PLAN.md section 2).
@@ -168,8 +176,9 @@ c++ -std=c++17 -Wall -Wextra -Icore/include -Ihal/include core/src/*.cpp tests/t
 # The daemon on the Mac: a Trixie arm64 container (the CM4's OS/arch; image in .devcontainer/,
 # builds kept in the Docker volume aow-hat-build). Needs OrbStack (or Docker Desktop) running.
 deploy/dev.sh test                          # build + ctest, incremental
-deploy/dev.sh package --version 0.3.0-rc.1  # signed .aowpkg + .tar.gz into dist/ (the release key)
-deploy/dev.sh install dist/aow-hat-0.3.0-rc.1-linux-arm64.aowpkg   # to the dev CM4's update page
+deploy/dev.sh package --version 0.3.0-rc.2 --agopenweb beta  # signed .aowpkg + .tar.gz into dist/ (the release key),
+                                            # with AgOpenWeb's Beta (leave --agopenweb out for the HAT software alone)
+deploy/dev.sh install dist/aow-hat-0.3.0-rc.2-linux-arm64.aowpkg   # to the dev CM4's update page
 deploy/dev.sh shell                         # builds are in /build/main there, e.g. /build/main/aow-hatd
 # VS Code: "Reopen in Container" uses the same image and volume; clangd sees the Linux headers.
 ```

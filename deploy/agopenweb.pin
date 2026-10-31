@@ -1,0 +1,7 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 The AgOpenWeb-HAT contributors
+#
+# The AgOpenWeb build a tagged HAT release ships (release.yml): its version as the app stamps it
+# (<version>+<commit>, AgOpenWeb.Desktop.dll). AgOpenWeb's Beta must be this build when the tag is
+# pushed, so a release carries the app it was tested with. Nightlies take the Beta as it is.
+26.7.0+8b34b11

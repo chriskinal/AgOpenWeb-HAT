@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 The AgOpenWeb-HAT contributors
+#
+# Prints one hash of an AgOpenWeb install's files (their paths and contents, not their owners or
+# modes), or nothing if the directory is missing. package.sh records it for the AgOpenWeb it
+# packs; install.sh compares it with /opt/agopenweb, and installs the app only when they differ.
+#
+#   aow-hat-app-tree DIR
+set -euo pipefail
+dir="${1:?usage: aow-hat-app-tree DIR}"
+[ -d "$dir" ] || exit 0
+cd "$dir"
+find . -type f -print0 | LC_ALL=C sort -z | xargs -0 -r sha256sum | sha256sum | cut -d' ' -f1

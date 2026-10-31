@@ -85,6 +85,9 @@ def main():
     st = json.loads(http(base, "/api/status")[2])
     check("version" in st and st["moduleId"] == 126,
           "/api/status: version %s, uptime %d ms, ip %s" % (st["version"], st["uptime"], st["network"]["ip"]))
+    ver = json.loads(http(base, "/api/ota/versions")[2])
+    check(ver.get("version") == st["version"] and "agopenweb" in ver,
+          "/api/ota/versions: AgOpenWeb %s, package had %s" % (ver.get("agopenweb") or "none", ver.get("agopenwebPackaged") or "none"))
     wifi = json.loads(http(base, "/api/wifi")[2])
     check("mode" in wifi and "ap" in wifi, "/api/wifi: %s, %s" % (wifi["mode"], (wifi["ssid"] or "not connected") if wifi["available"] else wifi["unavailable"]))
     dev = json.loads(http(base, "/api/device/settings")[2])

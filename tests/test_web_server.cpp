@@ -7,6 +7,10 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
+#include <algorithm>
+#include <cstdio>
+#include <fstream>
+#include <iterator>
 #include <stdexcept>
 #include <string>
 
@@ -77,6 +81,63 @@ int main() {
     // A body over the limit is refused.
     s.maxBody = 100;
     CHECK(request(s, http, "POST /api/echo HTTP/1.1\r\nContent-Length: 5000\r\n\r\n").rfind("HTTP/1.1 400", 0) == 0);
+
+    // An upload route: the body goes to the file, however far over maxBody, up to its own limit.
+    {
+        const std::string file = "/tmp/aow_test_web_server_upload";
+        std::string got;
+        std::string method;
+        s.uploadRoute("/api/upload", file, 1 << 20, [&](const Request& r) {
+            method = r.method;
+            got.clear();
+            if (!r.bodyFile.empty()) {
+                std::ifstream in(r.bodyFile, std::ios::binary);
+                got.assign(std::istreambuf_iterator<char>(in), {});
+                std::remove(r.bodyFile.c_str());
+            }
+            return Response::text("stored " + std::to_string(got.size()));
+        });
+        std::string body(600 * 1024, '\0');
+        for (size_t i = 0; i < body.size(); ++i) body[i] = static_cast<char>(i * 7);
+        const std::string head = "POST /api/upload HTTP/1.1\r\nContent-Length: " + std::to_string(body.size()) + "\r\n\r\n";
+        // Sends everything, polling the server whenever the socket is full.
+        const auto sendAll = [&s](int fd, const char* data, size_t len) {
+            while (len > 0) {
+                const ssize_t n = send(fd, data, len, 0);
+                if (n > 0) {
+                    data += n;
+                    len -= static_cast<size_t>(n);
+                } else {
+                    s.poll(5);
+                }
+            }
+        };
+        const auto briefly = [n = 0](const std::string&) mutable { return ++n > 3; };
+        int fd = connectTo(http);
+        const std::string first = head + body.substr(0, 1000);  // part of the body with the headers
+        sendAll(fd, first.data(), first.size());
+        pump(s, fd, briefly);
+        sendAll(fd, body.data() + 1000, body.size() - 1000);
+        std::string reply = pump(s, fd, [](const std::string& g) { return g.find("stored") != std::string::npos; });
+        close(fd);
+        CHECK(reply.rfind("HTTP/1.1 200", 0) == 0 && method == "POST" && got == body);
+
+        // Over the route's limit: refused before any of it is stored.
+        reply = request(s, http, "POST /api/upload HTTP/1.1\r\nContent-Length: 2000000\r\n\r\n");
+        CHECK(reply.rfind("HTTP/1.1 413", 0) == 0 && !std::ifstream(file).good());
+        // Other methods reach the handler with no file.
+        reply = request(s, http, "GET /api/upload HTTP/1.1\r\n\r\n");
+        CHECK(reply.find("stored 0") != std::string::npos && method == "GET");
+        // A connection lost mid-upload leaves no part file.
+        fd = connectTo(http);
+        sendAll(fd, head.data(), head.size());
+        sendAll(fd, body.data(), 5000);
+        pump(s, fd, briefly);
+        CHECK(std::ifstream(file).good());
+        close(fd);
+        for (int i = 0; i < 20; ++i) s.poll(5);
+        CHECK(!std::ifstream(file).good());
+    }
 
     // WebSocket: handshake, broadcast (text and a 300-byte binary), ping, close.
     {

@@ -10,6 +10,7 @@
 
 #include <cstdio>
 #include <cstring>
+#include <fstream>
 
 #include "pages/CANConfigUploadPage.h"
 #include "pages/CANInfoJSON.h"
@@ -559,17 +560,30 @@ Response canUpload(Backend& b, const Request& r) {
 // like a package. Verifying the signature and installing is the updater service's job.
 Response otaUpload(Backend& b, const Request& r) {
     if (r.method != "POST") return methodNotAllowed();
-    if (b.status().autosteerActive) return Response::text("Steering is engaged. Disengage it, then update.", 409);
-    if (!looksLikeUpdatePackage(r.body)) return Response::text("This is not an AgOpenWeb HAT update file (.aowpkg).", 400);
+    const auto refuse = [&r](Response resp) {
+        std::remove(r.bodyFile.c_str());
+        return resp;
+    };
+    if (b.status().autosteerActive) return refuse(Response::text("Steering is engaged. Disengage it, then update.", 409));
+    if (!looksLikeUpdatePackage(r.bodyFile)) return refuse(Response::text("This is not an AgOpenWeb HAT update file (.aowpkg).", 400));
     std::string err;
-    if (!b.startUpdate(r.body, err)) return Response::text(err, 500);
-    LOG_NOTICE(System, "Update package received (%zu bytes); handed to the updater", r.body.size());
+    if (!b.startUpdate(r.bodyFile, err)) return refuse(Response::text(err, 500));
+    LOG_NOTICE(System, "Update package received (%s bytes); handed to the updater", r.header("content-length").c_str());
     return Response::text("Package received");
 }
 
 Response otaStatus(Backend& b) {
     const std::string s = b.updateStatus();
     return Response::json(s.empty() ? R"({"state":"idle","message":""})" : s);
+}
+
+Response otaVersions(Backend& b, const char* version) {
+    const Backend::AppVersions app = b.agopenwebVersions();
+    JsonDocument doc;
+    doc["version"] = version;
+    doc["agopenweb"] = app.installed;
+    doc["agopenwebPackaged"] = app.packaged;
+    return Response::json(doc.as<std::string>());
 }
 
 Response otaReboot(Backend& b, const Request& r) {
@@ -639,12 +653,44 @@ void put(std::string& out, size_t at, const void* v, size_t n) { std::memcpy(&ou
 
 }  // namespace
 
-bool looksLikeUpdatePackage(const std::string& bytes) {
+bool looksLikeUpdatePackage(const std::string& file) {
     static const char kTrailer[] = "AOWHAT1\n";
     const size_t trailer = sizeof kTrailer - 1, signature = 64;
-    if (bytes.size() < 2 + signature + trailer + 64 || bytes.size() > kMaxUpdatePackage) return false;
-    if (static_cast<uint8_t>(bytes[0]) != 0x1f || static_cast<uint8_t>(bytes[1]) != 0x8b) return false;  // gzip
-    return bytes.compare(bytes.size() - trailer, trailer, kTrailer) == 0;
+    std::ifstream in(file, std::ios::binary | std::ios::ate);
+    if (!in) return false;
+    const auto size = static_cast<size_t>(in.tellg());
+    if (size < 2 + signature + trailer + 64 || size > kMaxUpdatePackage) return false;
+    char head[2], tail[sizeof kTrailer - 1];
+    in.seekg(0);
+    in.read(head, sizeof head);
+    in.seekg(static_cast<std::streamoff>(size - trailer));
+    in.read(tail, sizeof tail);
+    if (!in || static_cast<uint8_t>(head[0]) != 0x1f || static_cast<uint8_t>(head[1]) != 0x8b) return false;  // gzip
+    return std::memcmp(tail, kTrailer, trailer) == 0;
+}
+
+std::string findAppVersion(const std::string& bytes) {
+    // The first "<digits>.<digits>.<digits>+<7 or more hex digits>", with "-dirty" if it follows.
+    const auto digit = [](char c) { return c >= '0' && c <= '9'; };
+    const auto hex = [&digit](char c) { return digit(c) || (c >= 'a' && c <= 'f'); };
+    for (size_t start = 0; start < bytes.size(); ++start) {
+        if (!digit(bytes[start]) || (start > 0 && (digit(bytes[start - 1]) || bytes[start - 1] == '.'))) continue;
+        size_t i = start;
+        bool ok = true;
+        for (int part = 0; part < 3 && ok; ++part) {
+            const size_t from = i;
+            while (i < bytes.size() && digit(bytes[i])) ++i;
+            ok = i > from && i < bytes.size() && bytes[i] == (part < 2 ? '.' : '+');
+            ++i;
+        }
+        if (!ok) continue;
+        const size_t from = i;
+        while (i < bytes.size() && hex(bytes[i])) ++i;
+        if (i - from < 7) continue;
+        if (bytes.compare(i, 6, "-dirty") == 0) i += 6;
+        return bytes.substr(start, i - start);
+    }
+    return "";
 }
 
 void addRoutes(Server& server, Backend& b, const char* version) {
@@ -683,8 +729,10 @@ void addRoutes(Server& server, Backend& b, const char* version) {
         return Response::json(R"({"status":"restarting"})");
     });
     page(server, "/ota", TOUCH_FRIENDLY_OTA_PAGE);
-    server.route("/api/ota/upload", [&b](const Request& r) { return otaUpload(b, r); });
+    server.uploadRoute("/api/ota/upload", b.updateUploadFile(), kMaxUpdatePackage,
+                       [&b](const Request& r) { return otaUpload(b, r); });
     server.route("/api/ota/status", [&b](const Request&) { return otaStatus(b); });
+    server.route("/api/ota/versions", [&b, version](const Request&) { return otaVersions(b, version); });
     server.route("/api/ota/reboot", [&b](const Request& r) { return otaReboot(b, r); });
     server.route("/api/eventlogger/config", [&b](const Request& r) { return eventLogger(b, r); });
     server.route("/api/logs/data", [](const Request&) { return logData(); });

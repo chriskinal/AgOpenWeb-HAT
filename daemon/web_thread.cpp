@@ -38,6 +38,8 @@ namespace {
 using Clock = std::chrono::steady_clock;
 
 constexpr const char* kUpdateDir = "/var/lib/aow-hat/update";  // shared with deploy/aow-hat-update
+constexpr const char* kAppDll = "/opt/agopenweb/AgOpenWeb.Desktop.dll";  // AgOpenWeb's install.sh
+constexpr const char* kBundleVersion = "/usr/local/lib/aow-hat/current/VERSION";  // install.sh
 constexpr const char* kLinkdUnit = "/etc/systemd/system/aow-linkd.service";  // install.sh puts it there
 constexpr const char* kLinkdWanted = "/etc/systemd/system/multi-user.target.wants/aow-linkd.service";
 constexpr const char* kLinkdConf = "/etc/aow-hat/linkd.conf";  // read by aow-linkd (its --config)
@@ -345,13 +347,16 @@ public:
         return withReceiver(error, [&](Um98x& um) { return um.writeConfiguration(c); });
     }
 
-    bool startUpdate(const std::string& package, std::string& error) override {
-        if (mkdir(kUpdateDir, 0700) != 0 && errno != EEXIST) {
-            error = std::string(kUpdateDir) + ": " + std::strerror(errno);
+    std::string updateUploadFile() override {
+        mkdir(kUpdateDir, 0700);  // the upload is written here as it arrives (the server opens it)
+        return std::string(kUpdateDir) + "/upload.part";
+    }
+    bool startUpdate(const std::string& uploadedFile, std::string& error) override {
+        const std::string dir = kUpdateDir;
+        if (std::rename(uploadedFile.c_str(), (dir + "/incoming.aowpkg").c_str()) != 0) {
+            error = dir + "/incoming.aowpkg: " + std::strerror(errno);
             return false;
         }
-        const std::string dir = kUpdateDir;
-        if (!writeFileAtomically(dir + "/incoming.aowpkg", package, error)) return false;
         std::string ignored;
         writeFileAtomically(dir + "/status.json", R"({"state":"received","message":"Package received."})", ignored);
         // The updater is its own unit: it restarts this daemon, so it cannot be this daemon.
@@ -361,6 +366,27 @@ public:
             return false;
         }
         return true;
+    }
+    // AgOpenWeb's version from its DLL (read again only when the file changes), and the one the
+    // installed package carried, from the package's VERSION (install.sh keeps the bundle).
+    AppVersions agopenwebVersions() override {
+        AppVersions v;
+        struct stat st{};
+        if (stat(kAppDll, &st) == 0) {
+            if (st.st_mtime != appDllTime_ || st.st_size != appDllSize_) {
+                std::ifstream in(kAppDll, std::ios::binary);
+                std::stringstream bytes;
+                bytes << in.rdbuf();
+                appVersion_ = web::findAppVersion(bytes.str());
+                appDllTime_ = st.st_mtime;
+                appDllSize_ = st.st_size;
+            }
+            v.installed = appVersion_;
+        }
+        std::ifstream version(kBundleVersion);
+        for (std::string line; std::getline(version, line);)
+            if (line.rfind("agopenweb=", 0) == 0) v.packaged = line.substr(10);
+        return v;
     }
     std::string updateStatus() override {
         std::ifstream in(std::string(kUpdateDir) + "/status.json");
@@ -460,6 +486,9 @@ private:
     }
 
     std::string canPath() const { return file_.canConfigPath(); }
+    std::string appVersion_;
+    time_t appDllTime_ = 0;
+    off_t appDllSize_ = -1;
     Shared& shared_;
     const SettingsFile& file_;
     HelperListener& helpers_;
@@ -478,7 +507,6 @@ void WebThread::run() {
     HelperListener helpers;
     DaemonBackend backend(shared_, opt_.settingsFile, helpers);
     web::Server server;
-    server.maxBody = web::kMaxUpdatePackage;  // an update package is the largest upload
     bool pages = false;
     if (opt_.httpPort) {
         pages = server.listenHttp(opt_.httpPort) != 0;

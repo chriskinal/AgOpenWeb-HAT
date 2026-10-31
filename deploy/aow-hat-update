@@ -3,7 +3,7 @@
 # Copyright (c) 2026 The AgOpenWeb-HAT contributors
 #
 # AOW HAT updater: verifies a signed package, installs it, and puts the previous version back if
-# the new daemon does not stay up. Run as root by aow-hat-update.service (started by the daemon
+# the new daemon does not stay up, or AgOpenWeb, when the package changed it. Run as root by aow-hat-update.service (started by the daemon
 # when a package is uploaded on the System Update page), or by hand:
 #
 #   sudo /usr/local/lib/aow-hat/aow-hat-update aow-hat-<version>-linux-arm64.aowpkg
@@ -14,7 +14,7 @@ main() {
   set -u
   local LIB=/usr/local/lib/aow-hat DIR=/var/lib/aow-hat/update
   local PKG="${1:-$DIR/incoming.aowpkg}" KEY="$LIB/update-key.pem"
-  local new="" old="" work="" stage="$LIB/staging" reboot=false
+  local new="" old="" work="" stage="$LIB/staging" reboot=false app=
   mkdir -p "$DIR"
   [ -f "$LIB/current/VERSION" ] && old="$(sed -n 's/^version=//p' "$LIB/current/VERSION")"
   [ -n "$old" ] || old="$(/usr/local/bin/aow-hatd --version 2>/dev/null | awk '{print $2}')"
@@ -26,12 +26,21 @@ main() {
   }
   cleanup() { rm -rf "$stage" ${work:+"$work"}; [ "$PKG" = "$DIR/incoming.aowpkg" ] && rm -f "$PKG"; }
   fail() { status failed "$1"; cleanup; exit 1; }
-  # Reinstalls the version stored in $1 and makes it "current" again.
+  # Reinstalls the version stored in $1 and makes it "current" again. Its install.sh puts its own
+  # AgOpenWeb back if it carries one; if not and the app was changed, the copy AgOpenWeb's
+  # installer kept of the one it replaced goes back.
   rollback() {
-    local from="$1" why="$2"
+    local from="$1" why="$2" appChanged=no
+    [ -e /run/aow-hat-app-changed ] && appChanged=yes
     if [ -x "$from/install.sh" ]; then
       echo "aow-hat-update: $why; restoring version $old from $from"
       "$from/install.sh" --hat --no-record || true
+      if [ "$appChanged" = yes ] && [ ! -f "$from/agopenweb-linux-arm64.tar.gz" ] && [ -d /opt/agopenweb.old ]; then
+        echo "aow-hat-update: restoring AgOpenWeb from /opt/agopenweb.old"
+        systemctl stop agopenweb.service || true
+        rm -rf /opt/agopenweb && mv /opt/agopenweb.old /opt/agopenweb
+        systemctl start agopenweb.service || true
+      fi
       if [ "$from" = "$LIB/previous" ]; then rm -rf "$LIB/current"; mv "$LIB/previous" "$LIB/current"; fi
       status rolled_back "$why. Version $old was put back."
     else
@@ -59,8 +68,12 @@ main() {
   [ -x "$stage/install.sh" ] && [ -x "$stage/aow-hatd" ] && [ -x "$stage/aow-linkd" ] && [ -f "$stage/VERSION" ] || fail "The package is incomplete."
   grep -qx "arch=$(uname -m)" "$stage/VERSION" || fail "The package is for a different kind of computer."
   new="$(sed -n 's/^version=//p' "$stage/VERSION")"
+  app="$(sed -n 's/^agopenweb=//p' "$stage/VERSION")"
+  # AgOpenWeb is unpacked beside its old copy and the copy kept of that one: room for both.
+  local free; free="$(df --output=avail -m / | tail -n1 | tr -d ' ')"
+  [ "$free" -ge 600 ] || fail "Not enough free space: ${free} MB, the update needs 600 MB."
 
-  status installing "Installing version $new (was ${old:-unknown})."
+  status installing "Installing version $new${app:+ with AgOpenWeb $app} (was ${old:-unknown})."
   rm -f /run/aow-hat-reboot-needed
   "$stage/install.sh" --hat || rollback "$LIB/current" "Version $new could not be installed"
   [ -e /run/aow-hat-reboot-needed ] && reboot=true
@@ -80,8 +93,26 @@ main() {
   fi
   [ "$ok" = yes ] || rollback "$LIB/previous" "Version $new did not start properly"
 
-  if [ "$reboot" = true ]; then status done "Version $new is installed. Restart the unit to finish: the boot files changed."
-  else status done "Version $new is installed and running."; fi
+  # AgOpenWeb, if this package changed it: up without restarting, and its UI answering on 5174
+  # (its start takes a few seconds).
+  if [ -e /run/aow-hat-app-changed ]; then
+    status checking "Checking that AgOpenWeb $app runs."
+    restarts="$(systemctl show -p NRestarts --value agopenweb.service)"
+    ok=no
+    for i in $(seq 1 45); do
+      sleep 1
+      systemctl is-active --quiet agopenweb.service || break
+      [ "$i" -ge 12 ] || continue
+      if ! command -v curl >/dev/null || curl -fs -o /dev/null -m 2 http://127.0.0.1:5174/; then ok=yes; break; fi
+    done
+    [ "$(systemctl show -p NRestarts --value agopenweb.service)" = "$restarts" ] || ok=no
+    [ "$ok" = yes ] || rollback "$LIB/previous" "AgOpenWeb $app did not start properly"
+  fi
+
+  local with=""
+  [ -e /run/aow-hat-app-changed ] && with=" with AgOpenWeb $app"
+  if [ "$reboot" = true ]; then status done "Version $new$with is installed. Restart the unit to finish: the boot files changed."
+  else status done "Version $new$with is installed and running."; fi
   cleanup
 }
 main "$@"; exit

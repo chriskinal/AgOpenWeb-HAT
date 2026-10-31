@@ -7,12 +7,29 @@
 
 #include <cstdio>
 #include <cstring>
+#include <fstream>
+#include <sstream>
 
 #include "check.h"
 #include "http_client.h"
 
 using namespace aow;
 using namespace aow::web;
+
+namespace {
+
+std::string readFile(const std::string& path) {
+    std::ifstream in(path, std::ios::binary);
+    std::stringstream s;
+    s << in.rdbuf();
+    return s.str();
+}
+
+void writeFile(const std::string& path, const std::string& bytes) { std::ofstream(path, std::ios::binary) << bytes; }
+
+bool exists(const std::string& path) { return std::ifstream(path).good(); }
+
+}  // namespace
 
 struct FakeBackend : Backend {
     Settings s;
@@ -73,7 +90,15 @@ struct FakeBackend : Backend {
     void restart() override { ++restarts; }
     std::string updatePackage, updateJson;
     int reboots = 0;
-    bool startUpdate(const std::string& p, std::string&) override { updatePackage = p; return true; }
+    AppVersions app;
+    std::string uploadFile = "/tmp/aow_test_web_api_upload";
+    std::string updateUploadFile() override { return uploadFile; }
+    bool startUpdate(const std::string& f, std::string&) override {
+        updatePackage = readFile(f);
+        std::remove(f.c_str());
+        return true;
+    }
+    AppVersions agopenwebVersions() override { return app; }
     std::string updateStatus() override { return updateJson; }
     void reboot() override { ++reboots; }
     std::string canJson;
@@ -359,12 +384,21 @@ int main() {
 
     // System update: only a package-shaped file, only with steering off; status passes through.
     std::string pkg = std::string("\x1f\x8b", 2) + std::string(200, 'x') + std::string(64, 's') + "AOWHAT1\n";
-    CHECK(looksLikeUpdatePackage(pkg) && !looksLikeUpdatePackage(pkg.substr(1)) && !looksLikeUpdatePackage(":10000000"));
+    const std::string probe = "/tmp/aow_test_web_api_pkg";
+    writeFile(probe, pkg);
+    CHECK(looksLikeUpdatePackage(probe));
+    writeFile(probe, pkg.substr(1));
+    CHECK(!looksLikeUpdatePackage(probe));
+    writeFile(probe, ":10000000");
+    CHECK(!looksLikeUpdatePackage(probe) && !looksLikeUpdatePackage("/nonexistent/x.aowpkg"));
+    std::remove(probe.c_str());
     CHECK(request(s, port, "GET /ota HTTP/1.1\r\n\r\n").find(".aowpkg") != std::string::npos);
     CHECK(request(s, port, "GET /api/ota/upload HTTP/1.1\r\n\r\n").rfind("HTTP/1.1 405", 0) == 0);
     CHECK(post(s, port, "/api/ota/upload", "not a package").rfind("HTTP/1.1 400", 0) == 0 && b.updatePackage.empty());
+    CHECK(!exists(b.uploadFile));  // a refused upload is not left behind
     b.st.autosteerActive = true;
     CHECK(post(s, port, "/api/ota/upload", pkg).rfind("HTTP/1.1 409", 0) == 0 && b.updatePackage.empty());
+    CHECK(!exists(b.uploadFile));
     CHECK(post(s, port, "/api/ota/reboot", "").rfind("HTTP/1.1 409", 0) == 0 && b.reboots == 0);
     b.st.autosteerActive = false;
     CHECK(post(s, port, "/api/ota/upload", pkg).rfind("HTTP/1.1 200", 0) == 0 && b.updatePackage == pkg);
@@ -372,6 +406,16 @@ int main() {
     b.updateJson = R"({"state":"done","version":"9.9.9"})";
     CHECK(parse(request(s, port, "GET /api/ota/status HTTP/1.1\r\n\r\n"))["version"] == "9.9.9");
     CHECK(parse(post(s, port, "/api/ota/reboot", ""))["status"] == "rebooting" && b.reboots == 1);
+    b.app = {"26.7.0+cf710ed", "26.7.0+abc1234"};
+    d = parse(request(s, port, "GET /api/ota/versions HTTP/1.1\r\n\r\n"));
+    CHECK(d["version"] == "0.1.0" && d["agopenweb"] == "26.7.0+cf710ed" && d["agopenwebPackaged"] == "26.7.0+abc1234");
+
+    // AgOpenWeb's version, found in its DLL's bytes.
+    using namespace std::string_literals;
+    CHECK(findAppVersion("\0\x01 26.7.0.0\0\x15"s + "26.7.0+cf710ed\0"s + "1.2.3+aaaaaaa") == "26.7.0+cf710ed");
+    CHECK(findAppVersion("x26.7.0+cf710ed2880a60da-dirty\0"s) == "26.7.0+cf710ed2880a60da-dirty");
+    CHECK(findAppVersion("1.2.3.4+abcdef0 9.8+abcdef01") == "");  // four parts; two parts
+    CHECK(findAppVersion("26.7.0+cf71\0 26.7.0"s) == "" && findAppVersion("") == "");
 
     // Wi-Fi: not managed (a desktop build) says so; then the state, a switch each way, refusals.
     r = request(s, port, "GET /network HTTP/1.1\r\n\r\n");

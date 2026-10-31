@@ -14,6 +14,10 @@
 #   --gateway      enable and start it
 #   --no-gateway   stop and disable it
 #
+# A bundle that carries AgOpenWeb (a release: package.sh --agopenweb) installs it too, with
+# AgOpenWeb's own installer, when it differs from what is in /opt/agopenweb; --no-app leaves the
+# app as it is.
+#
 # Run from a bundle (deploy/package.sh) or from the repo's deploy/ with a built aow-hatd beside
 # it. From a bundle, the bundle is kept in /usr/local/lib/aow-hat/current and the one before it
 # in .../previous, which is what the updater rolls back to. --no-record skips that (the
@@ -26,6 +30,7 @@ LIB=/usr/local/lib/aow-hat
 choice=""
 record=yes
 gateway=""
+app=yes
 
 for a in "$@"; do
   case "$a" in
@@ -34,6 +39,7 @@ for a in "$@"; do
     --no-record) record=no ;;
     --gateway) gateway=yes ;;
     --no-gateway) gateway=no ;;
+    --no-app) app=no ;;
     *) echo "unknown option: $a" >&2; exit 2 ;;
   esac
 done
@@ -139,6 +145,29 @@ ENV
         echo "AOW link gateway disabled." ;;
     *) systemctl try-restart aow-linkd.service ;;  # running: run the new binary
   esac
+  # AgOpenWeb, when the bundle carries it: only when its files differ from /opt/agopenweb, so an
+  # update that changes only the HAT software does not restart the app. Its installer keeps the
+  # app's data (/home/agopenweb) and the copy it replaces (/opt/agopenweb.old).
+  # /run/aow-hat-app-changed tells the updater the app was touched: it checks the new one runs,
+  # and on a rollback puts the old one back.
+  rm -f /run/aow-hat-app-changed
+  if [ "$app" = yes ] && [ -f "$HERE/agopenweb-linux-arm64.tar.gz" ]; then
+    app_version="$(sed -n 's/^agopenweb=//p' "$HERE/VERSION")"
+    if [ "$(sed -n 's/^agopenweb_tree=//p' "$HERE/VERSION")" = "$("$HERE/aow-hat-app-tree" /opt/agopenweb)" ]; then
+      echo "AgOpenWeb $app_version is already installed."
+    else
+      touch /run/aow-hat-app-changed
+      app_tmp="$(mktemp -d /var/tmp/aow-hat-app.XXXXXX)"
+      tar --no-same-owner -xzf "$HERE/agopenweb-linux-arm64.tar.gz" -C "$app_tmp"
+      if ! "$app_tmp/agopenweb-linux-arm64/install.sh" --arch arm64 --from "$app_tmp/agopenweb-linux-arm64/app"; then
+        rm -rf "$app_tmp"
+        echo "AgOpenWeb $app_version could not be installed" >&2
+        exit 1
+      fi
+      rm -rf "$app_tmp"
+      echo "AgOpenWeb $app_version installed and started."
+    fi
+  fi
   if [ "$reboot_needed" = yes ]; then
     touch /run/aow-hat-reboot-needed
     echo "Boot files changed: reboot to load the HAT overlays and the RT kernel."
