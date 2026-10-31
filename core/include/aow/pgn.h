@@ -32,6 +32,7 @@ enum Id : uint8_t {
     MachineData = 239,
     SectionStatus = 240,    // AOG-TaskController's, to the app: section control on, count, bits
     SectionControl = 241,   // AOG-TaskController's: byte 0 = 1, ISOBUS section control on
+    VehicleGeometryData = 247,  // AgOpenWeb's: antenna and IMU positions, wheelbase (#387)
     TurnSensor = 250,
     SteerConfig = 251,
     SteerSettings = 252,
@@ -74,5 +75,23 @@ struct CorrectedFix {
 };
 // False for a short frame or a position that is not one.
 bool decodeCorrectedFix(const uint8_t* data, size_t len, CorrectedFix& f);
+
+// PGN 247, AgOpenWeb's vehicle geometry (its Docs/PGN.md, "Vehicle geometry"): sent with PGN
+// 251/252, when a vehicle setting changes, and when PGN 253 is heard again after a silence.
+// Lengths in cm. Positions from the pivot (rear axle centre): pivot ahead (+), offset right (+),
+// height above the ground. Layout version 1 is 19 bytes; later versions only add fields at the
+// end, so a longer frame is read for the fields known here.
+struct VehicleGeometry {
+    uint8_t version = 0;
+    bool imuEntered = false;  // the IMU position was set (else the IMU fields are 0, not a position)
+    uint16_t wheelbaseCm = 0, trackWidthCm = 0, antennaHeightCm = 0;
+    int16_t antennaPivotCm = 0, antennaOffsetCm = 0;
+    int16_t imuPivotCm = 0;
+    uint16_t imuHeightCm = 0;
+    int16_t imuOffsetCm = 0;
+    uint8_t maxSteerDeg = 0;
+};
+// False for a short frame or layout version 0.
+bool decodeVehicleGeometry(const uint8_t* data, size_t len, VehicleGeometry& g);
 
 }  // namespace aow::pgn

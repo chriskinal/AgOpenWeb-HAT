@@ -40,6 +40,7 @@ probe tests/gnss_probe.py "$B/aow-hatd"
 probe tests/imu_probe.py "$B/aow-hatd"
 probe tests/ports_probe.py "$B/aow-hatd"
 probe tests/um98x_probe.py "$B/aow-hatd"
+probe tests/ins_probe.py "$B/aow-hatd"
 
 # One simulated board for the rest: steering closes the loop on it; the app link and the web
 # pages talk to it.

@@ -199,9 +199,11 @@ bool parseInspvaa(State& s, const Fields& f, uint64_t now) {
     return true;
 }
 
-// #INSPVAXA,<9 header fields>;ins_status,pos_type,lat,lon,height,...
-// Field numbers follow the firmware. TO VERIFY against a UM981 capture: Unicore's INSPVAXA
-// has undulation after height, which would put the velocities at 16-18, not 15-17.
+// #INSPVAXA,<9 header fields>;ins_status,pos_type,lat,lon,height,undulation,vN,vE,vU,roll,pitch,
+// azimuth,9 standard deviations,ext_sol_stat,time_since_update
+// AOW HAT: the velocities are fields 16-18, after the undulation (UM981 commands reference,
+// table 2-11, and its example line); the firmware reads them at 15-17, which takes the
+// undulation as the north velocity.
 bool parseInspvaxa(State& s, const Fields& f, uint64_t now) {
     if (f.count() < 29) return false;
     bool insValid = true;
@@ -229,7 +231,7 @@ bool parseInspvaxa(State& s, const Fields& f, uint64_t now) {
     if (!f.empty(13)) s.longitude = f.num(13);
     s.hasPosition = insValid && (s.latitude != 0.0 || s.longitude != 0.0);
     if (!f.empty(14)) s.altitude = static_cast<float>(f.num(14));
-    applyVelocity(s, f, 15);
+    applyVelocity(s, f, 16);
     applyAttitude(s, f, 19);
     if (!f.empty(32)) s.ageDgps = static_cast<float>(f.integer(32));  // time since update
     s.numSatellites = 12;

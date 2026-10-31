@@ -15,6 +15,7 @@
 #include <unistd.h>
 
 #include "aow/hal.h"
+#include "aow/pgn.h"
 #include "aow/pi_mutex.h"
 #include "aow/settings.h"
 #include "aow/status.h"
@@ -70,6 +71,19 @@ public:
     IsobusStatus isobus() const { std::lock_guard<PiMutex> l(isobusMu_); return isobus_; }
     void setIsobus(const IsobusStatus& s) { std::lock_guard<PiMutex> l(isobusMu_); isobus_ = s; }
 
+    // The app's vehicle geometry (PGN 247): the control thread hands each one over, the web
+    // thread sets the receiver's lever arm from it (aow/ins_setup.h).
+    void setGeometry(const pgn::VehicleGeometry& g) {
+        { std::lock_guard<PiMutex> l(geometryMu_); geometry_ = g; }
+        geometryNew_.store(true);
+    }
+    bool takeGeometry(pgn::VehicleGeometry& g) {
+        if (!geometryNew_.exchange(false)) return false;
+        std::lock_guard<PiMutex> l(geometryMu_);
+        g = geometry_;
+        return true;
+    }
+
     // The control thread changed the settings (PGN 251/252); the web thread saves them.
     void requestSave() { saveRequested_.store(true); }
     bool takeSaveRequest() { return saveRequested_.exchange(false); }
@@ -123,6 +137,9 @@ private:
     IsobusStatus isobus_;
     std::atomic<unsigned> settingsVersion_{0};
     std::atomic<bool> saveRequested_{false};
+    PiMutex geometryMu_;
+    pgn::VehicleGeometry geometry_;
+    std::atomic<bool> geometryNew_{false};
     static constexpr size_t kMirror = 1024;
     PiMutex mirrorMu_;
     MirrorFrame mirror_[kMirror];

@@ -162,7 +162,8 @@ int main() {
         CHECK(nav::select(s, 7) == nav::Sentence::Paogi);
     }
 
-    // --- INSPVAXA (UM981): status and position type map to fix quality; attitude at 19-21
+    // --- INSPVAXA (UM981): status and position type map to fix quality; undulation at 15, the
+    // velocities at 16-18 (north 3, east 4: 5 m/s); attitude at 19-21
     {
         nmea::SentenceReader r;
         gnss::Parser p;
@@ -179,6 +180,7 @@ int main() {
         CHECK(near(s.insRoll, 1.25f, 1e-4) && near(s.insPitch, -0.5f, 1e-4) && near(s.insHeading, 181.75f, 1e-4));
         CHECK(near(s.dualHeading, 181.75f, 1e-4) && near(s.dualRoll, 1.25f, 1e-4));
         CHECK(near(s.ageDgps, 7.0f));
+        CHECK(near(s.northVel, 3.0f) && near(s.eastVel, 4.0f) && near(s.speedKnots, 5.0f * 1.943844f, 1e-3));
         CHECK(near(s.fixTime, 10000.5, 1e-6));  // 3618.5 s of week - 18 leap = 01:00:00.5
         char out[256];
         const std::string paogi = sentence(out, nav::build(s, nullptr, 9, out, sizeof out));

@@ -72,6 +72,9 @@ struct Backend {
     // installed package carried ("" if it carried none).
     struct AppVersions { std::string installed, packaged; };
     virtual AppVersions agopenwebVersions() { return {}; }
+    // The receiver's INS lever arm from the app's vehicle geometry: what is happening ("" if
+    // nothing to report).
+    virtual std::string insLeverArm() { return ""; }
 
     struct Interface { std::string name, ip; bool up; int speedMbps; };
     virtual std::vector<Interface> interfaces() = 0;

@@ -199,6 +199,16 @@ private:
     aow::Shared& shared_;
 };
 
+// Hands the app's vehicle geometry to the web thread, which sets the receiver's INS lever arm.
+class GeometryAdapter : public aow::GeometrySink {
+public:
+    explicit GeometryAdapter(aow::Shared& shared) : shared_(shared) {}
+    void onVehicleGeometry(const aow::pgn::VehicleGeometry& g) override { shared_.setGeometry(g); }
+
+private:
+    aow::Shared& shared_;
+};
+
 // The app's corrected position (PGN 100) to NMEA out.
 class FixAdapter : public aow::FixSink {
 public:
@@ -448,6 +458,8 @@ int main(int argc, char** argv) {
     app.setSteerModule(&steerAdapter);
     FixAdapter fixAdapter(gnss);
     app.setFixSink(&fixAdapter);
+    GeometryAdapter geometryAdapter(shared);
+    app.setGeometrySink(&geometryAdapter);
     gnss.setNmeaCorrected(portSettings.nmeaCorrected);
     gnss.setPassThrough(startSettings.gps.passThrough);
     gnss.setImu(&imu);
@@ -592,6 +604,7 @@ int main(int argc, char** argv) {
             st.heading = g.headingTrue;
             st.fixQuality = g.fixQuality;
             st.satellites = g.numSatellites;
+            st.gnssIns = g.hasIns;
             st.navSent = gnss.counters().navSent;
             st.imuType = aow::imu::typeName(imu.type());
             st.imuValid = imu.valid(clock.nowUs());

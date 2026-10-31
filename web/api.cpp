@@ -211,6 +211,8 @@ Response status(Backend& b, const char* version) {
     loop["inputsMaxEverUs"] = st.loop.inputsMaxEverUs;
     isobusStatusJson(b.isobusStatus(), doc["isobus"].to<JsonObject>());  // AOW HAT: not in the firmware's status
     linkGatewayJson(b, doc["linkGateway"].to<JsonObject>());               // AOW HAT: docs/PLAN_VT.md section 2
+    doc["insLeverArm"] = b.insLeverArm();                                  // AOW HAT: PGN 247 to the UM981 (aow/ins_setup.h)
+    doc["gnssIns"] = st.gnssIns;
     static const char* const kColors[] = {"off", "red", "amber", "green", "blue"};
     JsonArray leds = doc["leds"].to<JsonArray>();
     for (uint8_t c : st.leds) leds.add(kColors[c < 5 ? c : 0]);

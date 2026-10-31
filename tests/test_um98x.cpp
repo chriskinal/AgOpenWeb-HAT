@@ -95,6 +95,27 @@ int main() {
         CHECK(rx.received == want);
     }
 
+    // A quiet adjustment: logs off, CONFIG to `decide`, its commands, the logs back on, then
+    // SAVECONFIG (so the saved settings keep the logs).
+    {
+        rx.received.clear();
+        Um98x um(rx, clock, sleep);
+        std::string seen;
+        CHECK(um.adjustConfiguration([&seen](const std::string& config) {
+            seen = config;
+            return std::vector<std::string>{"CONFIG INSSOL OFFSET 0.10 0.20 0.30"};
+        }));
+        CHECK(seen == "CONFIG ANTENNA POWERON\nCONFIG COM1 460800\nCONFIG COM2 115200\nCONFIG COM3 115200");
+        const std::vector<std::string> want = {"UNILOGLIST", "UNLOGALL COM1", "UNLOGALL COM2", "UNLOGALL COM3",
+                                               "CONFIG", "CONFIG INSSOL OFFSET 0.10 0.20 0.30",
+                                               "GPGGA COM1 0.1", "GPHPR COM1 0.1", "SAVECONFIG"};
+        CHECK(rx.received == want);
+        // Nothing to change: no SAVECONFIG, the logs still come back.
+        rx.received.clear();
+        CHECK(um.adjustConfiguration([](const std::string&) { return std::vector<std::string>{}; }));
+        CHECK(rx.received.size() == 7 && rx.received.back() == "GPHPR COM1 0.1");
+    }
+
     // A receiver that never answers: read and write fail (after their timeouts), no hang.
     {
         rx.silent = true;
@@ -105,6 +126,11 @@ int main() {
         c.configCommands = "CONFIG COM1 460800";
         CHECK(!um.writeConfiguration(c));
         CHECK(rx.received.back() == "CONFIG COM1 460800");  // stopped at the first failure
+        // Adjusting: it gives up at UNILOGLIST, before stopping the logs it could not put back.
+        rx.received.clear();
+        bool asked = false;
+        CHECK(!um.adjustConfiguration([&asked](const std::string&) { asked = true; return std::vector<std::string>{}; }));
+        CHECK(!asked && rx.received.size() == 1 && rx.received[0] == "UNILOGLIST");
     }
 
     return finish("um98x");
