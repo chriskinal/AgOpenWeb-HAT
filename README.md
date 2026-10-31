@@ -27,6 +27,11 @@ The software plan is in [docs/PLAN.md](docs/PLAN.md).
 
 The installer asks once which one applies. With no HAT the daemon stays disabled.
 
+A HAT release ([Releases](https://github.com/chriskinal/AgOpenWeb-HAT/releases)) carries AgOpenWeb
+too, so the unit's software is one matched set: the `.aowpkg` goes on the unit's System Update page,
+which installs whatever changed (the HAT software, AgOpenWeb, or both) and puts the previous set back
+if the new one does not start. For a new unit, unpack the `.tar.gz` and run `sudo ./install.sh --hat`.
+
 ## Layout
 
 | Folder | Contents |

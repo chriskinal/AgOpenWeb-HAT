@@ -202,6 +202,11 @@ uint16_t Server::listen(uint16_t port, Kind kind) {
 
 void Server::route(const std::string& path, Handler h) { routes_[path] = std::move(h); }
 
+void Server::uploadRoute(const std::string& path, const std::string& file, size_t maxBytes, Handler h) {
+    routes_[path] = std::move(h);
+    uploads_[path] = Upload{file, maxBytes};
+}
+
 void Server::greet(uint16_t wsPort, std::function<std::string()> text) { greetings_[wsPort] = std::move(text); }
 
 size_t Server::clientCount(uint16_t wsPort) const {
@@ -245,6 +250,11 @@ void Server::broadcast(uint16_t wsPort, const void* data, size_t len, bool binar
 }
 
 void Server::close(int fd) {
+    const auto it = conns_.find(fd);
+    if (it != conns_.end() && it->second.bodyFd >= 0) {  // lost mid-upload: drop the part file
+        ::close(it->second.bodyFd);
+        ::unlink(it->second.upload.bodyFile.c_str());
+    }
     ::close(fd);
     conns_.erase(fd);
 }
@@ -314,6 +324,10 @@ void Server::readFrom(Conn& c) {
     for (;;) {
         const ssize_t n = ::recv(c.fd, buf, sizeof buf, 0);
         if (n > 0) {
+            if (c.bodyFd >= 0) {
+                writeBody(c, buf, static_cast<size_t>(n));
+                continue;
+            }
             c.in.append(buf, static_cast<size_t>(n));
             if (c.in.size() > kMaxHeader + maxBody) {
                 close(c.fd);
@@ -381,6 +395,16 @@ bool Server::parseRequest(Conn& c, Request& r, bool& complete) {
 
     const std::string cl = r.header("content-length");
     const size_t bodyLen = cl.empty() ? 0 : std::strtoul(cl.c_str(), nullptr, 10);
+    const auto up = uploads_.find(r.path);
+    if (up != uploads_.end() && r.method == "POST" && c.kind == Kind::Http) {
+        // The headers are enough: the body goes to the file from here on (handleHttp).
+        c.upload = r;
+        c.upload.bodyFile = up->second.file;
+        c.bodyLeft = bodyLen;
+        c.in.erase(0, end + 4);
+        complete = true;
+        return true;
+    }
     if (bodyLen > maxBody) return false;
     if (c.in.size() < end + 4 + bodyLen) return true;  // body still arriving
     r.body = c.in.substr(end + 4, bodyLen);
@@ -389,8 +413,48 @@ bool Server::parseRequest(Conn& c, Request& r, bool& complete) {
     return true;
 }
 
+void Server::writeBody(Conn& c, const char* data, size_t len) {
+    if (len > c.bodyLeft) len = c.bodyLeft;  // anything after the body is ignored
+    c.bodyLeft -= len;
+    while (len > 0 && !c.bodyErrno) {
+        const ssize_t n = ::write(c.bodyFd, data, len);
+        if (n < 0 && errno == EINTR) continue;
+        if (n <= 0) {
+            c.bodyErrno = n < 0 ? errno : ENOSPC;
+            break;
+        }
+        data += n;
+        len -= static_cast<size_t>(n);
+    }
+}
+
+void Server::finishUpload(Conn& c) {
+    ::close(c.bodyFd);
+    c.bodyFd = -1;
+    Request r = std::move(c.upload);
+    Response resp;
+    if (c.bodyErrno) {
+        ::unlink(r.bodyFile.c_str());
+        LOG_ERROR(Network, "web: upload to %s: %s", r.bodyFile.c_str(), std::strerror(c.bodyErrno));
+        resp = Response::text(std::string("The upload could not be stored: ") + std::strerror(c.bodyErrno), 500);
+    } else {
+        try {
+            resp = routes_[r.path](r);
+        } catch (const std::exception& e) {
+            LOG_ERROR(Network, "web: %s %s: %s", r.method.c_str(), r.path.c_str(), e.what());
+            resp = Response::text("Internal Server Error", 500);
+        }
+    }
+    c.out = serialize(resp);
+    c.closeAfterWrite = true;
+}
+
 void Server::handleHttp(Conn& c) {
     if (c.closeAfterWrite) return;  // already answered; ignore anything more
+    if (c.bodyFd >= 0) {
+        if (c.bodyLeft == 0) finishUpload(c);
+        return;
+    }
     Request r;
     bool complete;
     Response resp;
@@ -398,6 +462,23 @@ void Server::handleHttp(Conn& c) {
         resp = Response::text("Bad Request", 400);
     } else if (!complete) {
         return;
+    } else if (!c.upload.bodyFile.empty()) {
+        const Upload& up = uploads_[c.upload.path];
+        if (c.bodyLeft > up.maxBytes) {
+            c.upload = Request{};
+            resp = Response::text("The file is too large.", 413);
+        } else if ((c.bodyFd = ::open(up.file.c_str(), O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0600)) < 0) {
+            LOG_ERROR(Network, "web: upload to %s: %s", up.file.c_str(), std::strerror(errno));
+            resp = Response::text(std::string("The upload could not be stored: ") + std::strerror(errno), 500);
+            c.upload = Request{};
+        } else {
+            // What came with the headers, then the rest as it arrives (readFrom).
+            const std::string first = std::move(c.in);
+            c.in.clear();
+            writeBody(c, first.data(), first.size());
+            if (c.bodyLeft == 0) finishUpload(c);
+            return;
+        }
     } else {
         auto it = routes_.find(r.path);
         if (it == routes_.end()) {

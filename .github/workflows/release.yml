@@ -1,13 +1,17 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2026 The AgOpenWeb-HAT contributors
 #
-# Releases the AOW HAT software: ci.yml first (build, unit tests, probes), then the update package
-# built on arm64 in the dev container's image (deploy/package.sh), signed with the release key
-# (the AOW_HAT_SIGNING_KEY secret; its public half is deploy/update-key.pem), then published:
-#   - a tag vX.Y.Z: release vX.Y.Z, version X.Y.Z;
-#   - nightly, at 06:30 UTC when main has moved since the last one (or by hand: Actions, release,
-#     Run workflow): the `nightly` pre-release is replaced, version X.Y.Z-nightly.DATE.RUN with
-#     X.Y.Z the project version in CMakeLists.txt (the next release).
+# Releases the AOW HAT software with AgOpenWeb, as a matched set: ci.yml first (build, unit tests,
+# probes), then the update package built on arm64 in the dev container's image (deploy/package.sh
+# --agopenweb, with AgOpenWeb's headless linux-arm64 tarball from its Beta release), signed with
+# the release key (the AOW_HAT_SIGNING_KEY secret; its public half is deploy/update-key.pem), then
+# published:
+#   - a tag vX.Y.Z: release vX.Y.Z, version X.Y.Z, with the AgOpenWeb build in
+#     deploy/agopenweb.pin (the Beta must be that build when the tag is pushed);
+#   - nightly, checked hourly: when main or AgOpenWeb's Beta has moved since the last one (or by
+#     hand: Actions, release, Run workflow), the `nightly` pre-release is replaced, version
+#     X.Y.Z-nightly.DATE.RUN with X.Y.Z the project version in CMakeLists.txt (the next release),
+#     with the Beta as it is.
 # Each has the signed .aowpkg (the System Update page), the .tar.gz (a first install:
 # sudo ./install.sh --hat) and SHA256SUMS. AgIsoStack++'s pin must be upstream's HEAD for a tagged
 # release (CLAUDE.md); a nightly only warns.
@@ -17,7 +21,7 @@ on:
   push:
     tags: ['v*']
   schedule:
-    - cron: '30 6 * * *'
+    - cron: '17 * * * *'
   workflow_dispatch:
 
 concurrency:
@@ -25,7 +29,8 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # Nightly: nothing to do when the nightly release is already of main's head.
+  # Nightly: nothing to do when the nightly release is already of main's head and of AgOpenWeb's
+  # Beta (its notes name the AgOpenWeb build in it).
   changed:
     name: anything new
     runs-on: ubuntu-24.04
@@ -39,7 +44,13 @@ jobs:
           go=true
           if [ "$GITHUB_EVENT_NAME" = schedule ]; then
             last=$(gh api repos/$GITHUB_REPOSITORY/git/ref/tags/nightly -q .object.sha 2>/dev/null || true)
-            if [ "$last" = "$GITHUB_SHA" ]; then go=false; echo "nightly is already $GITHUB_SHA"; fi
+            beta=$(gh release view beta -R AgOpenGPS-Official/AgOpenWeb --json targetCommitish -q .targetCommitish)
+            had=$(gh release view nightly --json body -q .body 2>/dev/null |
+                  sed -n '/AgOpenWeb [0-9.]*+[0-9a-f]/{s/.*AgOpenWeb [0-9.]*+\([0-9a-f]*\).*/\1/p;q;}' || true)
+            echo "main $GITHUB_SHA, nightly of ${last:-none}; AgOpenWeb Beta $beta, nightly has ${had:-none}"
+            if [ "$last" = "$GITHUB_SHA" ] && [ -n "$had" ] && [ "${beta#"$had"}" != "$beta" ]; then
+              go=false; echo "nothing new"
+            fi
           fi
           echo "go=$go" >> "$GITHUB_OUTPUT"
 
@@ -79,6 +90,24 @@ jobs:
             refs/tags/v*) echo "::error title=AgIsoStack++ pin::$msg"; exit 1 ;;
             *) echo "::warning title=AgIsoStack++ pin::$msg" ;;
           esac
+      - name: AgOpenWeb
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download beta -R AgOpenGPS-Official/AgOpenWeb -p agopenweb-linux-arm64.tar.gz -D "$RUNNER_TEMP"
+          mkdir "$RUNNER_TEMP/app"
+          tar -xzf "$RUNNER_TEMP/agopenweb-linux-arm64.tar.gz" -C "$RUNNER_TEMP/app" agopenweb-linux-arm64/app/AgOpenWeb.Desktop.dll
+          got=$(grep -a -o -m1 -E '[0-9]+\.[0-9]+\.[0-9]+\+[0-9a-f]{7,}(-dirty)?' "$RUNNER_TEMP/app/agopenweb-linux-arm64/app/AgOpenWeb.Desktop.dll" || true)
+          got=${got%%$'\n'*}
+          pin=$(sed -n '/^[^#]/{p;q;}' deploy/agopenweb.pin)
+          echo "AgOpenWeb's Beta is ${got:-unknown}; the pin is $pin"
+          if [ "$got" != "$pin" ]; then
+            msg="AgOpenWeb's Beta is ${got:-unknown}, deploy/agopenweb.pin says $pin"
+            case "$GITHUB_REF" in
+              refs/tags/v*) echo "::error title=AgOpenWeb pin::$msg: a release ships the pinned build (move the pin, or wait for the Beta)"; exit 1 ;;
+              *) echo "::notice title=AgOpenWeb::$msg (a nightly takes the Beta)" ;;
+            esac
+          fi
       - name: image
         run: docker build -t aow-hat-dev .devcontainer
       - name: package
@@ -88,8 +117,9 @@ jobs:
           [ -n "$KEY" ] || { echo "::error::the AOW_HAT_SIGNING_KEY secret is not set"; exit 1; }
           umask 077
           printf '%s\n' "$KEY" > "$RUNNER_TEMP/key.pem"
-          docker run --rm -v "$PWD:/src" -v "$RUNNER_TEMP/key.pem:/key.pem:ro" aow-hat-dev \
-            /src/deploy/package.sh --version "$VERSION" --key /key.pem --out /src/dist
+          docker run --rm -v "$PWD:/src" -v "$RUNNER_TEMP/key.pem:/key.pem:ro" \
+            -v "$RUNNER_TEMP/agopenweb-linux-arm64.tar.gz:/agopenweb.tar.gz:ro" aow-hat-dev \
+            /src/deploy/package.sh --version "$VERSION" --key /key.pem --out /src/dist --agopenweb /agopenweb.tar.gz
           rm -f "$RUNNER_TEMP/key.pem"
           ls -l dist
       - uses: actions/upload-artifact@v7
@@ -123,17 +153,22 @@ jobs:
           (cd release && sha256sum * > SHA256SUMS && cat SHA256SUMS)
           V=$(ls release/*.aowpkg | sed 's:.*/aow-hat-\(.*\)-linux-arm64\.aowpkg:\1:')
           echo "VERSION=$V" >> "$GITHUB_ENV"
+          A=$(tar -xzOf release/aow-hat-*.tar.gz ./VERSION | sed -n 's/^agopenweb=//p')
+          [ -n "$A" ] || { echo "::error::the package has no AgOpenWeb"; exit 1; }
+          echo "APP=$A" >> "$GITHUB_ENV"
       - name: nightly
         if: "!startsWith(github.ref, 'refs/tags/v')"
         run: |
           gh release delete nightly --cleanup-tag --yes 2>/dev/null || true
           git push -q origin "$GITHUB_SHA:refs/tags/nightly"
           gh release create nightly release/* --prerelease --verify-tag --title "Nightly $VERSION" \
-            --notes "Built from main at $GITHUB_SHA ($(git log -1 --format=%cs)). Replaced each night main has moved. Not a release: for testing.
+            --notes "Built from main at $GITHUB_SHA ($(git log -1 --format=%cs)), with AgOpenWeb $APP (its Beta). Replaced when main or AgOpenWeb's Beta moves (checked hourly). Not a release: for testing.
 
           Install: the .aowpkg on the unit's System Update page; a new unit: unpack the .tar.gz and run sudo ./install.sh --hat.
 
           $(git log -1 --format='Last change: %s')"
       - name: tagged
         if: startsWith(github.ref, 'refs/tags/v')
-        run: gh release create "$GITHUB_REF_NAME" release/* --verify-tag --title "AOW HAT $VERSION" --generate-notes
+        run: |
+          gh release create "$GITHUB_REF_NAME" release/* --verify-tag --title "AOW HAT $VERSION" --generate-notes \
+            --notes "With AgOpenWeb $APP."

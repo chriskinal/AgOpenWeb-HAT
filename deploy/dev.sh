@@ -8,6 +8,8 @@
 #   deploy/dev.sh build                      configure and build (incremental)
 #   deploy/dev.sh test                       build, then ctest
 #   deploy/dev.sh package --version X.Y.Z    signed .aowpkg and .tar.gz into dist/
+#       [--agopenweb FILE|beta]              with AgOpenWeb in it: its linux-arm64 tarball, or
+#                                            "beta" to download AgOpenWeb's Beta (needs gh)
 #   deploy/dev.sh install FILE [HOST]        upload a .aowpkg to HOST's update page and follow it
 #   deploy/dev.sh shell                      a shell in the container
 #
@@ -57,17 +59,34 @@ case "$cmd" in
     image
     mkdir -p "$REPO/dist"
     EXTRA=(-v "$KEY":/key.pem:ro -e AOW_PACKAGE_BUILD=/build/package)
-    run /src/deploy/package.sh --key /key.pem --out /src/dist "$@"
+    args=()
+    while [ $# -gt 0 ]; do
+      if [ "$1" = --agopenweb ]; then
+        app="${2:?--agopenweb FILE|beta}"
+        shift 2
+        if [ "$app" = beta ]; then
+          app="$REPO/dist/agopenweb-linux-arm64.tar.gz"
+          gh release download beta -R AgOpenGPS-Official/AgOpenWeb -p agopenweb-linux-arm64.tar.gz -O "$app" --clobber
+        fi
+        [ -f "$app" ] || { echo "no such file: $app" >&2; exit 1; }
+        EXTRA+=(-v "$(cd "$(dirname "$app")" && pwd)/$(basename "$app")":/agopenweb.tar.gz:ro)
+        args+=(--agopenweb /agopenweb.tar.gz)
+      else
+        args+=("$1")
+        shift
+      fi
+    done
+    run /src/deploy/package.sh --key /key.pem --out /src/dist ${args[@]+"${args[@]}"}
     ;;
   install)
     f="${1:?usage: dev.sh install FILE.aowpkg [HOST]}"
     host="${2:-$HOST}"
     [ -f "$f" ] || { echo "no such file: $f" >&2; exit 1; }
     echo "== $(basename "$f") to $host"
-    curl -sS -m 60 -w " (http %{http_code})\n" -H "Content-Type: application/octet-stream" \
+    curl -sS -m 600 -w " (http %{http_code})\n" -H "Content-Type: application/octet-stream" \
       --data-binary @"$f" "http://$host/api/ota/upload"
     last="" st=""
-    for _ in $(seq 1 90); do
+    for _ in $(seq 1 300); do
       s=$(curl -s -m 2 "http://$host/api/ota/status") || { sleep 1; continue; }
       st=$(sed -n 's/.*"state":"\([a-z_]*\)".*/\1/p' <<<"$s")
       msg=$(sed -n 's/.*"message":"\([^"]*\)".*/\1/p' <<<"$s")
@@ -75,7 +94,7 @@ case "$cmd" in
       case "$st" in done|failed|rolled_back) break ;; esac
       sleep 1
     done
-    echo "  running: $(curl -s -m 3 "http://$host/api/status" | sed -n 's/.*"version":"\([^"]*\)".*/\1/p')"
+    echo "  running: $(curl -s -m 3 "http://$host/api/ota/versions")"
     [ "$st" = done ]
     ;;
   shell)
@@ -83,7 +102,7 @@ case "$cmd" in
     run bash
     ;;
   *)
-    sed -n '2,16p' "$0"
+    sed -n '2,18p' "$0"
     exit 2
     ;;
 esac

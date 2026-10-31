@@ -21,6 +21,7 @@ namespace aow::web {
 struct Request {
     std::string method, path, query, body;
     std::vector<std::pair<std::string, std::string>> headers;  // names lower-cased
+    std::string bodyFile;  // an upload route's POST: the file the body was written to (body is empty)
     std::string header(const char* lowerName) const;
 };
 
@@ -51,6 +52,11 @@ public:
 
     // Exact-path routes; the handler checks the method. Unknown paths get 404.
     void route(const std::string& path, Handler h);
+    // A route whose POST body is written to `file` as it arrives, not held in memory: for an
+    // upload larger than maxBody (an update package). Up to maxBytes, else 413. The handler gets
+    // the request with bodyFile set and owns the file from then on (keep, rename or delete it);
+    // a connection lost mid-upload removes it. Other methods reach the handler as on route().
+    void uploadRoute(const std::string& path, const std::string& file, size_t maxBytes, Handler h);
 
     // Sends one message to every client of the WebSocket listener on this port.
     void broadcast(uint16_t wsPort, const void* data, size_t len, bool binary);
@@ -75,7 +81,13 @@ private:
         bool closeAfterWrite = false;
         std::string in, out;
         uint64_t lastActivityMs = 0;
+        // An upload route's body, on its way to the file.
+        int bodyFd = -1;
+        size_t bodyLeft = 0;
+        int bodyErrno = 0;  // a write failed: answered 500 when the body has all arrived
+        Request upload;     // its request line and headers
     };
+    struct Upload { std::string file; size_t maxBytes; };
 
     uint16_t listen(uint16_t port, Kind kind);
     void accept(const Listener& l);
@@ -85,12 +97,15 @@ private:
     void handleWebSocketHandshake(Conn& c);
     void handleWebSocketFrames(Conn& c);
     bool parseRequest(Conn& c, Request& r, bool& complete);
+    void writeBody(Conn& c, const char* data, size_t len);
+    void finishUpload(Conn& c);
     static std::string frame(const void* data, size_t len, uint8_t opcode);
     void close(int fd);
 
     std::vector<Listener> listeners_;
     std::map<int, Conn> conns_;
     std::map<std::string, Handler> routes_;
+    std::map<std::string, Upload> uploads_;
     std::map<uint16_t, std::function<std::string()>> greetings_;
 };
 
