@@ -26,6 +26,8 @@
 #include "api.h"
 #include "aow/gvret.h"
 #include "aow/helper_status.h"
+#include "aow/imu.h"
+#include "aow/ins_setup.h"
 #include "aow/log.h"
 #include "linux_io.h"
 #include "server.h"
@@ -344,7 +346,9 @@ public:
         return withReceiver(error, [&](Um98x& um) { return um.readConfiguration(c); });
     }
     bool um98xWrite(const Um98x::Config& c, std::string& error) override {
-        return withReceiver(error, [&](Um98x& um) { return um.writeConfiguration(c); });
+        const bool ok = withReceiver(error, [&](Um98x& um) { return um.writeConfiguration(c); });
+        leverArm_.recheck();  // the page may have put the receiver's lever arm back to its defaults
+        return ok;
     }
 
     std::string updateUploadFile() override {
@@ -485,7 +489,47 @@ private:
         return ok;
     }
 
+public:
+    // The receiver's INS lever arm from the app's vehicle geometry (aow/ins_setup.h). Called
+    // every second. A check holds this thread for the few seconds the receiver takes, as the
+    // GPS page's read and write do; the control loop carries on (the GNSS stream pauses).
+    void tickLeverArm() {
+        pgn::VehicleGeometry g;
+        if (shared_.takeGeometry(g)) leverArm_.onGeometry(g);
+        const Status st = shared_.status();
+        ins::LeverArmJob::Conditions c;
+        c.receiverIns = st.gnssIns;
+        c.externalImu = std::strcmp(st.imuType, imu::typeName(imu::Type::None)) != 0;
+        c.steering = st.autosteerActive;
+        c.speedKph = st.speedKph;
+        const uint64_t nowMs = static_cast<uint64_t>(
+            std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now().time_since_epoch()).count());
+        if (leverArm_.due(c, nowMs)) {
+            LOG_INFO(Gnss, "INS lever arm: %s", leverArm_.message().c_str());
+            const ins::Vec want = leverArm_.want();
+            ins::Decision d = ins::Decision::NoIns;
+            std::string err;
+            const bool ok = withReceiver(err, [&](Um98x& um) {
+                return um.adjustConfiguration([&](const std::string& config) {
+                    std::vector<std::string> commands;
+                    d = ins::decide(ins::parseConfig(config), want, commands);
+                    return commands;
+                });
+            });
+            if (!ok && !err.empty()) LOG_WARNING(Gnss, "INS lever arm: %s", err.c_str());
+            leverArm_.finished(ok, d, nowMs);
+        }
+        if (leverArm_.message() != leverArmLogged_) {
+            leverArmLogged_ = leverArm_.message();
+            LOG_INFO(Gnss, "INS lever arm: %s", leverArmLogged_.c_str());
+        }
+    }
+    std::string insLeverArm() override { return leverArm_.message(); }
+
+private:
     std::string canPath() const { return file_.canConfigPath(); }
+    ins::LeverArmJob leverArm_;
+    std::string leverArmLogged_ = leverArm_.message();  // not logged until something happens
     std::string appVersion_;
     time_t appDllTime_ = 0;
     off_t appDllSize_ = -1;
@@ -547,6 +591,7 @@ void WebThread::run() {
             }
             while (n < Shared::kOwnAddresses) shared_.ownAddresses[n++].store(0, std::memory_order_relaxed);
             shared_.networkUp = up;
+            backend.tickLeverArm();
         }
         if (shared_.takeSaveRequest()) {
             std::string err;

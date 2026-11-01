@@ -73,4 +73,24 @@ bool decodeCorrectedFix(const uint8_t* data, size_t len, CorrectedFix& f) {
     return true;
 }
 
+bool decodeVehicleGeometry(const uint8_t* data, size_t len, VehicleGeometry& g) {
+    if (!data || len < 19 || data[0] == 0) return false;
+    const auto u16 = [data](size_t at) { return static_cast<uint16_t>(data[at] | data[at + 1] << 8); };
+    const auto s16 = [&u16](size_t at) { return static_cast<int16_t>(u16(at)); };
+    VehicleGeometry n;
+    n.version = data[0];
+    n.imuEntered = data[1] & 0x01;
+    n.wheelbaseCm = u16(2);
+    n.trackWidthCm = u16(4);
+    n.antennaHeightCm = u16(6);
+    n.antennaPivotCm = s16(8);
+    n.antennaOffsetCm = s16(10);
+    n.imuPivotCm = s16(12);
+    n.imuHeightCm = u16(14);
+    n.imuOffsetCm = s16(16);
+    n.maxSteerDeg = data[18];
+    g = n;
+    return true;
+}
+
 }  // namespace aow::pgn

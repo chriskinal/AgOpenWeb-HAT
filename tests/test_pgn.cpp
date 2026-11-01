@@ -39,5 +39,31 @@ int main() {
     uint8_t bad[] = {0x80, 0x81, 0x7F, 0xFE, 0x01, 0x00, 0x47};
     CHECK(!pgn::parse(bad, sizeof bad, f));
 
+    // PGN 247, vehicle geometry, laid out as AgOpenWeb's PgnBuilder.BuildVehicleGeometryPgn:
+    // wheelbase 2.50 m, track 1.80, antenna 3.00 high, 1.20 ahead, 0.15 left; IMU 0.50 behind,
+    // 0.80 high, 0.25 right; max steer 45 degrees.
+    {
+        uint8_t data[21] = {1, 0x01, 250, 0, 180, 0, 0x2C, 0x01, 120, 0, 0xF1, 0xFF, 0xCE, 0xFF, 80, 0, 25, 0, 45, 0xAA, 0xBB};
+        uint8_t frame[40];
+        const size_t n = pgn::build(pgn::kSrcHost, pgn::VehicleGeometryData, data, 19, frame, sizeof frame);
+        pgn::Frame gf;
+        CHECK(n == 25 && pgn::parse(frame, n, gf) && gf.pgn == 247 && gf.len == 19);
+        pgn::VehicleGeometry g;
+        CHECK(pgn::decodeVehicleGeometry(gf.data, gf.len, g));
+        CHECK(g.version == 1 && g.imuEntered && g.wheelbaseCm == 250 && g.trackWidthCm == 180);
+        CHECK(g.antennaHeightCm == 300 && g.antennaPivotCm == 120 && g.antennaOffsetCm == -15);
+        CHECK(g.imuPivotCm == -50 && g.imuHeightCm == 80 && g.imuOffsetCm == 25 && g.maxSteerDeg == 45);
+        // A later layout version, longer: the known fields are read, the rest skipped.
+        data[0] = 2;
+        CHECK(pgn::decodeVehicleGeometry(data, 21, g) && g.version == 2 && g.imuOffsetCm == 25);
+        // No IMU position entered.
+        data[1] = 0;
+        CHECK(pgn::decodeVehicleGeometry(data, 19, g) && !g.imuEntered);
+        // Too short, or version 0: refused, and g left as it was.
+        CHECK(!pgn::decodeVehicleGeometry(data, 18, g) && g.version == 2);
+        data[0] = 0;
+        CHECK(!pgn::decodeVehicleGeometry(data, 19, g));
+    }
+
     return finish("pgn");
 }

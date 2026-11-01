@@ -11,6 +11,7 @@
 #include <cstdint>
 #include <functional>
 #include <string>
+#include <vector>
 
 #include "aow/hal.h"
 
@@ -29,6 +30,12 @@ public:
 
     bool readConfiguration(Config& config);
     bool writeConfiguration(const Config& config);
+    // AOW HAT: one quiet session to change a few settings. The logs are stopped, CONFIG is read
+    // and handed to `decide`, which returns the commands to send (none: nothing to change); they
+    // are sent, the logs are switched back on, and only then SAVECONFIG, so the saved settings
+    // keep their logs. The logs come back on even when a command fails. False if the receiver
+    // did not answer or a command failed.
+    bool adjustConfiguration(const std::function<std::vector<std::string>(const std::string& configCommands)>& decide);
 
     static constexpr uint32_t kCommandTimeoutMs = 5000;
     static constexpr uint32_t kSaveConfigTimeoutMs = 10000;

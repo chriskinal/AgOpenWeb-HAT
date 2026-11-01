@@ -79,6 +79,16 @@ void AppLink::handle(const uint8_t* buf, int len) {
         if (fixSink_) fixSink_->onCorrectedFix(fix);
         break;
     }
+    case pgn::VehicleGeometryData: {
+        pgn::VehicleGeometry g;
+        if (!pgn::decodeVehicleGeometry(f.data, f.len, g)) {
+            ++counters_.rejected;
+            return;
+        }
+        ++counters_.geometries;
+        if (geometrySink_) geometrySink_->onVehicleGeometry(g);
+        break;
+    }
     case pgn::Sections64:
         if (f.len >= 8) {
             sections64_ = 0;

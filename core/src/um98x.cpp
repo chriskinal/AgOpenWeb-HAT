@@ -242,4 +242,28 @@ bool Um98x::writeConfiguration(const Config& config) {
     return ok;
 }
 
+bool Um98x::adjustConfiguration(const std::function<std::vector<std::string>(const std::string&)>& decide) {
+    std::string response, saved, config;
+    // Without the log list they could not be put back: leave the receiver alone.
+    if (!sendCommandAndWaitForResponse("UNILOGLIST", response) || !parseLogListResponse(response, saved)) {
+        LOG_ERROR(Gnss, "UM98x: no answer to UNILOGLIST");
+        return false;
+    }
+    for (const char* c : {"UNLOGALL COM1", "UNLOGALL COM2", "UNLOGALL COM3"}) sendCommandAndWaitForResponse(c, response);
+    sleep_(100);
+    bool ok = sendCommandAndWaitForResponse("CONFIG", response) && parseConfigResponse(response, config);
+    if (!ok) LOG_ERROR(Gnss, "UM98x: CONFIG read failed");
+    std::vector<std::string> commands;
+    if (ok) commands = decide(config);
+    for (const std::string& cmd : commands)
+        if (!(ok = sendCommandAndWaitForResponse(cmd, response))) {
+            LOG_ERROR(Gnss, "UM98x: '%s' failed", cmd.c_str());
+            break;
+        }
+    for (const std::string& cmd : lines(saved)) sendCommandAndWaitForResponse(cmd, response);  // logs back on
+    if (ok && !commands.empty() && !(ok = sendCommandAndWaitForResponse("SAVECONFIG", response, kSaveConfigTimeoutMs)))
+        LOG_ERROR(Gnss, "UM98x: SAVECONFIG failed");
+    return ok;
+}
+
 }  // namespace aow

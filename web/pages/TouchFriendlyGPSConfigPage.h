@@ -6,7 +6,8 @@
 // Like most Arduino code, portions of this are based on other open source Arduino code with a compatiable license.
 
 // AOW HAT: copied from Firmware_Teensy_AiO_26 v26.5.5 web_pages/TouchFriendlyGPSConfigPage.h.
-// HAT changes: none.
+// HAT changes: a line under the buttons with the receiver's INS lever arm, which the daemon sets
+// from AgOpenWeb's vehicle geometry (PGN 247; /api/status insLeverArm), shown with a UM981.
 
 // TouchFriendlyGPSConfigPage.h
 // Touch-optimized GPS configuration page
@@ -225,6 +226,19 @@ CONFIG COM3 460800`;
             document.getElementById('messages').value = 'INSPVAXA COM3 0.1';
             showStatus('UM981 default configuration loaded', 'success');
         }
+        
+        function loadLeverArm() {
+            fetch('/api/status')
+            .then(response => response.json())
+            .then(data => {
+                if (!data.gnssIns && !data.insLeverArm) return;
+                document.getElementById('leverArm').textContent = data.insLeverArm || '';
+                document.getElementById('leverArmCard').style.display = 'block';
+            })
+            .catch(() => {});
+        }
+        window.addEventListener('load', loadLeverArm);
+        setInterval(loadLeverArm, 5000);
     </script>
 </head>
 <body>
@@ -243,6 +257,11 @@ CONFIG COM3 460800`;
             <button class="touch-button" onclick="writeConfig()">Save</button>
             <button class="touch-button btn-secondary" onclick="loadUM981Defaults()">UM981 Defaults</button>
             <button class="touch-button btn-danger" onclick="clearAll()">Clear</button>
+        </div>
+        
+        <div class="card" id="leverArmCard" style="display: none;">
+            <label>INS lever arm (from the antenna and IMU positions in AgOpenWeb)</label>
+            <div id="leverArm"></div>
         </div>
         
         <div class="card">

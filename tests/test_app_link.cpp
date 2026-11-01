@@ -275,5 +275,19 @@ int main() {
     link.poll();
     CHECK(sink.got.size() == 2 && link.counters().rejected == rejected + 3 && link.counters().fixes == 2);
 
+    // PGN 247 to its sink; a short one is rejected. No reply: the app expects none.
+    struct GeoSink : GeometrySink {
+        std::vector<pgn::VehicleGeometry> got;
+        void onVehicleGeometry(const pgn::VehicleGeometry& g) override { got.push_back(g); }
+    } geo;
+    link.setGeometrySink(&geo);
+    udp.out.clear();
+    const Bytes g = {1, 1, 250, 0, 180, 0, 44, 1, 120, 0, 0xF1, 0xFF, 0xCE, 0xFF, 80, 0, 25, 0, 45};
+    udp.in.push_back(frame(0x7F, 247, g));
+    udp.in.push_back(frame(0x7F, 247, Bytes(g.begin(), g.begin() + 10)));
+    link.poll();
+    CHECK(geo.got.size() == 1 && geo.got[0].antennaOffsetCm == -15 && geo.got[0].imuPivotCm == -50);
+    CHECK(link.counters().geometries == 1 && link.counters().rejected == rejected + 4 && udp.out.empty());
+
     return finish("app_link");
 }

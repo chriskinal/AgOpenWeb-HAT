@@ -59,6 +59,7 @@ add_library(aow_core
   core/src/gvret.cpp
   core/src/helper_status.cpp
   core/src/um98x.cpp
+  core/src/ins_setup.cpp
   core/src/indicators.cpp
   core/src/imu.cpp
   core/src/port_monitor.cpp
@@ -139,7 +140,7 @@ if(AOW_ISOBUS)
 endif()
 
 enable_testing()
-foreach(t pgn wifi app_link helper_status gnss gnss_link imu port_monitor serial_detect log settings steer steer_motor can can_stall gvret um98x indicators loop_timing web_server web_api hat_leds)
+foreach(t pgn wifi app_link helper_status gnss gnss_link imu port_monitor serial_detect log settings steer steer_motor can can_stall gvret um98x ins_setup indicators loop_timing web_server web_api hat_leds)
   add_executable(test_${t} tests/test_${t}.cpp)
   target_link_libraries(test_${t} PRIVATE aow_web)
   target_include_directories(test_${t} PRIVATE boards/hat)

@@ -60,7 +60,11 @@ The Teensy firmware is not being rewritten and nothing is ported back to it.
   the control loop), SK6812 LEDs from the PCM block, the piezo. Not yet run with a motor driver.
   Tractor CAN (all 9 brands, JSON engine, Keya CAN), Keya serial, CAN page and upload, GVRET on
   TCP 23: done and tested on vcan. The firmware's CAN files live in `core/src/can` near-verbatim.
-  UM98x (GPS) page, radio RTCM and GPS passthrough: done. External IMU (`core/imu`): a BNO085
+  UM98x (GPS) page, radio RTCM and GPS passthrough: done. A UM981's INS lever arm (CONFIG
+  IMUTOANT and INSSOL, the antenna minus the IMU) is set from AgOpenWeb's vehicle geometry, PGN
+  247 (`core/ins_setup`, issue #2): once for each new geometry, by the web thread, only with an
+  INS receiver, no external IMU, steering off and the vehicle stopped; the GPS page shows it
+  (`/api/status` `insLeverArm`). Tested against a fake UM981 only (`tests/ins_probe.py`). External IMU (`core/imu`): a BNO085
   (RVC) on an RS-232 port or a TM171 on USB (`/dev/ttyACMx`), reopened after an unplug: done on
   ptys, and a real TM171 on the dev CM4 (signs checked on the bench). What is on the
   RS-232 ports and USB (a receiver, radio or IMU) is found by listening (`daemon/serial_hub`,
@@ -195,6 +199,7 @@ scan, then PGN 254 at a set rate, checking every reply and timing the 253.
 `tests/steer_probe.py` closes the steering loop against `--board sim`.
 `tests/can_probe.py build/aow-hatd` runs Valtra/MF CAN steering and GVRET on vcan0-2.
 `tests/um98x_probe.py build/aow-hatd` runs the GPS page and radio with ptys as the devices.
+`tests/ins_probe.py build/aow-hatd` sets a fake UM981's lever arm from PGN 247, as the app sends it.
 `tests/imu_probe.py build/aow-hatd` runs an external IMU (BNO085 RVC) on a pty: hello as 121, IMU fields in PANDA.
 `tests/ports_probe.py build/aow-hatd` runs the serial ports on ptys: NMEA out (GGA at 5 Hz; the corrected position from PGN 100 and the fallback), RTCM out, and
 detection (a radio, unknown text, an IMU, a receiver taking over from a silent onboard one).

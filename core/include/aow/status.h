@@ -29,6 +29,7 @@ struct Status {
     // GNSS.
     uint8_t fixQuality = 0;
     uint8_t satellites = 0;
+    bool gnssIns = false;  // AOW HAT: the receiver sends INS solutions (a UM981)
     uint32_t navSent = 0;
 
     // External IMU (AOW HAT: not in the firmware's status).

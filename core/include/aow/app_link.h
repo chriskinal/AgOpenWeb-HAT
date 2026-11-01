@@ -30,6 +30,12 @@ struct FixSink {
     virtual void onCorrectedFix(const pgn::CorrectedFix& f) = 0;
 };
 
+// Whatever needs the vehicle's geometry (PGN 247): the receiver's INS lever arm.
+struct GeometrySink {
+    virtual ~GeometrySink() = default;
+    virtual void onVehicleGeometry(const pgn::VehicleGeometry& g) = 0;
+};
+
 class AppLink {
 public:
     AppLink(hal::UdpLink& udp, hal::Clock& clock, const uint8_t moduleIp[4]);
@@ -42,6 +48,8 @@ public:
     void setStatus(const pgn::SteerStatus& s) { status_ = s; }
     // PGN 100 goes to the sink as each one arrives.
     void setFixSink(FixSink* s) { fixSink_ = s; }
+    // PGN 247 too.
+    void setGeometrySink(GeometrySink* s) { geometrySink_ = s; }
     // An external IMU has been detected: hello and scan are answered as the IMU module too.
     void setImuPresent(bool on) { imuPresent_ = on; }
 
@@ -72,6 +80,7 @@ public:
         uint32_t rejected = 0;   // datagrams that failed parse or came from a module
         uint32_t commands = 0;   // PGN 254
         uint32_t fixes = 0;      // PGN 100
+        uint32_t geometries = 0; // PGN 247
         uint32_t sendErrors = 0;
     };
     const Counters& counters() const { return counters_; }
@@ -85,6 +94,7 @@ private:
     uint8_t ip_[4];
     SteerModule* steer_ = nullptr;
     FixSink* fixSink_ = nullptr;
+    GeometrySink* geometrySink_ = nullptr;
     pgn::SteerStatus status_;
     pgn::SteerCommand command_;
     bool haveCommand_ = false;
