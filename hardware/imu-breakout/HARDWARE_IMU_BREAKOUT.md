@@ -8,13 +8,14 @@
 > It mounts rigidly with two M3 screws and plugs into a Raspberry Pi 40-pin header (CM4 IO Board or
 > any Pi) over I²C or SPI at 3.3 V.
 >
-> **Status (2026-10-07): parked.** Designed on paper, not drawn. Two assembled boards from JLC come
-> to about $125; ST's own DIL24 adapter for this part, **STEVAL-MKI257A** (announced for Nov 2026),
-> is the usual $15–30 and carries the same circuit (sensor, 100 nF, 10 µF), so the plan is to wait
-> for it. Kept as the reference if the adapter slips or a bolt-down board is needed for the
-> vibration test (the DIL24 module has no mounting holes and no pull-ups: a Pi's I²C1 has its own).
-> This file is the complete document set for the board: design, netlist, BOM and open items.
-> Designed for **EasyEDA Standard**, 2 layers.
+> **Status (2026-11-03): parked; the sample is on its way.** Designed on paper, not drawn. Two
+> assembled boards from JLC come to about $125; ST's own DIL24 adapter for this part,
+> **STEVAL-MKI257A**, is the usual $15–30 and carries the same circuit (sensor, 100 nF, 10 µF). A
+> sample is due 2026-11-05 and is evaluated on the **STEVAL-MKI109V3** motherboard (section 8), so
+> no Pi and no breakout are needed for the test. Kept as the reference if the adapter is not what
+> arrives or a bolt-down board is needed (the DIL24 module has no mounting holes and no pull-ups: a
+> Pi's I²C1 has its own). This file is the complete document set for the board: design, netlist,
+> BOM and open items. Designed for **EasyEDA Standard**, 2 layers.
 >
 > **Sources:**
 > - ST datasheet **DS15060 Rev 1 (July 2026)**, `DS_lsm6dsk320x.pdf`, 210 pages: electrical limits,
@@ -239,7 +240,97 @@ Defaults: SJ1, SJ2, SJ4, SJ5 **closed**; SJ3 **A–C bridged** (address `0x6B`).
 | SJ1–SJ5 | — | solder jumpers, footprint only | | — | | |
 | H1, H2 | — | Ø 3.2 unplated | | — | | |
 
-## 8. Bring-up on the CM4 IO Board
+## 8. Evaluation plan
+
+### 8.1 What is being measured
+
+The IMU's job on the HAT is roll, and heading between GPS fixes. AgOpenWeb moves the antenna
+position by the roll, so one degree of roll error is about 5 cm at a 3 m antenna. The datasheet
+claims "enhanced vibration immunity" but **gives no number for it**: DS15060 has no g-sensitivity
+and no vibration rectification spec. The test measures that claim directly, against the IMU the
+app uses today (a TM171, or a BNO085 in RVC mode), on the same plate, at the same measured
+vibration. Two questions: does roll stay true and quiet while the engine and implement shake it,
+and does the gyro's zero shift?
+
+What the datasheet does give, for the still baseline (DS15060 Table 4, typical):
+
+| | Value | What it means |
+|---|---|---|
+| Gyro rate noise density | 3.8 mdps/√Hz, any ODR and FS | angular random walk ≈ 0.23 °/√h; 42 mdps RMS at 240 Hz ODR (BW = ODR/2) |
+| Gyro zero-rate level | ±1 dps after calibration; ±0.006 dps/°C | |
+| Accel noise density (low-g) | 60 µg/√Hz | 0.66 mg RMS at 240 Hz: 0.04° of tilt |
+| Accel zero-g offset | ±12 mg; ±0.07 mg/°C | 0.7° of tilt if uncalibrated: calibrate, or use the fusion output |
+| On-chip fusion (SFLP) roll | 0.5° low dynamics, 1.2° high dynamics (Table 1) | a gaming spec; log raw data too, so a filter in the daemon can be judged against it |
+
+ST's design tips in `imu/` (not committed): **DT0064** is the Allan deviation method used for the
+still baseline; **DT0106**'s residual linear acceleration (acceleration minus the rotated gravity
+vector) is the measure of how hard the sensor is being shaken, so the two IMUs are compared at the
+same dose. The SFLP block outputs the gravity vector and the gyro bias on-chip, so that subtraction
+comes free.
+
+### 8.2 The rig: STEVAL-MKI109V3, no Pi
+
+The sample is the STEVAL-MKI257A DIL24 adapter, and it plugs into the **STEVAL-MKI109V3**
+motherboard (on hand). ST's desktop tool on the Mac, **MEMS Studio** (or the older Unico-GUI),
+reads the part over USB: raw accel and gyro at the full ODR, the FIFO with timestamps, the
+embedded-function registers for the SFLP output, and a register panel for anything else, all
+logged to a text file. That is the whole logger. The Pi hookup in §4 and the breakout stay as the
+fallback.
+
+- **The tool must know the part.** The LSM6DSK320X is a July 2026 datasheet: use a current MEMS
+  Studio and let it update the board's firmware. If the part is still missing from its list, select
+  the sister **LSM6DSV320X** profile: same package, pinout and, for the data registers and the
+  SFLP block, the same register map, so raw logging works under the wrong name.
+- **Mounting.** The sensor sits on the motherboard, so bolt the MKI109V3 **flat to an aluminium
+  plate through all its holes** on short standoffs. A board held at one end resonates and the log
+  shows the board, not the shaker. The reference IMU bolts beside it, X forward, Z up, leads short
+  and tied down.
+- **The reference IMU** is logged separately on the Mac: the TM171 on USB, or a BNO085 on a
+  USB-serial adapter, read by a short Python script (both parsers are in `core/imu.h`, a few lines
+  each in Python). Both logs carry the Mac's clock, enough for 1 s window statistics; the
+  still-to-shaking steps line the files up if in doubt.
+- **The analysis script** (Allan deviation per DT0064; still-versus-shaking means and standard
+  deviations in 1 s windows) is written against the tool's log format once the first file exists:
+  the columns depend on what is ticked in the tool.
+
+### 8.3 The tests, in order
+
+1. **Alive (day 1).** WHO_AM_I reads `0x75`. Run the built-in self-test: DS15060 Table 4 gives
+   the expected output change (gyro 20–80 dps at ±250 dps; accel 50–1700 mg). Tilt the plate and
+   check the axes against the silkscreen.
+2. **Still baseline (overnight, B6).** Two hours at rest at 240 Hz, temperature logged, then the
+   Allan deviation. Expect the 0.23 °/√h random walk; the curve's floor gives the bias instability
+   and the useful averaging time. The reference IMU gets its heading drift at rest over the same
+   run.
+3. **Bench vibration, the immunity test (B7).** Clamp the plate to a vibration source: a random-orbit
+   sander or a drill with an eccentric weight, clamped to the bench, gives a usable 100–200 Hz.
+   Sequence 60 s still, 120 s shaking, 60 s still, at two or three intensities, in two orientations
+   (Z up, then X up) so the shaking hits different axes. The high-g channel at ±32 g shows the true
+   peaks when the ±16 g channel clips.
+4. **Tractor, same plate, where the HAT will live (B5).** Engine off, idle and PTO speed for five
+   minutes each at rest, then a straight pass, a headland turn and a side slope. At rest the true
+   roll is constant, so the shift when the engine starts is the error with no reference needed. For
+   the driving runs the UM982's dual-antenna roll is the vibration-free reference; it is not in the
+   daemon's `/api/status` yet (K7).
+
+For each run, per IMU:
+
+| Measure | Pass for use on the HAT |
+|---|---|
+| Roll mean shift, still to shaking | ≤ 0.2° (1 cm at 3 m) |
+| Roll standard deviation in 1 s windows while shaking | ≤ 0.3° |
+| Gyro mean shift, still to shaking | ≤ 0.1 °/s |
+| Vibration dose (residual linear acceleration RMS, DT0106) | logged, so both IMUs are compared at the same level |
+
+### 8.4 If it wins
+
+K1 stands: adopting it means a HAT revision with the part on the board over SPI0 and a reallocated
+GPIO for its chip select, on a stiff part of the board away from the connectors (MEMS parts read
+board stress as offset). The daemon side is a driver in `boards/hat` and a third IMU type in
+`core/imu`, with roll from the SFLP quaternion or the daemon's own filter, whichever test 3 and 4
+favour.
+
+### 8.5 Bring-up on a Pi (the fallback)
 
 Without the HAT fitted (the HAT uses GPIO2/3 as outputs and keeps `i2c_arm` off; see K1).
 
@@ -250,11 +341,10 @@ Without the HAT fitted (the HAT uses GPIO2/3 as outputs and keeps `i2c_arm` off;
    address `0x8F` (read bit set) and compare.
 4. Raw data: a short Python script over `smbus2`/`spidev` that enables accel and gyro at 240 Hz
    and logs CSV from the register map in DS15060 §9 (CTRL1 0x10 accel ODR, CTRL2 0x11 gyro ODR,
-   CTRL3 0x12 IF_INC, data from 0x20 on). The Linux IIO driver `st_lsm6dsx` does not know this part
-   yet; ST's platform-independent C driver (`lsm6dsk320x-pid` on GitHub, or the sister part's
-   `lsm6dsv320x-pid` until it exists) is the starting point.
-5. Vibration test: same bracket, same log, engine off / idle / PTO speed, with the BNO085 next to
-   it. Compare gyro bias drift and roll noise. This is the result the board exists for.
+   CTRL3 0x12 IF_INC, data from 0x20 on; the SFLP quaternion, gravity and gyro bias are readable as
+   registers on the embedded-function page, FUNC_CFG_ACCESS 0x01). The Linux IIO driver
+   `st_lsm6dsx` does not know this part yet; ST's platform-independent C driver (`lsm6dsk320x-pid`
+   on GitHub, or the sister part's `lsm6dsv320x-pid` until it exists) is the starting point.
 
 ## 9. Open items and checks
 
@@ -272,4 +362,7 @@ IDs: **K#** = decision or open item, **B#** = bench check. Status: open, decided
 | **B2** | `i2cdetect` shows 0x6B at SJ3 = A and 0x6A at B. | open |
 | **B3** | SPI WHO_AM_I at 10 MHz, modes 0 and 3. | open |
 | **B4** | SJ1 open, VDDIO at 1.8 V: I²C and SPI still work. Optional. | open |
-| **B5** | Vibration comparison against the BNO085 (§8 step 5). | open |
+| **K7** | **The UM982's dual-antenna roll in `/api/status`**, as the vibration-free reference for the tractor runs (§8.3 test 4). A small daemon change. | open |
+| **B5** | Vibration comparison on the tractor against the TM171 or BNO085 (§8.3 test 4). | open |
+| **B6** | Still baseline: two hours at rest, Allan deviation, random walk near 0.23 °/√h (§8.3 test 2). | open |
+| **B7** | Bench vibration: still-to-shaking shifts within the §8.3 table, two orientations (§8.3 test 3). | open |
