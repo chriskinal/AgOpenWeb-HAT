@@ -6,7 +6,8 @@
 // Like most Arduino code, portions of this are based on other open source Arduino code with a compatiable license.
 
 // AOW HAT: copied from Firmware_Teensy_AiO_26 v26.5.5 web_pages/CANConfigUploadPage.h.
-// HAT changes: none.
+// HAT changes: alert() and confirm() replaced by the in-page uiAlert/uiConfirm (/dialog.js),
+// which work in an AgOpenWeb web card.
 
 // CANConfigUploadPage.h
 // Touch-optimized CAN configuration JSON upload page
@@ -25,6 +26,7 @@ const char CAN_CONFIG_UPLOAD_PAGE[] PROGMEM = R"rawliteral(
     <meta name="apple-mobile-web-app-capable" content="yes">
     <title>CAN Config Upload - AiO v26</title>
     <link rel="stylesheet" href="/touch.css">
+    <script src="/dialog.js"></script>
     <style>
         .info-box {
             background: #e3f2fd;
@@ -247,7 +249,7 @@ const char CAN_CONFIG_UPLOAD_PAGE[] PROGMEM = R"rawliteral(
             const file = fileInput.files[0];
 
             if (!file) {
-                alert('Please select a JSON file');
+                uiAlert('Please select a JSON file');
                 return false;
             }
 
@@ -299,8 +301,8 @@ const char CAN_CONFIG_UPLOAD_PAGE[] PROGMEM = R"rawliteral(
             return false;
         }
 
-        function restoreDefault() {
-            if (!confirm('Restore default CAN configuration?\n\nThis will delete your custom configuration and revert to the built-in defaults.')) {
+        async function restoreDefault() {
+            if (!await uiConfirm('Restore default CAN configuration?\n\nThis will delete your custom configuration and revert to the built-in defaults.', 'Restore')) {
                 return;
             }
 

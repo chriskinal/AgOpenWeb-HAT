@@ -9,6 +9,8 @@
 // HAT changes: the IP form is the firmware's (the API reports that the OS manages the address);
 // a Wi-Fi card is added (/api/wifi): the CM4 as a client of known networks or as the cab's
 // access point, the fallback to the access point after boot, and the networks in range.
+// The firmware's alert() and confirm() are uiAlert/uiConfirm (/dialog.js), which work in an
+// AgOpenWeb web card.
 
 // TouchFriendlyNetworkPage.h
 // Touch-optimized network settings page with compact layout
@@ -27,6 +29,7 @@ const char TOUCH_FRIENDLY_NETWORK_PAGE[] PROGMEM = R"rawliteral(
     <meta name="apple-mobile-web-app-capable" content="yes">
     <title>Network Settings - AiO v26</title>
     <link rel="stylesheet" href="/touch.css">
+    <script src="/dialog.js"></script>
     <style>
         /* Additional styles specific to network settings */
         .status-row {
@@ -143,7 +146,7 @@ const char TOUCH_FRIENDLY_NETWORK_PAGE[] PROGMEM = R"rawliteral(
             const octet3 = parseInt(document.getElementById('octet3').value);
             
             if (octet1 < 0 || octet1 > 255 || octet2 < 0 || octet2 > 255 || octet3 < 0 || octet3 > 255) {
-                alert('Invalid IP address. Each octet must be between 0 and 255.');
+                uiAlert('Invalid IP address. Each octet must be between 0 and 255.');
                 return false;
             }
             
@@ -189,8 +192,8 @@ const char TOUCH_FRIENDLY_NETWORK_PAGE[] PROGMEM = R"rawliteral(
             return false;
         }
         
-        function rebootSystem() {
-            if (confirm('Are you sure you want to reboot? The system will be unavailable for a moment.')) {
+        async function rebootSystem() {
+            if (await uiConfirm('Are you sure you want to reboot? The system will be unavailable for a moment.', 'Reboot')) {
                 document.getElementById('status').innerHTML = 
                     '<div class="status">System is rebooting...</div>';
                     
@@ -347,7 +350,7 @@ const char TOUCH_FRIENDLY_NETWORK_PAGE[] PROGMEM = R"rawliteral(
                      band: document.getElementById('wifiBand').value,
                      channel: parseInt(document.getElementById('wifiChannel').value), activate: activate };
         }
-        function wifiSwitch() {
+        async function wifiSwitch() {
             let body, where;
             if (wifiMode === 'ap') {
                 body = wifiApBody(true);
@@ -358,8 +361,8 @@ const char TOUCH_FRIENDLY_NETWORK_PAGE[] PROGMEM = R"rawliteral(
                          password: document.getElementById('wifiPassword').value };
                 where = 'join "' + body.ssid + '" on this device, then open http://' + wifiLast.hostname + '.local/network';
             }
-            if (!confirm('This page loses its connection if it reached the unit over Wi-Fi. To come back, ' + where +
-                         '.\n\nIf the switch fails, the unit goes back to the connection it has now.')) return;
+            if (!await uiConfirm('This page loses its connection if it reached the unit over Wi-Fi. To come back, ' + where +
+                                 '.\n\nIf the switch fails, the unit goes back to the connection it has now.', 'Switch')) return;
             wifiPost(body, () => {
                 const msg = document.getElementById('wifiMsg');
                 msg.textContent = 'Switching in a moment. To come back, ' + where + '.';

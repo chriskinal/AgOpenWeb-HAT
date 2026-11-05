@@ -14,6 +14,7 @@
 
 #include "pages/CANConfigUploadPage.h"
 #include "pages/CANInfoJSON.h"
+#include "pages/Dialog.h"
 #include "pages/DragDropCANConfigPage.h"
 #include "pages/IsobusPage.h"
 #include "pages/SerialPage.h"
@@ -701,6 +702,12 @@ void addRoutes(Server& server, Backend& b, const char* version) {
         Response r;
         r.contentType = "text/css";
         r.body = TOUCH_FRIENDLY_CSS;
+        return r;
+    });
+    server.route("/dialog.js", [](const Request&) {  // AOW HAT: alert/confirm that work in a web card
+        Response r;
+        r.contentType = "text/javascript";
+        r.body = AOW_DIALOG_JS;
         return r;
     });
     page(server, "/device", TOUCH_FRIENDLY_DEVICE_SETTINGS_PAGE);

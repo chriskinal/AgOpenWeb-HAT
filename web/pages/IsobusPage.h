@@ -5,6 +5,7 @@
 // pages' stylesheet and layout. Settings and live state come from /api/isobus, and with them the
 // AOW link gateway's (aow-linkd, docs/PLAN_VT.md section 2). Its switch acts at once through
 // /api/linkgateway (the service started or stopped), apart from Apply Changes.
+// Dialogs are uiConfirm (/dialog.js): the browser's confirm() does nothing in an AgOpenWeb web card.
 
 #ifndef ISOBUS_PAGE_H
 #define ISOBUS_PAGE_H
@@ -18,6 +19,7 @@ const char ISOBUS_PAGE[] PROGMEM = R"rawliteral(
     <meta name="apple-mobile-web-app-capable" content="yes">
     <title>ISOBUS - AgOpenWeb HAT</title>
     <link rel="stylesheet" href="/touch.css">
+    <script src="/dialog.js"></script>
     <style>
         .toggle-container { display: flex; align-items: center; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid #ecf0f1; }
         .toggle-label { font-size: 18px; font-weight: 500; }
@@ -127,9 +129,9 @@ const char ISOBUS_PAGE[] PROGMEM = R"rawliteral(
             set('gw_dropped', g.clientConnected ? (lost ? g.rxDropped + ' from the bus, ' + g.txDropped + ' to it' : 'None') : '-', lost ? 'warn' : '');
         }
 
-        function switchGateway(box) {
+        async function switchGateway(box) {
             const on = box.checked;
-            if (!on && gwConnected && !confirm('AgOpenWeb has the implement\'s screens open through the gateway. Switching it off disconnects them. Switch off?')) {
+            if (!on && gwConnected && !await uiConfirm('AgOpenWeb has the implement\'s screens open through the gateway. Switching it off disconnects them. Switch off?', 'Switch off')) {
                 box.checked = true;
                 return;
             }
@@ -159,9 +161,9 @@ const char ISOBUS_PAGE[] PROGMEM = R"rawliteral(
             document.getElementById('gw_network').checked = !!g.network;
         }
 
-        function saveGateway() {
+        async function saveGateway() {
             const network = document.getElementById('gw_network').checked;
-            if (gwConnected && !confirm('Saving restarts the gateway: AgOpenWeb reconnects within about a second. Save?')) return;
+            if (gwConnected && !await uiConfirm('Saving restarts the gateway: AgOpenWeb reconnects within about a second. Save?', 'Save')) return;
             const msg = document.getElementById('gw_msg');
             msg.innerHTML = '<div class="status">Saving...</div>';
             fetch('/api/linkgateway', { method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -203,14 +205,14 @@ const char ISOBUS_PAGE[] PROGMEM = R"rawliteral(
             msg.innerHTML = '<div class="status">Saving...</div>';
             fetch('/api/isobus', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
                 .then(r => r.json())
-                .then(d => {
+                .then(async d => {
                     if (d.status !== 'saved') throw new Error(d.message || 'not saved');
                     if (!d.restartRequired) {
                         msg.innerHTML = '<div class="status success">Saved. Nothing changed.</div>';
                         setTimeout(() => { msg.innerHTML = ''; }, 4000);
                         return;
                     }
-                    if (confirm('Saved. ISOBUS settings take effect when the HAT software restarts. Steering stops for a few seconds. Restart now?')) {
+                    if (await uiConfirm('Saved. ISOBUS settings take effect when the HAT software restarts. Steering stops for a few seconds. Restart now?', 'Restart now')) {
                         msg.innerHTML = '<div class="status">Restarting...</div>';
                         fetch('/api/restart', { method: 'POST' }).finally(() => setTimeout(() => location.reload(), 4000));
                     } else {

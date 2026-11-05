@@ -49,6 +49,52 @@ constexpr const char* kLinkdConf = "/etc/aow-hat/linkd.conf";  // read by aow-li
 // gateway is on and listens on the network, so tablets find it by name. Avahi notices the file.
 constexpr const char* kAvahiDir = "/etc/avahi/services";
 constexpr const char* kAvahiService = "/etc/avahi/services/aow-linkd.service";
+// The pages' announcement (_aowcard._tcp, AgOpenWeb Docs/ADD_ON_CARDS.md "Discovery"), so
+// AgOpenWeb can offer them for a web card by name: there while the pages are served.
+constexpr const char* kAvahiPages = "/etc/avahi/services/aow-hat-pages.service";
+
+std::string xmlEscape(const std::string& s) {
+    std::string out;
+    for (char c : s) {
+        switch (c) {
+        case '&': out += "&amp;"; break;
+        case '<': out += "&lt;"; break;
+        case '>': out += "&gt;"; break;
+        case '"': out += "&quot;"; break;
+        default: out += c;
+        }
+    }
+    return out;
+}
+
+// The pages' announcement: written while they are served (port), removed when not (0). Without
+// avahi on the unit, nothing is written. The name is the unit's, as the gateway's (the ISOBUS
+// page; another service type, so the two don't clash).
+void announcePages(uint16_t port, const std::string& name) {
+    if (access(kAvahiDir, F_OK) != 0) return;
+    if (!port) {
+        if (unlink(kAvahiPages) == 0) LOG_INFO(Network, "Web pages no longer announced on the network");
+        return;
+    }
+    const std::string xml =
+        "<?xml version=\"1.0\" standalone='no'?>\n"
+        "<!DOCTYPE service-group SYSTEM \"avahi-service.dtd\">\n"
+        "<!-- Written by aow-hatd while it serves its pages: an AgOpenWeb web card. -->\n"
+        "<service-group>\n"
+        "  <name>" + xmlEscape(name) + "</name>\n"
+        "  <service>\n"
+        "    <type>_aowcard._tcp</type>\n"
+        "    <port>" + std::to_string(port) + "</port>\n"
+        "    <txt-record>v=1</txt-record>\n"
+        "    <txt-record>path=/</txt-record>\n"
+        "  </service>\n"
+        "</service-group>\n";
+    std::string error;
+    if (writeFileAtomically(kAvahiPages, xml, error))
+        LOG_INFO(Network, "Web pages announced on the network as \"%s\"", name.c_str());
+    else
+        LOG_WARNING(Network, "Web pages not announced: %s", error.c_str());
+}
 
 // Console: stderr, which systemd puts in the journal. Under systemd (JOURNAL_STREAM set) each
 // line starts with <N> so the journal records its priority; in a terminal, the firmware's format.
@@ -307,6 +353,7 @@ public:
         LOG_NOTICE(Network, "AOW link gateway: name \"%s\", %s", name.empty() ? linkGatewayDefaultName().c_str() : name.c_str(),
                    in.network ? "tablets on the network may connect" : "this unit only");
         syncAnnouncement(linkGatewayEnabled());
+        announcePages(pagesPort_, unitName());  // the same name
         // Running: restarted to take them (a connected terminal is back within about a second).
         if (std::system("systemctl --no-block try-restart aow-linkd.service >/dev/null 2>&1") != 0)
             LOG_WARNING(Network, "AOW link gateway not restarted (systemctl failed); its new settings apply at its next start");
@@ -421,19 +468,16 @@ public:
         return out;
     }
 
+    // The pages are served on port (0: not): announced under the unit's name while they are.
+    void servePages(uint16_t port) {
+        pagesPort_ = port;
+        announcePages(port, unitName());
+    }
+
 private:
-    static std::string xmlEscape(const std::string& s) {
-        std::string out;
-        for (char c : s) {
-            switch (c) {
-            case '&': out += "&amp;"; break;
-            case '<': out += "&lt;"; break;
-            case '>': out += "&gt;"; break;
-            case '"': out += "&quot;"; break;
-            default: out += c;
-            }
-        }
-        return out;
+    std::string unitName() {
+        const std::string name = linkGatewaySettings().name;
+        return name.empty() ? linkGatewayDefaultName() : name;
     }
 
     // The announcement follows the gateway: there while it is on and listens on the network.
@@ -445,7 +489,7 @@ private:
             if (unlink(kAvahiService) == 0) LOG_INFO(Network, "AOW link gateway no longer announced on the network");
             return;
         }
-        const std::string name = s.name.empty() ? linkGatewayDefaultName() : s.name;
+        const std::string name = unitName();
         const std::string xml =
             "<?xml version=\"1.0\" standalone='no'?>\n"
             "<!DOCTYPE service-group SYSTEM \"avahi-service.dtd\">\n"
@@ -537,6 +581,7 @@ private:
     const SettingsFile& file_;
     HelperListener& helpers_;
     WifiControl wifi_;
+    uint16_t pagesPort_ = 0;
 };
 
 }  // namespace
@@ -560,6 +605,7 @@ void WebThread::run() {
         web::addRoutes(server, backend, opt_.version);
         if (pages) LOG_INFO(Network, "Web pages on port %u", opt_.httpPort);
     }
+    backend.servePages(pages ? opt_.httpPort : 0);
 
     GvretServer gvretServer(shared_, opt_.gvretPort);
     SyslogOut syslog;
@@ -608,6 +654,7 @@ void WebThread::run() {
             }
         }
     }
+    if (pages) backend.servePages(0);
     log::global().drain(outputs);  // last words
 }
 
