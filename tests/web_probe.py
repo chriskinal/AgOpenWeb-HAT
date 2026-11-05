@@ -10,6 +10,7 @@ and the log WebSocket (8083). Standard library only.
 import argparse
 import base64
 import json
+import re
 import os
 import socket
 import struct
@@ -78,9 +79,15 @@ def main():
         ok &= bool(cond)
 
     for path, marker in [("/", "AgOpenWeb HAT"), ("/device", "invertWorkSwitch"), ("/eventlogger", "serialLevel"),
-                         ("/logs", ":8083"), ("/network", "/api/network/config"), ("/ota", ".aowpkg"), ("/isobus", "/api/isobus"), ("/serial", "/api/serial"), ("/touch.css", "{")]:
+                         ("/logs", ":8083"), ("/network", "/api/network/config"), ("/ota", ".aowpkg"), ("/isobus", "/api/isobus"), ("/serial", "/api/serial"), ("/touch.css", "{"),
+                         ("/dialog.js", "uiConfirm")]:
         code, ctype, body = http(base, path)
         check(code == 200 and marker in body, "GET %-14s %d %s, %d bytes" % (path, code, ctype.split(";")[0], len(body)))
+    # In an AgOpenWeb web card (an iframe sandboxed without allow-modals) the browser's alert() and
+    # confirm() do nothing: the pages use /dialog.js instead (Docs/ADD_ON_CARDS.md in AgOpenWeb).
+    blocked = [p for p in ("/", "/device", "/eventlogger", "/logs", "/network", "/ota", "/isobus", "/serial", "/can", "/can/upload", "/um98x-config")
+               if re.search(r"(?<![\w.])(alert|confirm|prompt)\(", http(base, p)[2])]
+    check(not blocked, "no browser dialogs, which a web card blocks: %s" % (", ".join(blocked) or "none"))
 
     st = json.loads(http(base, "/api/status")[2])
     check("version" in st and st["moduleId"] == 126,

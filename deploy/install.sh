@@ -185,7 +185,7 @@ else
   if systemctl list-unit-files aow-linkd.service >/dev/null 2>&1; then
     systemctl disable --now aow-linkd.service 2>/dev/null || true
   fi
-  rm -f /etc/avahi/services/aow-linkd.service
+  rm -f /etc/avahi/services/aow-linkd.service /etc/avahi/services/aow-hat-pages.service
   echo "No HAT: daemon left disabled. AgOpenWeb will use the AiO board on the network."
 fi
 echo "Choice saved in $CONF. Run this script again to change it."

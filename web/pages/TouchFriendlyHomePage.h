@@ -8,6 +8,8 @@
 // AOW HAT: copied from Firmware_Teensy_AiO_26 v26.5.5 web_pages/TouchFriendlyHomePage.h.
 // HAT changes: title; no Work Switch tile (the HAT work switch is digital only). Restart restarts the daemon.
 // ISOBUS and Serial Communications tiles (the HAT's own pages).
+// alert() and confirm() are the in-page uiAlert/uiConfirm (/dialog.js), which work in an AgOpenWeb
+// web card.
 
 // TouchFriendlyHomePage.h
 // Home page optimized for touchscreen tablets
@@ -26,6 +28,7 @@ const char TOUCH_FRIENDLY_HOME_PAGE[] PROGMEM = R"rawliteral(
     <meta name="apple-mobile-web-app-capable" content="yes">
     <title>AOW HAT</title>
     <link rel="stylesheet" href="/touch.css">
+    <script src="/dialog.js"></script>
 </head>
 <body>
     <div class="container">
@@ -106,17 +109,17 @@ const char TOUCH_FRIENDLY_HOME_PAGE[] PROGMEM = R"rawliteral(
         let rateUpdateTime = 0;
         
         // Touch-friendly confirmation dialog
-        function confirmRestart() {
-            if (confirm('Are you sure you want to restart the system?')) {
+        async function confirmRestart() {
+            if (await uiConfirm('Are you sure you want to restart the system?', 'Restart')) {
                 restartSystem();
             }
         }
-        
+
         function restartSystem() {
             fetch('/api/restart', { method: 'POST' })
                 .then(response => {
                     if (response.ok) {
-                        alert('System is restarting...');
+                        uiAlert('System is restarting...');
                     }
                 });
         }

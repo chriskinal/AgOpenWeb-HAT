@@ -6,7 +6,8 @@
 // Like most Arduino code, portions of this are based on other open source Arduino code with a compatiable license.
 
 // AOW HAT: copied from Firmware_Teensy_AiO_26 v26.5.5 web_pages/DragDropCANConfigPage.h.
-// HAT changes: none.
+// HAT changes: alert() and confirm() replaced by the in-page uiAlert/uiConfirm (/dialog.js),
+// which work in an AgOpenWeb web card.
 
 // DragDropCANConfigPage.h
 // Modern drag-and-drop CAN configuration interface
@@ -24,6 +25,7 @@ const char DRAG_DROP_CAN_CONFIG_PAGE[] PROGMEM = R"rawliteral(
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <title>CAN Configuration</title>
+    <script src="/dialog.js"></script>
     <style>
         * {
             box-sizing: border-box;
@@ -1254,8 +1256,8 @@ const char DRAG_DROP_CAN_CONFIG_PAGE[] PROGMEM = R"rawliteral(
         }
 
         // Restart confirmation
-        function confirmRestart() {
-            if (confirm('Are you sure you want to restart the system?')) {
+        async function confirmRestart() {
+            if (await uiConfirm('Are you sure you want to restart the system?', 'Restart')) {
                 fetch('/api/restart', { method: 'POST' })
                     .then(response => {
                         if (response.ok) {

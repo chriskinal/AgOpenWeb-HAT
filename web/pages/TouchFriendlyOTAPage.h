@@ -13,6 +13,8 @@
 // software and the app as a matched set): the page shows the AgOpenWeb installed
 // (/api/ota/versions), and says so when it is not the one the installed package carried; the wait
 // for a result is 5 minutes, not 3. Layout and styles are the firmware's.
+// The firmware's alert() and confirm() are uiAlert/uiConfirm (/dialog.js), which work in an
+// AgOpenWeb web card.
 
 // TouchFriendlyOTAPage.h
 // Touch-optimized system update page
@@ -31,6 +33,7 @@ const char TOUCH_FRIENDLY_OTA_PAGE[] PROGMEM = R"rawliteral(
     <meta name="apple-mobile-web-app-capable" content="yes">
     <title>System Update - AgOpenWeb HAT</title>
     <link rel="stylesheet" href="/touch.css">
+    <script src="/dialog.js"></script>
     <style>
         /* Additional styles specific to OTA update */
         .board-info {
@@ -349,12 +352,12 @@ const char TOUCH_FRIENDLY_OTA_PAGE[] PROGMEM = R"rawliteral(
             const file = fileInput.files[0];
             
             if (!file) {
-                alert('Please select an update file');
+                uiAlert('Please select an update file');
                 return false;
             }
-            
+
             if (!file.name.endsWith('.aowpkg')) {
-                alert('Please select an .aowpkg update file');
+                uiAlert('Please select an .aowpkg update file');
                 return false;
             }
         
@@ -370,8 +373,8 @@ const char TOUCH_FRIENDLY_OTA_PAGE[] PROGMEM = R"rawliteral(
             return false;
         }
         
-        function rebootUnit() {
-            if (!confirm('Restart the unit now? It will be away for about a minute.')) return;
+        async function rebootUnit() {
+            if (!await uiConfirm('Restart the unit now? It will be away for about a minute.', 'Restart')) return;
             fetch('/api/ota/reboot', { method: 'POST' })
             .then(response => response.text().then(text => {
                 log(response.ok ? 'Restarting the unit. Reload this page in a minute.' : 'Not restarted: ' + text);

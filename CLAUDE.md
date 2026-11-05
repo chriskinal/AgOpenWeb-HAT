@@ -111,6 +111,13 @@ The Teensy firmware is not being rewritten and nothing is ported back to it.
   On the dev CM4 (2026-10-26) client to access point and back worked from the page (up in 6 s,
   back on the home network in 13 s); the fallback after boot is not tried yet. A switch cuts
   the SSH session.
+- **AgOpenWeb web card:** the pages work in one (AgOpenWeb `Docs/ADD_ON_CARDS.md`; bookmark
+  `http://{host}/`). The card's iframe is sandboxed without `allow-modals`, so `alert()` and
+  `confirm()` do nothing there: pages use `uiAlert` / `uiConfirm` from `/dialog.js`
+  (`web/pages/Dialog.h`), and `tests/web_probe.py` fails on a browser dialog. They fit the
+  smallest card (420 x 350). `aow-hatd` announces them as `_aowcard._tcp` under the unit's name
+  (the gateway's, set on the ISOBUS page) while it serves them
+  (`/etc/avahi/services/aow-hat-pages.service`).
 - **CAN watch:** `daemon/can_watch.cpp` restarts a CAN interface that has frames queued and sends
   none with no bus error (seen once after a bus-off storm; `/api/status` `canRestarts`).
 - **Key monitor:** `deploy/aow-keymon.py`, its own service: key off for 3 s runs `poweroff`.

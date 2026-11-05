@@ -10,6 +10,7 @@
 // is coming in on each port and USB device: parsed for what the HAT reads, else the first 20
 // characters of the last lines. Uses the firmware pages' stylesheet and layout. Settings from
 // /api/serial, live state from /api/status.
+// Long USB device names wrap, so the page fits AgOpenWeb's smallest web card.
 
 #ifndef SERIAL_PAGE_H
 #define SERIAL_PAGE_H
@@ -32,7 +33,7 @@ const char SERIAL_PAGE[] PROGMEM = R"rawliteral(
         .nmea-boxes input, .check input { width: 20px; height: 20px; }
         .check { display: flex; align-items: center; gap: 8px; font-weight: normal; margin-top: 10px; }
         .port-live { font-size: 15px; padding: 10px; background: #f8f9fa; border-radius: 8px; line-height: 1.6; margin-bottom: 10px; }
-        .port-live .head { font-weight: 600; }
+        .port-live .head { font-weight: 600; overflow-wrap: anywhere; }  /* long USB by-id names */
         .port-live .head span { font-weight: normal; color: #7f8c8d; font-size: 13px; }
         .port-live pre { margin: 4px 0 0; font-family: Menlo, Consolas, monospace; font-size: 14px; white-space: pre; overflow-x: auto; }
         .quiet { color: #7f8c8d; }

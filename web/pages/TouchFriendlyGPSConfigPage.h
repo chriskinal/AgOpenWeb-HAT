@@ -8,6 +8,8 @@
 // AOW HAT: copied from Firmware_Teensy_AiO_26 v26.5.5 web_pages/TouchFriendlyGPSConfigPage.h.
 // HAT changes: a line under the buttons with the receiver's INS lever arm, which the daemon sets
 // from AgOpenWeb's vehicle geometry (PGN 247; /api/status insLeverArm), shown with a UM981.
+// The firmware's alert() and confirm() are uiAlert/uiConfirm (/dialog.js), which work in an
+// AgOpenWeb web card.
 
 // TouchFriendlyGPSConfigPage.h
 // Touch-optimized GPS configuration page
@@ -26,6 +28,7 @@ const char TOUCH_FRIENDLY_GPS_CONFIG_PAGE[] PROGMEM = R"rawliteral(
     <meta name="apple-mobile-web-app-capable" content="yes">
     <title>GPS Configuration - AiO v26</title>
     <link rel="stylesheet" href="/touch.css">
+    <script src="/dialog.js"></script>
     <style>
         /* Additional styles specific to GPS config */
         textarea {
@@ -189,8 +192,8 @@ const char TOUCH_FRIENDLY_GPS_CONFIG_PAGE[] PROGMEM = R"rawliteral(
             }
         }
         
-        function clearAll() {
-            if (confirm('Clear all configuration fields?')) {
+        async function clearAll() {
+            if (await uiConfirm('Clear all configuration fields?', 'Clear')) {
                 document.getElementById('config').value = '';
                 document.getElementById('mode').value = '';
                 document.getElementById('messages').value = '';
