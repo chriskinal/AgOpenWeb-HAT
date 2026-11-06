@@ -285,13 +285,18 @@ fallback.
   plate through all its holes** on short standoffs. A board held at one end resonates and the log
   shows the board, not the shaker. The reference IMU bolts beside it, X forward, Z up, leads short
   and tied down.
-- **The reference IMU** is logged separately on the Mac: the TM171 on USB, or a BNO085 on a
-  USB-serial adapter, read by a short Python script (both parsers are in `core/imu.h`, a few lines
-  each in Python). Both logs carry the Mac's clock, enough for 1 s window statistics; the
-  still-to-shaking steps line the files up if in doubt.
-- **The analysis script** (Allan deviation per DT0064; still-versus-shaking means and standard
-  deviations in 1 s windows) is written against the tool's log format once the first file exists:
-  the columns depend on what is ticked in the tool.
+- **The reference IMU** is logged separately on the Mac: the TM171 on USB by
+  `hardware/tools/imu-eval/tm171_log.py` (Mac, Linux or Windows; Enter bumps a marker column at
+  each still/shaking change). A sharp tap on the plate at the start and end of each run lines the
+  two logs up: the TM171's own timestamp runs about 0.27 % fast and wraps every 71.6 min.
+- **The analysis script** is `hardware/tools/imu-eval/analyze.py` (pure Python): it aligns the logs
+  on the taps, splits the run at the markers or at motion, and gives each IMU's roll and pitch per
+  segment; with `--still`, drift in 10-minute blocks, against temperature, and the Allan deviation
+  (DT0064).
+- **MEMS Studio's quirks.** Turning fusion on turns the high-g channel and the temperature column
+  off, and can change the ranges: set them again after. Its "roll" is our pitch (nose up positive)
+  and its "pitch" is minus our roll; the quaternion is logged to 3 decimals (0.1°), so tilt is taken
+  from the gravity vector, which has the accel's axes and signs.
 
 ### 8.3 The tests, in order
 
@@ -302,11 +307,16 @@ fallback.
    Allan deviation. Expect the 0.23 °/√h random walk; the curve's floor gives the bias instability
    and the useful averaging time. The reference IMU gets its heading drift at rest over the same
    run.
-3. **Bench vibration, the immunity test (B7).** Clamp the plate to a vibration source: a random-orbit
-   sander or a drill with an eccentric weight, clamped to the bench, gives a usable 100–200 Hz.
-   Sequence 60 s still, 120 s shaking, 60 s still, at two or three intensities, in two orientations
-   (Z up, then X up) so the shaking hits different axes. The high-g channel at ±32 g shows the true
-   peaks when the ±16 g channel clips.
+3. **Bench vibration, the immunity test (B7).** The plate stays at one angle while it vibrates, so
+   any tilt change is error (rocking it by hand tilts it for real and tests nothing). Fix the plate
+   rigidly to the **body** of a random-orbit sander (hose clamps, no foam), not to the pad: the pad
+   orbits at about 200 Hz and well over 100 g, the body gives 0.3–0.8 g, a cab-mount level, set by
+   the speed dial. Sander clamped by its handle, pad free and bare, USB leads tied to the body with
+   a loose loop to the Mac, the MKI257A tied into its socket. A laptop cooler gives the mild end.
+   Sequence: tap, 60 s still, 120 s shaking, 60 s still, tap, at two or three intensities, in two
+   orientations (Z up, then X up) so the shaking hits different axes. Each intensity twice: fusion
+   off with high-g on (low-g ±16 g and gyro ±500 dps at 240 Hz, high-g ±32 g at 480 Hz: the raw
+   data for §8.5), then fusion on (the SFLP's answer).
 4. **Tractor, same plate, where the HAT will live (B5).** Engine off, idle and PTO speed for five
    minutes each at rest, then a straight pass, a headland turn and a side slope. At rest the true
    roll is constant, so the shift when the engine starts is the error with no reference needed. For
@@ -322,15 +332,78 @@ For each run, per IMU:
 | Gyro mean shift, still to shaking | ≤ 0.1 °/s |
 | Vibration dose (residual linear acceleration RMS, DT0106) | logged, so both IMUs are compared at the same level |
 
-### 8.4 If it wins
+### 8.4 Results so far
+
+The MKI109V3 and the TM171 on one aluminium plate, both on USB to the Mac.
+
+- **Test 1, alive (2026-11-06): pass.** WHO_AM_I `0x75`. Self-test (CTRL10 0x19): accel
+  +378 / +328 / +241 mg (50–1700), gyro 48.4 / 46.1 / 53.9 dps at ±250 (20–80). Axes as the
+  silkscreen: X forward, Y left, Z up; pin-1 dot at the rear left. The TM171 has the same axes, its
+  accel the opposite sign (it reports gravity), its gyro in rad/s.
+- **Fused tilt at rest, 47 s (SFLP gravity vector against the TM171's own fusion):** roll sd
+  0.004° / 0.012°, pitch sd 0.002° / 0.011°. The SFLP's gyro bias matched the raw gyro to 10 mdps;
+  its yaw drifts 0.2°/min (no magnetometer), which steering does not use.
+- **Rocked by hand, ±45° at up to 300 dps:** the two IMUs agree to 1° rms (mostly the TM171's 20 ms
+  sample spacing) and both settle back within 0.1° in a few seconds. Not a vibration test: the plate
+  really tilted.
+- **Test 2, still baseline, 2 h (2026-11-06): pass (B6).** 240 Hz, fusion off, 24.3–25.6 °C at the
+  die.
+
+  | | LSM6DSK320X | TM171 |
+  |---|---|---|
+  | Gyro random walk X/Y/Z | 0.14 / 0.14 / 0.13 °/√h (2.4 mdps/√Hz) | 0.70 / 0.92 / 0.41 °/√h |
+  | Gyro bias instability | 2.0 / 3.1 / 1.5 °/h at 35–140 s | 1.0 / 0.8 / 0.4 °/h at 650 s |
+  | Accel noise X/Y/Z | 35 / 36 / 55 µg/√Hz | about 145 µg/√Hz |
+  | Accel bias instability | 0.02–0.04 mg | 0.03–0.10 mg |
+  | Tilt spread over 2 h, 10-min means (roll / pitch) | 0.011° / 0.009° (from accel) | 0.027° / 0.013° (its fusion) |
+
+  Random walk read as ST's DT0064 does (the Allan deviation at 1 s equals the noise density):
+  better than the 3.8 mdps/√Hz typical. The TM171 outputs bias-corrected, filtered data, hence its
+  better long-term bias; the fusion re-learns the ST part's. The 1.3 °C swing is too small for
+  temperature coefficients (fits: gyro Y +7.7 mdps/°C, accel X/Z +0.10 / +0.15 mg/°C); a cold start
+  in the cab gives a real swing. The low-g offset is at the ±12 mg limit (|g| reads 987.5 mg):
+  calibrate it.
+
+### 8.5 Our own fusion in the daemon (K8)
+
+The SFLP uses the low-g accel and the gyro only ("based on the (low-g) accelerometer and gyroscope
+data processing", DS15060 §2.8), so a shock that clips the low-g reaches it clipped. Read the raw
+channels instead and fuse in `aow-hatd`; that can do what no external IMU can (TM171, BNO085, SFLP):
+
+1. **Both accels.** Low-g normally; high-g for the samples where low-g is clipped; the accel weighted
+   down while high-g shows a shock. The high-g is 16 × noisier (1000 against 60 µg/√Hz), so it
+   bridges short gaps only, never steady tilt.
+2. **Adaptive accel weight.** When |a| is far from 1 g, or noisy over the last fraction of a second,
+   lean on the gyro. The gyro's symmetric, fully differential architecture ("enhanced vibration
+   immunity", DS15060 §1) is what makes that safe; the bench vibration runs check its bias does not
+   move while shaking.
+3. **GNSS aiding.** In a turn the centripetal acceleration (speed × yaw rate) tips the measured
+   gravity sideways and a stand-alone IMU reads it as roll; a speed change does the same to pitch.
+   The daemon has speed and heading, so it subtracts both, and re-learns the gyro bias whenever the
+   vehicle is stopped.
+4. **The SFLP alongside**, as a cross-check and fallback. The FIFO carries raw low-g, high-g, gyro,
+   timestamps and the SFLP output in one stream; the daemon reads it in batches at about 100 Hz,
+   not per sample.
+
+Start with a complementary (Mahony-type) filter with the adaptive weighting; an EKF only if the
+logs say it is needed. Order:
+
+1. **Offline, in Python, against the logs.** The fusion-off bench runs (test 3) and the tractor
+   runs (test 4) replayed through the filter and compared with the SFLP and the TM171 on the same
+   run. The tractor's turns and speed changes are what item 3 is for, and need the UM982 roll (K7)
+   as the truth.
+2. **In `core`** (no hardware headers, unit-tested on recorded data, as the daemon rules require),
+   with the SPI driver and FIFO reading in `boards/hat` behind `hal/`.
+
+### 8.6 If it wins
 
 K1 stands: adopting it means a HAT revision with the part on the board over SPI0 and a reallocated
 GPIO for its chip select, on a stiff part of the board away from the connectors (MEMS parts read
 board stress as offset). The daemon side is a driver in `boards/hat` and a third IMU type in
-`core/imu`, with roll from the SFLP quaternion or the daemon's own filter, whichever test 3 and 4
-favour.
+`core/imu`, with roll from the daemon's own filter (§8.5, K8) or the SFLP, whichever tests 3 and 4
+favour. One-time work besides: offset calibration and mount-angle zeroing.
 
-### 8.5 Bring-up on a Pi (the fallback)
+### 8.7 Bring-up on a Pi (the fallback)
 
 Without the HAT fitted (the HAT uses GPIO2/3 as outputs and keeps `i2c_arm` off; see K1).
 
@@ -364,5 +437,6 @@ IDs: **K#** = decision or open item, **B#** = bench check. Status: open, decided
 | **B4** | SJ1 open, VDDIO at 1.8 V: I²C and SPI still work. Optional. | open |
 | **K7** | **The UM982's dual-antenna roll in `/api/status`**, as the vibration-free reference for the tractor runs (§8.3 test 4). A small daemon change. | open |
 | **B5** | Vibration comparison on the tractor against the TM171 or BNO085 (§8.3 test 4). | open |
-| **B6** | Still baseline: two hours at rest, Allan deviation, random walk near 0.23 °/√h (§8.3 test 2). | open |
+| **B6** | Still baseline: two hours at rest, Allan deviation, random walk near 0.23 °/√h (§8.3 test 2). | **pass 2026-11-06:** 0.14 °/√h, tilt within 0.011° over 2 h (§8.4) |
 | **B7** | Bench vibration: still-to-shaking shifts within the §8.3 table, two orientations (§8.3 test 3). | open |
+| **K8** | **The daemon's own fusion** from the raw low-g, high-g and gyro, GNSS-aided (§8.5). Offline in Python against the test 3 and 4 logs first, then in `core`. | open |
