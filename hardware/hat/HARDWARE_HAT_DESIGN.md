@@ -64,9 +64,34 @@ that's easy to rework.
 panel-mount Deutsch connector, and the enclosure is sealed there, so the IO board's own edge
 connectors don't matter.
 
-**Host.** The CM4 IO Board only. The HAT uses the IO board's J1 pads (§5) to hold the CM4 off and
-restart it, so it doesn't fit a Pi 4/5 as it stands. It keeps the standard HAT hole pattern, so a Pi 4
-variant stays possible (same BCM2711, same GPIO allocation).
+**Host.** The CM4 IO Board, or a **Raspberry Pi 4 Model B**. The IO board's 40-pin header and
+mounting holes are laid out as the Pi 4B's, so the HAT bolts onto either one. The Pi 4B's J2 pads
+carry the same three signals in the same order as the IO board's J1 (1 = `GLOBAL_EN`, 2 = GND,
+3 = `RUN`), so the latch, the restart and the watchdog (§4, §5) work unchanged. It is the same
+BCM2711 with the same GPIO, so the overlay, the device names and the software are the same too.
+On a Pi 4B:
+- **J2 doesn't mate.** The Pi 4B's J2 pads sit about 10 mm further down (+y) and 2 mm further left
+  (−x) than the IO board's J1 (§2.1), so pin 1 is at about HAT (16, 42) (measured by eye, 2026-11-05).
+  Connect the HAT's J2 to them with three short wires. A second J2 footprint at that position is
+  planned (issues H17).
+- **Power:** it has no 12 V input. A 12 V → 5 V converter (3 A) feeds header pins 2/4 from the
+  vehicle's constant 12 V, in place of the IO board's J20 (§4). It runs with the key off, so its
+  standby current sets the battery drain. On the bench: USB-C for the Pi, and 12 V from a separate
+  supply on J3.21 (key) and J3.1 (sense), its ground on J3.2.
+- **Heat:** the SoC sits under the HAT. Fit a low heatsink that clears the 11 mm standoffs.
+- **GNSS extension:** the 16 mm upward extension (§2.3) overhangs the Pi's header edge with nothing
+  under it. Leave room for it in the enclosure.
+- **Storage:** no NVMe; boot from SD or a USB SSD.
+- **Bootloader EEPROM:** `POWER_OFF_ON_HALT=1` and `WAKE_ON_GPIO=0` (§7), as on the CM4. Without
+  them the Pi's 3.3 V stays up at halt and the latch keeps `5V_MAIN` (the GNSS receiver, CAN) on.
+  On a Pi 4B, `rpi-eeprom-config` sets them from Linux; no `rpiboot` needed.
+
+Tried on a Pi 4B (Rev 1.4), 2026-11-05, with J2 on jumper wires and the same package as the CM4:
+boot on the key, shutdown at key-off with `5V_MAIN` off after the halt, GNSS with RTK corrections.
+Not yet: steering with a motor driver.
+
+A Pi 5 is not a host: its GPIO, UARTs and PCM go through the RP1, so neither the overlay nor the
+drivers carry over.
 
 ---
 
