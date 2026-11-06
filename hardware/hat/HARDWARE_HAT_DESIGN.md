@@ -70,10 +70,11 @@ carry the same three signals in the same order as the IO board's J1 (1 = `GLOBAL
 3 = `RUN`), so the latch, the restart and the watchdog (§4, §5) work unchanged. It is the same
 BCM2711 with the same GPIO, so the overlay, the device names and the software are the same too.
 On a Pi 4B:
-- **J2 doesn't mate.** The Pi 4B's J2 pads sit about 10 mm further down (+y) and 2 mm further left
-  (−x) than the IO board's J1 (§2.1), so pin 1 is at about HAT (16, 42) (measured by eye, 2026-11-05).
-  Connect the HAT's J2 to them with three short wires. A second J2 footprint at that position is
-  planned (issues H17).
+- **J2 doesn't mate: wire it.** Raspberry Pi's Pi 4B mechanical drawing puts the centre of its J2
+  (pin 2) 12.0 mm from the left edge and 20.5 mm from the bottom edge: HAT (12.0, 35.5), 3.5 mm left
+  of and 3.5 mm below the HAT's J2 centre (15.5, 32.0, §2.1). Its pins are in the same order as J2's,
+  pin 1 (`GLOBAL_EN`) at the +x end. Leave J2's socket off and run three short wires from J2's pads to
+  the Pi's J2, pin 1 to pin 1 (issues H17).
 - **Power:** it has no 12 V input. A 12 V → 5 V converter (3 A) feeds header pins 2/4 from the
   vehicle's constant 12 V, in place of the IO board's J20 (§4). It runs with the key off, so its
   standby current sets the battery drain. On the bench: USB-C for the Pi, and 12 V from a separate
