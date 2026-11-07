@@ -66,7 +66,8 @@ private:
     uint64_t changedAt_ = 0;
 };
 
-// (counts - 2048 - offset) / counts-per-degree, inverted if set. 0 if counts-per-degree is 0.
+// As the AgOpenGPS firmware: (counts - 2048 + offset) / counts-per-degree, or inverted
+// -(counts - 2048 - offset) / counts-per-degree. 0 if counts-per-degree is 0.
 float wasAngle(uint16_t counts, const Settings& s);
 
 class Autosteer {

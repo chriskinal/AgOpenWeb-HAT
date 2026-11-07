@@ -35,8 +35,13 @@ bool Debouncer::update(bool raw, uint64_t nowMs) {
 
 float wasAngle(uint16_t counts, const Settings& s) {
     if (s.gains.steerSensorCounts == 0) return 0;
-    const float angle = (static_cast<float>(counts) - 2048.0f - s.gains.wasOffset) / s.gains.steerSensorCounts;
-    return s.steer.invertWas ? -angle : angle;
+    // The AgOpenGPS firmware's sign (AiO ADProcessor::getWASAngle): the offset is added for a
+    // normal sensor and subtracted for an inverted one, so it always moves the reported angle by
+    // +offset / counts-per-degree and the app's Zero WAS (offset - angle * cpd) converges.
+    const bool inv = s.steer.invertWas;
+    const float centred = static_cast<float>(counts) - 2048.0f + (inv ? -s.gains.wasOffset : s.gains.wasOffset);
+    const float angle = centred / s.gains.steerSensorCounts;
+    return inv ? -angle : angle;
 }
 
 // --- Autosteer

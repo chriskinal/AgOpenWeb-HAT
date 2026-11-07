@@ -4,6 +4,7 @@
 // Autosteer: every path that stops the motor, then the controller itself.
 #include "aow/steer.h"
 
+#include <cmath>
 #include <cstdlib>
 
 #include "check.h"
@@ -323,8 +324,28 @@ int main() {
         CHECK(g.gains.ackermanFix > 0.899f && g.gains.ackermanFix < 0.901f);
         CHECK(!r.a.onSteerSettings(gains, 7));
 
-        // WAS scaling with those: (counts - 2048 - offset) / counts-per-degree, inverted.
+        // WAS scaling with those, inverted: -(counts - 2048 - offset) / counts-per-degree.
         CHECK(wasAngle(2048 - 100 + 45 * 3, g) == -3.0f);
+    }
+
+    // WAS offset sign as the AgOpenGPS firmware (issue #13): the offset moves the reported angle
+    // by +offset / cpd for a normal and an inverted sensor alike, so the app's Zero WAS
+    // (offset' = offset - angle * cpd, AgOpenWeb WasCalibration) reads 0 after one press.
+    for (const bool inv : {false, true}) {
+        Settings s;
+        s.steer.invertWas = inv;
+        s.gains.steerSensorCounts = 45;
+        s.gains.wasOffset = 0;
+        const uint16_t raw = 2048 + 45 * 4;
+        const float a0 = wasAngle(raw, s);
+        CHECK(a0 == (inv ? -4.0f : 4.0f));
+        s.gains.wasOffset = 90;
+        CHECK(wasAngle(raw, s) == a0 + 2.0f);
+        s.gains.wasOffset = static_cast<int16_t>(std::lround(90 - wasAngle(raw, s) * 45));
+        CHECK(wasAngle(raw, s) == 0.0f);
+        // Pressed again at zero: nothing moves.
+        s.gains.wasOffset = static_cast<int16_t>(std::lround(s.gains.wasOffset - wasAngle(raw, s) * 45));
+        CHECK(wasAngle(raw, s) == 0.0f);
     }
 
     // ---------------------------------------------------------------- what the app sees

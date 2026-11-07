@@ -40,7 +40,9 @@ public:
     steer::Inputs read(const Settings& s) override {
         steer::Inputs in;
         const float perDeg = s.gains.steerSensorCounts ? s.gains.steerSensorCounts : 30;
-        float counts = 2048.0f + s.gains.wasOffset + (s.steer.invertWas ? -angle_ : angle_) * perDeg;
+        // steer::wasAngle backwards: the offset is subtracted from the counts for a normal sensor.
+        const float off = s.steer.invertWas ? s.gains.wasOffset : -s.gains.wasOffset;
+        float counts = 2048.0f + off + (s.steer.invertWas ? -angle_ : angle_) * perDeg;
         in.wasCounts = static_cast<uint16_t>(counts < 0 ? 0 : counts > 4095 ? 4095 : counts);
         return in;
     }
