@@ -292,7 +292,8 @@ fallback.
   TM171's gyro output is filtered and often misses the taps (7 dps peak on the sander).
 - **The analysis script** is `hardware/tools/imu-eval/analyze.py` (pure Python): it aligns the logs
   on the taps or, when they are not in both, on the shaking (the accel spread matched in each half
-  of the run, 0.99–1.00 on every run so far), splits the run at the markers or at motion, and gives each IMU's roll and pitch per
+  of the run, 0.99–1.00 on every run so far), splits the run at the markers or at motion and at
+  steps in its level (idle to working revs), and gives each IMU's roll and pitch per
   segment; with `--still`, drift in 10-minute blocks, against temperature, and the Allan deviation
   (DT0064).
 - **MEMS Studio's quirks.** Turning fusion on turns the high-g channel and the temperature column
@@ -367,8 +368,9 @@ The MKI109V3 and the TM171 on one aluminium plate, both on USB to the Mac.
   in the cab gives a real swing. The low-g offset is at the ±12 mg limit (|g| reads 987.5 mg):
   calibrate it.
 - **Test 3, bench vibration, sander, Z up (2026-11-08): fail while shaking, both IMUs (B7).**
-  The plate on the sander's body, one intensity: 1.5–1.8 g rms, about 80 Hz with a harmonic near
-  160 Hz, 2–5 × the cab level assumed in test 3 (the tractor, below, gave 0.03 g). Nothing clipped:
+  The plate on the sander's body, one dial setting: the sander was failing and its speed wandered
+  on its own (73–83 Hz, falling to 0.8 g rms for the last 10 s of run A), so this is one rough
+  level, not a controlled one. 1.5–1.8 g rms, about 80 Hz with a harmonic near 160 Hz, 2–5 × the cab level assumed in test 3 (the tractor, below, gave 0.03 g). Nothing clipped:
   low-g 4.4 g of ±16, high-g 8.8 g of ±32, gyro 33 dps of ±500. Over the 100 s of shaking:
 
   | | Roll / pitch at the end of the shaking | Back at rest |
@@ -383,19 +385,22 @@ The MKI109V3 and the TM171 on one aluminium plate, both on USB to the Mac.
   low-g's mean moves (vibration rectification), the SFLP follows it, and the TM171's accel does the
   same (+2° roll). The high-g's mean does not. Gyro mean shift 25 mdps at most (pass), partly the
   sander warming the die from 26.1 to 29.7 °C. The high-g sits 5.7° from the low-g at rest: it
-  needs its own calibration. Still to run: the laptop cooler, a gentler sander setting, Y up.
-- **Test 4, tractor at rest (2026-11-08): pass, both IMUs (B5, at rest).** Engine off, then running
-  (idle and working revs, one segment: no markers), then off. 0.03 g rms at most, at 15, 22.5, 45
-  and 67.5 Hz (engine orders). No clipping.
+  needs its own calibration. Still to run: the laptop cooler, levels in between on a sander that holds its speed, Y up.
+- **Test 4, tractor at rest (2026-11-08): pass, both IMUs (B5, at rest).** 5 min engine off,
+  5 min idle, 5 min working revs, engine off. The engine orders put a figure on each: idle 18 mg
+  rms at 15, 22.5 and 45 Hz (15 Hz crank, 900 rpm); working revs 43 mg rms at 34.9, 52.2 and 204 Hz
+  (34.9 Hz crank, 2090 rpm; 52.2 Hz is 1.5 × crank, a three-cylinder's firing). No clipping.
 
-  | Still to engine running | Roll / pitch shift | Roll sd while running | Gyro shift |
-  |---|---|---|---|
-  | SFLP (run B) | −0.002° / +0.006° | 0.011° | under 3 mdps |
-  | TM171 fusion (run B / run A) | −0.030° / −0.031°, +0.093° / −0.027° | 0.074° / 0.055° | under 2 mdps |
-  | Low-g accel mean (run A) | −0.003° / +0.004° | | under 1 mdps |
+  | Shift from engine off, roll / pitch (roll sd) | Idle, 18 mg | Working revs, 43 mg |
+  |---|---|---|
+  | SFLP (run B) | +0.001° / +0.002° (0.006°) | −0.004° / +0.010° (0.014°) |
+  | TM171 fusion (run B) | +0.007° / +0.006° (0.013°) | −0.068° / −0.068° (0.089°) |
+  | TM171 fusion (run A) | +0.052° / −0.015° (0.015°) | +0.138° / −0.039° (0.043°) |
+  | Low-g accel mean (run A) | +0.003° / +0.000° | −0.010° / +0.008° |
 
-  At this level the low-g does not rectify, and the SFLP is about 7 × steadier than the TM171.
-  Driving runs (turns, slopes) need the UM982 roll as the reference (K7).
+  Gyro shift under 4 mdps for both IMUs at both speeds. At this level the low-g does not rectify.
+  The SFLP hardly notices the revs; the TM171's shift and spread grow with them, about 6 × the
+  SFLP's at working revs. Driving runs (turns, slopes) need the UM982 roll as the reference (K7).
 
 ### 8.5 Our own fusion in the daemon (K8)
 
@@ -471,7 +476,7 @@ IDs: **K#** = decision or open item, **B#** = bench check. Status: open, decided
 | **B3** | SPI WHO_AM_I at 10 MHz, modes 0 and 3. | open |
 | **B4** | SJ1 open, VDDIO at 1.8 V: I²C and SPI still work. Optional. | open |
 | **K7** | **The UM982's dual-antenna roll in `/api/status`**, as the vibration-free reference for the tractor runs (§8.3 test 4). A small daemon change. | open |
-| **B5** | Vibration comparison on the tractor against the TM171 or BNO085 (§8.3 test 4). | **at rest pass 2026-11-08:** SFLP within 0.006°, sd 0.011° (TM171 0.03°, 0.074°); driving runs open (K7) |
+| **B5** | Vibration comparison on the tractor against the TM171 or BNO085 (§8.3 test 4). | **at rest pass 2026-11-08:** at working revs SFLP within 0.010°, sd 0.014° (TM171 0.07–0.14°, 0.089°); driving runs open (K7) |
 | **B6** | Still baseline: two hours at rest, Allan deviation, random walk near 0.23 °/√h (§8.3 test 2). | **pass 2026-11-06:** 0.14 °/√h, tilt within 0.011° over 2 h (§8.4) |
 | **B7** | Bench vibration: still-to-shaking shifts within the §8.3 table, two orientations (§8.3 test 3). | open: sander Z up 2026-11-08 fails while shaking for both IMUs, SFLP +6°, TM171 +3°, the low-g rectifying (§8.4); cooler and Y up to run |
 | **K8** | **The daemon's own fusion** from the raw low-g, high-g and gyro, GNSS-aided (§8.5). Offline in Python against the test 3 and 4 logs first, then in `core`. | open |

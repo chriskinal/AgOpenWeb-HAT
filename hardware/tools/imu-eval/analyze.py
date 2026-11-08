@@ -218,6 +218,30 @@ def active(S, lo, hi, win=0.5):
     return [(a, b) for a, b in out if b - a >= 2]
 
 
+def levels(S, lo, hi, blk=5.0, step=1.5):
+    """Where the shaking changes level inside a stretch (idle to working revs): the edges between
+    5 s blocks whose accel rms differs by 1.5 times or more and stays there for the next block."""
+    rms, t, i, n = [], S["t"], 0, len(S)
+    while i < n and t[i] < lo:
+        i += 1
+    while i < n and t[i] < hi:
+        j = i
+        while j < n and t[j] < t[i] + blk and t[j] < hi:
+            j += 1
+        if j - i > 2:
+            rms.append((t[i], math.sqrt(sum(st.pvariance(S[k][i:j]) for k in ACC))))
+        i = j
+    edges, base = [], rms[0][1] if rms else 0
+    for b in range(1, len(rms) - 1):
+        r, nxt = rms[b][1], rms[b + 1][1]
+        up = r >= base * step and nxt >= base * step
+        down = r <= base / step and nxt <= base / step
+        if up or down:
+            edges.append(rms[b][0])
+            base = nxt
+    return edges
+
+
 def fit(x, y):
     mx, my = st.mean(x), st.mean(y)
     sxx = sum((a - mx) ** 2 for a in x)
@@ -296,8 +320,8 @@ def main():
         how = "TM171 markers"
     else:
         for b0, b1 in active(S, lo, hi):
-            edges += [b0, b1]
-        how = "activity: accel sd over 10 mg or gyro over 10 dps"
+            edges += [b0] + levels(S, b0, b1) + [b1]
+        how = "activity: accel sd over 10 mg or gyro over 10 dps, split where its level steps 1.5 times"
     edges.append(hi)
     print("\nSegments (%s), roll and pitch in degrees, shift from the first segment:" % how)
     print("  %-15s %-28s %-28s %-28s" % ("", "ST (%s)" % ("SFLP" if src is GRAV else "accel"),
