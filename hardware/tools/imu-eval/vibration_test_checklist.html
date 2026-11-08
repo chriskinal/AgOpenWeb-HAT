@@ -1,0 +1,294 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: MIT -->
+<!-- Copyright (c) 2026 The AgOpenWeb-HAT contributors -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>IMU Vibration Test</title>
+<style>
+:root {
+  --bg: #f7f7f5; --card: #ffffff; --text: #1d1d1b; --muted: #66665f; --line: #deded8;
+  --accent: #2f6f4f; --warn-bg: #fff4e0; --warn-line: #e0a040; --code-bg: #efefea; --done: #9a9a92;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #161715; --card: #1f201e; --text: #e8e8e3; --muted: #a2a29a; --line: #34352f;
+    --accent: #7cc49c; --warn-bg: #3a2e18; --warn-line: #b88330; --code-bg: #2a2b27; --done: #6d6d66;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #161715; --card: #1f201e; --text: #e8e8e3; --muted: #a2a29a; --line: #34352f;
+  --accent: #7cc49c; --warn-bg: #3a2e18; --warn-line: #b88330; --code-bg: #2a2b27; --done: #6d6d66;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text);
+  font: 16px/1.5 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+main { max-width: 860px; margin: 0 auto; padding: 16px 16px 64px; }
+h1 { font-size: 1.6rem; margin: 8px 0 4px; }
+h2 { font-size: 1.2rem; margin: 0 0 8px; color: var(--accent); }
+h3 { font-size: 1rem; margin: 14px 0 6px; }
+.sub { color: var(--muted); margin: 0 0 16px; }
+section { background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+  padding: 14px 16px; margin: 0 0 14px; }
+ul.check { list-style: none; padding: 0; margin: 0; }
+ul.check li { padding: 4px 0; }
+ul.check label { display: flex; gap: 10px; align-items: flex-start; cursor: pointer; }
+ul.check input { margin-top: 4px; width: 18px; height: 18px; flex: none; accent-color: var(--accent); }
+ul.check input:checked + span { color: var(--done); text-decoration: line-through; }
+ol.steps { margin: 0; padding-left: 22px; }
+ol.steps li { padding: 3px 0; }
+code, pre { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.88rem;
+  background: var(--code-bg); border-radius: 5px; }
+code { padding: 1px 5px; }
+pre { padding: 8px 10px; overflow-x: auto; margin: 6px 0; white-space: pre-wrap; word-break: break-all; }
+.warn { background: var(--warn-bg); border-left: 4px solid var(--warn-line); padding: 8px 12px;
+  border-radius: 6px; margin: 8px 0; }
+table { border-collapse: collapse; width: 100%; font-size: 0.92rem; }
+th, td { border: 1px solid var(--line); padding: 5px 7px; text-align: left; vertical-align: top; }
+th { background: var(--code-bg); }
+.scroll { overflow-x: auto; }
+td[contenteditable] { min-width: 60px; }
+td[contenteditable]:focus { outline: 2px solid var(--accent); }
+.tabs { display: flex; gap: 6px; flex-wrap: wrap; margin: 6px 0; }
+.tabs button, .bar button { font: inherit; padding: 4px 12px; border-radius: 6px; border: 1px solid var(--line);
+  background: var(--card); color: var(--text); cursor: pointer; }
+.tabs button[aria-pressed="true"] { background: var(--accent); color: var(--card); border-color: var(--accent); }
+.bar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 0 0 14px; color: var(--muted); }
+[data-os="win"] .mac, [data-os="mac"] .win { display: none; }
+@media print {
+  body { background: #fff; color: #000; }
+  section { break-inside: avoid; border-color: #aaa; }
+  .bar, .tabs { display: none; }
+  [data-os] .mac, [data-os] .win { display: block; }
+}
+</style>
+</head>
+<body data-os="mac">
+<main>
+<h1>IMU vibration test</h1>
+<p class="sub">LSM6DSK320X on the STEVAL-MKI109V3 against the TM171, bench (B7) and tractor (B5).
+Plan: <code>hardware/imu-breakout/HARDWARE_IMU_BREAKOUT.md</code> §8.3. Ticks and the run log are saved in this browser.</p>
+
+<div class="bar">
+  <span>Laptop:</span>
+  <div class="tabs" role="group" aria-label="Laptop">
+    <button type="button" data-os-pick="mac" aria-pressed="true">Mac</button>
+    <button type="button" data-os-pick="win" aria-pressed="false">Windows</button>
+  </div>
+  <button type="button" id="reset">Clear ticks and run log</button>
+</div>
+
+<section>
+<h2>1. Before you leave (at home, with power and internet)</h2>
+<ul class="check">
+  <li><label><input type="checkbox"><span><b>MEMS Studio opens with no internet.</b> Turn Wi-Fi off, start it, connect the MKI109V3, see live data. If it wants a login or an update, sort it now.</span></label></li>
+  <li><label><input type="checkbox"><span>Python 3 and pyserial installed: <code class="mac">python3 -c "import serial"</code><code class="win">python -c "import serial"</code> gives no error.</span></label></li>
+  <li><label><input type="checkbox"><span><code>tm171_log.py</code> and <code>analyze.py</code> copied onto the laptop, in one folder.</span></label></li>
+  <li><label><input type="checkbox"><span>A folder for the logs:
+    <code class="mac">mkdir -p ~/imu-runs</code><code class="win">mkdir C:\imu-runs</code></span></label></li>
+  <li><label><input type="checkbox"><span><b>Dress rehearsal:</b> a 30 s run of both loggers with two taps, then <code>analyze.py</code> on the pair. It must say "aligned on the taps" and show segments.</span></label></li>
+  <li><label><input type="checkbox"><span>Disk: at least 2 GB free. A raw run (high-g on) is about 85 kB/s, a fusion run about 42 kB/s: a 5-minute run is 13–26 MB.</span></label></li>
+  <li><label><input type="checkbox"><span>Sleep off while plugged in and on battery
+    <span class="mac">(System Settings, Battery: prevent automatic sleeping; the logger runs under <code>caffeinate -i</code>; keep the lid open)</span><span class="win">(Settings, System, Power: screen and sleep "Never"; keep the lid open or set lid close to "Do nothing")</span>.</span></label></li>
+  <li><label><input type="checkbox"><span>Laptop charged; charger and, for the tractor, a 12 V inverter or USB-C car charger.</span></label></li>
+  <li><label><input type="checkbox"><span>Note where MEMS Studio saves its logs (its <code>Data_Log_YY_MM_DD_HH_MM_SS.csv</code> files) so you can find each run.</span></label></li>
+</ul>
+</section>
+
+<section>
+<h2>2. Pack list</h2>
+<ul class="check">
+  <li><label><input type="checkbox"><span>The plate: MKI109V3 with the MKI257A in its socket, TM171 beside it, both bolted through all holes.</span></label></li>
+  <li><label><input type="checkbox"><span>Two USB cables that fit (and a spare of each), a USB hub if the laptop is short of ports.</span></label></li>
+  <li><label><input type="checkbox"><span>Zip ties (a bag), electrical tape, VHB double-sided tape, scissors or side cutters.</span></label></li>
+  <li><label><input type="checkbox"><span>Two hose clamps (worm-drive) big enough to go round the sander body, a small wood block as a saddle, screwdriver or nut driver for them.</span></label></li>
+  <li><label><input type="checkbox"><span>Random-orbit sander (sandpaper off), laptop cooler, extension lead, a power strip with a switch.</span></label></li>
+  <li><label><input type="checkbox"><span>Vise or bar clamps, a rag for the jaws, a towel.</span></label></li>
+  <li><label><input type="checkbox"><span>A screwdriver handle for the taps.</span></label></li>
+  <li><label><input type="checkbox"><span>Phone, for photos of each mounting (the orientation matters later).</span></label></li>
+  <li><label><input type="checkbox"><span>Tractor: bolts, clamps or ratchet straps to fix the plate rigidly where the HAT will live. No foam.</span></label></li>
+</ul>
+</section>
+
+<section>
+<h2>3. MEMS Studio settings</h2>
+<p>Each intensity is run twice: <b>A</b> gives the raw data for our own fusion, <b>B</b> gives the chip's fusion (SFLP).</p>
+<div class="scroll"><table>
+<tr><th></th><th>A: raw (fusion off)</th><th>B: fusion on</th></tr>
+<tr><td>Low-g accel</td><td>high-performance, 240 Hz, <b>±16 g</b></td><td>same</td></tr>
+<tr><td>Gyro</td><td>high-performance, 240 Hz, <b>±500 dps</b></td><td>same</td></tr>
+<tr><td>High-g accel</td><td><b>on</b>, 480 Hz, ±32 g</td><td>off (fusion turns it off)</td></tr>
+<tr><td>Temperature</td><td>on</td><td>not available</td></tr>
+<tr><td>SFLP</td><td>off</td><td>on: game rotation vector, gravity vector, gyro bias; 240 Hz (or 120)</td></tr>
+</table></div>
+<div class="warn"><b>Turning fusion on changes the ranges.</b> After switching to B, set low-g ±16 g and gyro ±500 dps again. <code>analyze.py</code> prints the ranges it found ("ranges: acc_l +-16, gyro +-500"): check that line after the first run of each setting.</div>
+</section>
+
+<section>
+<h2>4. Mounting on the sander</h2>
+<ul class="check">
+  <li><label><input type="checkbox"><span><b>On the body, not the pad.</b> The pad orbits at about 200 Hz and well over 100 g; the body gives 0.3–0.8 g, the tractor range.</span></label></li>
+  <li><label><input type="checkbox"><span>Plate on a flat part of the housing (wood saddle if needed), two hose clamps tight, VHB under the plate if it helps. <b>No foam or rubber.</b></span></label></li>
+  <li><label><input type="checkbox"><span>MKI257A tied into its socket (zip tie or tape across the board); all plate screws tight.</span></label></li>
+  <li><label><input type="checkbox"><span>USB leads zip-tied to the sander body near the plate, then a loose loop to the laptop.</span></label></li>
+  <li><label><input type="checkbox"><span>Sander clamped by its handle (rag in the jaws) or on its side on the towel; pad free in the air, sandpaper off.</span></label></li>
+  <li><label><input type="checkbox"><span>Switched at the power strip, so nobody touches the sander during a run. Speed dial set before the run.</span></label></li>
+  <li><label><input type="checkbox"><span><b>First, a 10 s check at the lowest speed</b> (setting A): <code>analyze.py</code> must show 0 clipped (low-g) and 0 gyro clipped. If not, lower the speed; don't soften the mount.</span></label></li>
+  <li><label><input type="checkbox"><span>Photo of the mounting.</span></label></li>
+</ul>
+<h3>Orientations</h3>
+<p><b>Z up</b> (plate flat, as on the tractor), then <b>on its side, Y up</b> (plate on its left or right edge), so the vibration hits other axes.
+Not X up: with X pointing up the pitch is 90° and roll is undefined, so the tilt numbers mean nothing.</p>
+</section>
+
+<section>
+<h2>5. One run, step by step</h2>
+<p>About 5 minutes. Run names: <code>r01</code>, <code>r02</code> … Fill in the run log (section 8) as you go.</p>
+<ol class="steps">
+  <li>Plate set, sander off, nothing touching the rig. Settings A or B checked in MEMS Studio.</li>
+  <li>Start the TM171 logger in a terminal:
+    <pre class="mac">cd FOLDER_WITH_THE_SCRIPTS
+caffeinate -i python3 tm171_log.py --out ~/imu-runs/r01_tm171.csv</pre>
+    <pre class="win">cd FOLDER_WITH_THE_SCRIPTS
+python tm171_log.py --out C:\imu-runs\r01_tm171.csv</pre>
+    It prints <code>TM171 on …</code>, then roll/pitch/yaw once a second. (It skips the port MEMS Studio holds. If it finds nothing, add <code>--port</code><span class="win"> <code>COM5</code> from Device Manager</span>.)</li>
+  <li>Start logging in MEMS Studio. Note the file name.</li>
+  <li>Wait 5 s. <b>Tap</b> the plate sharply once with the screwdriver handle.</li>
+  <li><b>60 s still.</b> Hands off.</li>
+  <li>Press <b>Enter</b> in the logger terminal, then switch the power strip <b>on</b>.</li>
+  <li><b>120 s running.</b></li>
+  <li>Switch <b>off</b>, then press <b>Enter</b>.</li>
+  <li><b>60 s still.</b> Wait for the sander to stop completely first.</li>
+  <li><b>Tap</b> again. Wait 5 s.</li>
+  <li>Stop MEMS Studio logging, then <b>Ctrl-C</b> in the logger terminal.</li>
+  <li>Check the run (section 6) before changing anything.</li>
+</ol>
+<div class="warn">Taps: hard enough to show (over 10 dps on the gyro), once each, at the start and the end. The two taps line the logs up and correct the TM171's clock, which runs about 0.27 % fast.</div>
+</section>
+
+<section>
+<h2>6. Check each run before the next</h2>
+<pre class="mac">python3 analyze.py PATH/Data_Log_….csv ~/imu-runs/r01_tm171.csv</pre>
+<pre class="win">python analyze.py PATH\Data_Log_….csv C:\imu-runs\r01_tm171.csv</pre>
+<ul class="check">
+  <li><label><input type="checkbox"><span>"aligned on the taps", TM171 clock about +2500 to +2800 ppm.</span></label></li>
+  <li><label><input type="checkbox"><span>"Segments (TM171 markers)" with 3 segments: still, running, still. If it says "activity" instead, the Enter presses were missed; still usable.</span></label></li>
+  <li><label><input type="checkbox"><span>"ranges" line shows <code>acc_l +-16</code> and <code>gyro +-500</code>.</span></label></li>
+  <li><label><input type="checkbox"><span><b>clipped</b> and <b>gyro cl</b> are 0 in the running segment. If not: note it, and if it was a B run, repeat that intensity as A to get the high-g peak.</span></label></li>
+  <li><label><input type="checkbox"><span>Note the running segment's <b>rms g</b> in the run log: that is the vibration dose.</span></label></li>
+</ul>
+<h3>What to look at (pass for the HAT, §8.3)</h3>
+<div class="scroll"><table>
+<tr><th>Measure</th><th>Where in the output</th><th>Pass</th></tr>
+<tr><td>Roll and pitch shift, still to running</td><td>Segments table, ST and TM171 columns, running row</td><td>≤ 0.2°</td></tr>
+<tr><td>Roll spread while running</td><td>the "sd" after the shift</td><td>≤ 0.3°</td></tr>
+<tr><td>Gyro shift, still to running</td><td>"ST gyro shift mdps", running row</td><td>≤ 100 mdps</td></tr>
+<tr><td>Back to normal after</td><td>last still row's shift</td><td>near 0 (the rig itself may have moved: compare with the TM171)</td></tr>
+</table></div>
+<p>Both IMUs shifting by the same amount means the rig moved. Only the difference between them is IMU error.</p>
+</section>
+
+<section>
+<h2>7. The run plan</h2>
+<p>Minimum set marked ★. Each line is one A run and one B run.</p>
+<div class="scroll"><table>
+<tr><th>#</th><th>Source</th><th>Intensity</th><th>Orientation</th><th>A</th><th>B</th></tr>
+<tr><td>1</td><td>Laptop cooler</td><td>its highest</td><td>Z up</td><td>☐</td><td>☐</td></tr>
+<tr><td>2 ★</td><td>Sander</td><td>lowest speed</td><td>Z up</td><td>☐</td><td>☐</td></tr>
+<tr><td>3</td><td>Sander</td><td>middle</td><td>Z up</td><td>☐</td><td>☐</td></tr>
+<tr><td>4 ★</td><td>Sander</td><td>highest without clipping</td><td>Z up</td><td>☐</td><td>☐</td></tr>
+<tr><td>5 ★</td><td>Sander</td><td>lowest speed</td><td>Y up</td><td>☐</td><td>☐</td></tr>
+<tr><td>6</td><td>Sander</td><td>highest without clipping</td><td>Y up</td><td>☐</td><td>☐</td></tr>
+</table></div>
+</section>
+
+<section>
+<h2>8. Run log</h2>
+<p>Click a cell to type. Saved in this browser; print or copy it when done.</p>
+<div class="scroll"><table id="runlog">
+<tr><th>Run</th><th>Time</th><th>A/B</th><th>Source, intensity</th><th>Orient.</th><th>MEMS Studio file</th><th>TM171 file</th><th>rms g</th><th>Clipped?</th><th>Notes</th></tr>
+</table></div>
+</section>
+
+<section>
+<h2>9. On the tractor (B5)</h2>
+<ul class="check">
+  <li><label><input type="checkbox"><span>Plate fixed rigidly where the HAT will live, X forward, Z up. Photo.</span></label></li>
+  <li><label><input type="checkbox"><span>Leads tied down, loose loop to the laptop; laptop secured so it cannot slide.</span></label></li>
+  <li><label><input type="checkbox"><span>Parked on firm, level ground, handbrake on.</span></label></li>
+</ul>
+<h3>At rest, engine runs: one long run per setting (A, then B)</h3>
+<ol class="steps">
+  <li>Start both loggers, tap, <b>5 min engine off</b>.</li>
+  <li>Enter, start the engine, <b>5 min idle</b>.</li>
+  <li>Enter, <b>5 min at working revs</b> (PTO speed, PTO on if it is safe to run unloaded).</li>
+  <li>Enter, engine off, <b>2 min still</b>, tap, stop both loggers.</li>
+</ol>
+<p>Nothing moves the tractor, so the true roll is constant: any shift when the engine starts is error, no reference needed. A tap on the plate with the engine running may not show above the vibration; tap firmly, and tap again at the end with the engine off.</p>
+<h3>Driving runs (optional today)</h3>
+<p>A straight pass, a headland turn and a side slope, setting A, Enter at each change. There is no true roll to compare with yet (the UM982's dual-antenna roll is not in <code>/api/status</code>, K7), so these give the ST part against the TM171 only. Worth logging for our own fusion later: note the time of each manoeuvre in the run log.</p>
+</section>
+
+<section>
+<h2>10. Before packing up</h2>
+<ul class="check">
+  <li><label><input type="checkbox"><span>Every run in the log has both files, and both open.</span></label></li>
+  <li><label><input type="checkbox"><span>Copy all logs to a USB stick or the cloud before leaving.</span></label></li>
+  <li><label><input type="checkbox"><span>Print or copy the run log (section 8).</span></label></li>
+</ul>
+</section>
+</main>
+<script>
+(function () {
+  var KEY = "imu-vib-checklist-v1";
+  var state = {};
+  try { state = JSON.parse(localStorage.getItem(KEY)) || {}; } catch (e) { state = {}; }
+  function save() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} }
+
+  // OS switch
+  function setOs(os) {
+    document.body.setAttribute("data-os", os);
+    document.querySelectorAll("[data-os-pick]").forEach(function (b) {
+      b.setAttribute("aria-pressed", String(b.getAttribute("data-os-pick") === os));
+    });
+    state.os = os; save();
+  }
+  document.querySelectorAll("[data-os-pick]").forEach(function (b) {
+    b.addEventListener("click", function () { setOs(b.getAttribute("data-os-pick")); });
+  });
+  setOs(state.os || (/Win/.test(navigator.platform) ? "win" : "mac"));
+
+  // Checkboxes
+  state.checks = state.checks || {};
+  document.querySelectorAll("ul.check input").forEach(function (c, i) {
+    c.checked = !!state.checks[i];
+    c.addEventListener("change", function () { state.checks[i] = c.checked; save(); });
+  });
+
+  // Run log: 16 rows, editable
+  var table = document.getElementById("runlog");
+  state.log = state.log || {};
+  for (var r = 0; r < 16; r++) {
+    var tr = document.createElement("tr");
+    for (var c = 0; c < 10; c++) {
+      var td = document.createElement("td");
+      var id = r + ":" + c;
+      td.contentEditable = "true";
+      td.textContent = state.log[id] !== undefined ? state.log[id] : (c === 0 ? "r" + String(r + 1).padStart(2, "0") : "");
+      (function (cell, key) {
+        cell.addEventListener("input", function () { state.log[key] = cell.textContent; save(); });
+      })(td, id);
+      tr.appendChild(td);
+    }
+    table.appendChild(tr);
+  }
+
+  document.getElementById("reset").addEventListener("click", function () {
+    if (!window.confirm("Clear all ticks and the run log?")) return;
+    var os = state.os; state = { os: os }; save(); location.reload();
+  });
+})();
+</script>
+</body>
+</html>

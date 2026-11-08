@@ -314,7 +314,8 @@ fallback.
    the speed dial. Sander clamped by its handle, pad free and bare, USB leads tied to the body with
    a loose loop to the Mac, the MKI257A tied into its socket. A laptop cooler gives the mild end.
    Sequence: tap, 60 s still, 120 s shaking, 60 s still, tap, at two or three intensities, in two
-   orientations (Z up, then X up) so the shaking hits different axes. Each intensity twice: fusion
+   orientations (Z up, then on its side, Y up) so the shaking hits different axes; not X up, where
+   pitch is 90° and roll undefined. Field checklist: `hardware/tools/imu-eval/vibration_test_checklist.html`. Each intensity twice: fusion
    off with high-g on (low-g ±16 g and gyro ±500 dps at 240 Hz, high-g ±32 g at 480 Hz: the raw
    data for §8.5), then fusion on (the SFLP's answer).
 4. **Tractor, same plate, where the HAT will live (B5).** Engine off, idle and PTO speed for five
