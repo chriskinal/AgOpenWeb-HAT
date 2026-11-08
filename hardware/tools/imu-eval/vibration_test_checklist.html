@@ -87,7 +87,7 @@ Plan: <code>hardware/imu-breakout/HARDWARE_IMU_BREAKOUT.md</code> §8.3. Ticks a
   <li><label><input type="checkbox"><span><code>tm171_log.py</code> and <code>analyze.py</code> copied onto the laptop, in one folder.</span></label></li>
   <li><label><input type="checkbox"><span>A folder for the logs:
     <code class="mac">mkdir -p ~/imu-runs</code><code class="win">mkdir C:\imu-runs</code></span></label></li>
-  <li><label><input type="checkbox"><span><b>Dress rehearsal:</b> a 30 s run of both loggers with two taps, then <code>analyze.py</code> on the pair. It must say "aligned on the taps" and show segments.</span></label></li>
+  <li><label><input type="checkbox"><span><b>Dress rehearsal:</b> a 30 s run of both loggers with two taps, then <code>analyze.py</code> on the pair. It must say "aligned on the taps" (or "aligned on the shaking") and show segments.</span></label></li>
   <li><label><input type="checkbox"><span>Disk: at least 2 GB free. A raw run (high-g on) is about 85 kB/s, a fusion run about 42 kB/s: a 5-minute run is 13–26 MB.</span></label></li>
   <li><label><input type="checkbox"><span>Sleep off while plugged in and on battery
     <span class="mac">(System Settings, Battery: prevent automatic sleeping; the logger runs under <code>caffeinate -i</code>; keep the lid open)</span><span class="win">(Settings, System, Power: screen and sleep "Never"; keep the lid open or set lid close to "Do nothing")</span>.</span></label></li>
@@ -164,7 +164,7 @@ python tm171_log.py --out C:\imu-runs\r01_tm171.csv</pre>
   <li>Stop MEMS Studio logging, then <b>Ctrl-C</b> in the logger terminal.</li>
   <li>Check the run (section 6) before changing anything.</li>
 </ol>
-<div class="warn">Taps: hard enough to show (over 10 dps on the gyro), once each, at the start and the end. The two taps line the logs up and correct the TM171's clock, which runs about 0.27 % fast.</div>
+<div class="warn">Taps: hard enough to show (over 10 dps on the gyro), once each, at the start and the end. The two taps line the logs up and correct the TM171's clock, which runs about 0.27 % fast. The TM171 often misses them; the script then lines the logs up on the shaking.</div>
 </section>
 
 <section>
@@ -172,7 +172,7 @@ python tm171_log.py --out C:\imu-runs\r01_tm171.csv</pre>
 <pre class="mac">python3 analyze.py PATH/Data_Log_….csv ~/imu-runs/r01_tm171.csv</pre>
 <pre class="win">python analyze.py PATH\Data_Log_….csv C:\imu-runs\r01_tm171.csv</pre>
 <ul class="check">
-  <li><label><input type="checkbox"><span>"aligned on the taps", TM171 clock about +2500 to +2800 ppm.</span></label></li>
+  <li><label><input type="checkbox"><span>"aligned on the taps", TM171 clock about +2500 to +2800 ppm, or "aligned on the shaking" with both matches over 0.9.</span></label></li>
   <li><label><input type="checkbox"><span>"Segments (TM171 markers)" with 3 segments: still, running, still. If it says "activity" instead, the Enter presses were missed; still usable.</span></label></li>
   <li><label><input type="checkbox"><span>"ranges" line shows <code>acc_l +-16</code> and <code>gyro +-500</code>.</span></label></li>
   <li><label><input type="checkbox"><span><b>clipped</b> and <b>gyro cl</b> are 0 in the running segment. If not: note it, and if it was a B run, repeat that intensity as A to get the high-g peak.</span></label></li>

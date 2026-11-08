@@ -6,7 +6,8 @@
 
     python3 analyze.py ST_LOG.csv [TM171_LOG.csv] [--still] [--allan-csv FILE]
 
-Lines the two logs up on the first and last tap (a gyro spike in both), then reports:
+Lines the two logs up on the first and last tap (a gyro spike in both) or, when the TM171 misses
+the taps, on the shaking itself (the accel spread, matched in each half of the run), then reports:
   - rates, ranges hit (clipping), temperature
   - per segment (the TM171 log's markers, or still / shaking found from the accel and gyro): the
     mean and spread of roll and pitch for each IMU, as a shift from the first segment; the
@@ -134,6 +135,42 @@ def bursts(t, g, thr, gap=0.5):
     return out
 
 
+TM_PPM = 2650  # the TM171's clock, fast, as measured on the taps of the earlier runs
+
+
+def envelope(t, cols, w=0.2):
+    """Accel spread in w-second bins: log10(1 + sd in mg), indexed by bin."""
+    out, i, n = {}, 0, len(t)
+    while i < n:
+        b = int(t[i] // w)
+        j = i
+        while j < n and int(t[j] // w) == b:
+            j += 1
+        if j - i > 2:
+            out[b] = math.log10(1 + math.sqrt(sum(st.pvariance(c[i:j]) for c in cols)))
+        i = j
+    return out
+
+
+def match(es, et, lo, hi, w=0.2, reach=30.0):
+    """The shift (s) of the TM171 envelope that best matches the ST one between lo and hi."""
+    best = None
+    bins = [b for b in range(int(lo / w), int(hi / w)) if b in es]
+    for d in range(-int(reach / w), int(reach / w) + 1):
+        pairs = [(es[b], et[b - d]) for b in bins if b - d in et]
+        if len(pairs) < 50:
+            continue
+        x, y = zip(*pairs)
+        sx, sy = st.pstdev(x), st.pstdev(y)
+        if not sx or not sy:
+            continue
+        mx, my = st.mean(x), st.mean(y)
+        r = sum((a - mx) * (b - my) for a, b in pairs) / (len(pairs) * sx * sy)
+        if best is None or r > best[1]:
+            best = (d * w, r)
+    return best
+
+
 def window(t, v, lo, hi):
     return [x for ti, x in zip(t, v) if lo <= ti < hi and not math.isnan(x)]
 
@@ -217,14 +254,31 @@ def main():
         bt = bursts(T["t"], tg, 5)
         print("TM171: %d rows over %.1f s, temperature %.1f to %.1f C" % (
             len(T), T["t"][-1], min(T["temp"]), max(T["temp"])))
-        if len(bs) >= 2 and len(bt) >= 2:
-            k = (bs[-1][0] - bs[0][0]) / (bt[-1][0] - bt[0][0])
+        k = (bs[-1][0] - bs[0][0]) / (bt[-1][0] - bt[0][0]) if len(bs) >= 2 and len(bt) >= 2 else 0
+        if abs(1 / k - 1) < 0.01 if k else False:
             off = bs[0][0] - bt[0][0] * k
             print("  aligned on the taps at ST %.2f s and %.2f s; TM171 clock %+.0f ppm" % (
                 bs[0][0], bs[-1][0], (1 / k - 1) * 1e6))
-            T.col["t"] = array("d", (x * k + off for x in T["t"]))
         else:
-            print("  fewer than two taps in a log: lined up on the first rows only")
+            # No pair of taps in both logs (the TM171's gyro is filtered and can miss them):
+            # match the shaking instead, in each half, with the TM171's clock at its usual rate.
+            k = 1 / (1 + TM_PPM * 1e-6)
+            es = envelope(S["t"], [S[c] for c in ACC])
+            et = envelope([x * k for x in T["t"]], [T[c] for c in ("ax", "ay", "az")])
+            m1, m2 = match(es, et, 0, span / 2), match(es, et, span / 2, span)
+            if m1 and m2 and m1[1] > 0.5 and m2[1] > 0.5:
+                # The two halves give the rate too, when they are far enough apart to trust it.
+                k2 = k * (1 + (m2[0] - m1[0]) / (span / 2))
+                if abs(1 / k2 - 1) < 0.01 and span > 600:
+                    k, off = k2, m1[0] - (m2[0] - m1[0]) / 2
+                else:
+                    off = (m1[0] + m2[0]) / 2
+                print("  no taps in both logs: aligned on the shaking (match %.2f and %.2f), TM171 "
+                      "starts %+.1f s, clock %+.0f ppm" % (m1[1], m2[1], off, (1 / k - 1) * 1e6))
+            else:
+                k, off = 1.0, 0.0
+                print("  no taps in both logs and no shaking to match: lined up on the first rows only")
+        T.col["t"] = array("d", (x * k + off for x in T["t"]))
 
     # Tilt for each IMU: the fused gravity vector if there is one, else the accel.
     src = GRAV if GRAV[0] in S else ACC
