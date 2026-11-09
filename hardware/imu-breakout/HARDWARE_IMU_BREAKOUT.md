@@ -296,6 +296,8 @@ fallback.
   steps in its level (idle to working revs), and gives each IMU's roll and pitch per
   segment; with `--still`, drift in 10-minute blocks, against temperature, and the Allan deviation
   (DT0064).
+- **The offline filter** is `hardware/tools/imu-eval/fusion_offline.py`: tilt filters replayed on a
+  fusion-off log, for the daemon's own fusion (§8.5).
 - **MEMS Studio's quirks.** Turning fusion on turns the high-g channel and the temperature column
   off, and can change the ranges: set them again after. Its "roll" is our pitch (nose up positive)
   and its "pitch" is minus our roll; the quaternion is logged to 3 decimals (0.1°), so tilt is taken
@@ -435,6 +437,37 @@ logs say it is needed. Order:
 2. **In `core`** (no hardware headers, unit-tested on recorded data, as the daemon rules require),
    with the SPI driver and FIFO reading in `boards/hat` behind `hal/`.
 
+**First offline try, the sander run (2026-11-08).** `hardware/tools/imu-eval/fusion_offline.py` on
+test 3's fusion-off log (476 Hz, 93 s at 1.6 g rms): Mahony-type filters on the gravity vector, the
+gyro bias and the high-g's offset learnt in the still minute before, the bias re-learnt online only
+while not shaking (low-g rms under 100 mg). Error against the tilt at rest before the shaking:
+
+| Filter | Worst roll / pitch while shaking | 60 s after |
+|---|---|---|
+| Gyro alone | −1.0° / −0.3° | −1.5° / −1.9°, still drifting |
+| Low-g, tau 1 s (as the SFLP; the SFLP itself reached +6°) | +5.0° / −10.7° | −0.06° / −0.03° |
+| High-g while shaking, raw samples | −5.1° / +4.4° | −0.04° / −0.06° |
+| High-g while shaking, accels low-passed 0.5 s first | −0.56° / +0.37° | −0.05° / −0.02° |
+| The same, the high-g's offset corrected for temperature | −0.44° / +0.10° (−0.19° / −0.09° at the end) | −0.06° / −0.01° |
+
+What it says for the filter in `core`:
+
+1. **Average the accel linearly before anything nonlinear.** Normalising each sample or taking
+   its cross product rectifies the shaking in the filter itself: the switch to high-g went from
+   −5° to −0.56° on this alone.
+2. **High-g while shaking.** Low-passing does not save the low-g (+4° / −10°): its own reading
+   rectifies.
+3. **Calibrate the high-g's offset against temperature.** It moved about 2 mg/°C on X and Y (0.1°
+   of tilt per °C) as the sander warmed the die 3 °C; a unit can learn it over its standstills. The
+   temperature row is fitted on the same run, so it is a best case.
+4. **Learn the gyro bias only while quiet.** Alone, the gyro drifts 1.5–2° within a minute
+   (the vibration shift and the warming).
+
+Not yet within the 0.2° mark while shaking, at 2–5 × the vibration level of the tractor, where the
+SFLP already holds 0.01°. One run, one rough level, Z up, an on/off switch at 100 mg; the plate's
+tilt assumed constant (it moved under 0.06° between the still stretches). Next: a smooth weighting
+in place of the switch, Y up, the cooler, and the tractor runs once K7 gives a roll reference.
+
 ### 8.6 If it wins
 
 K1 stands: adopting it means a HAT revision with the part on the board over SPI0 and a reallocated
@@ -479,4 +512,4 @@ IDs: **K#** = decision or open item, **B#** = bench check. Status: open, decided
 | **B5** | Vibration comparison on the tractor against the TM171 or BNO085 (§8.3 test 4). | **at rest pass 2026-11-08:** at working revs SFLP within 0.010°, sd 0.014° (TM171 0.07–0.14°, 0.089°); driving runs open (K7) |
 | **B6** | Still baseline: two hours at rest, Allan deviation, random walk near 0.23 °/√h (§8.3 test 2). | **pass 2026-11-06:** 0.14 °/√h, tilt within 0.011° over 2 h (§8.4) |
 | **B7** | Bench vibration: still-to-shaking shifts within the §8.3 table, two orientations (§8.3 test 3). | open: sander Z up 2026-11-08 fails while shaking for both IMUs, SFLP +6°, TM171 +3°, the low-g rectifying (§8.4); cooler and Y up to run |
-| **K8** | **The daemon's own fusion** from the raw low-g, high-g and gyro, GNSS-aided (§8.5). Offline in Python against the test 3 and 4 logs first, then in `core`. | open |
+| **K8** | **The daemon's own fusion** from the raw low-g, high-g and gyro, GNSS-aided (§8.5). Offline in Python against the test 3 and 4 logs first, then in `core`. | open: first offline try 2026-11-08, sander run held to 0.4–0.6° against the SFLP's 6° (§8.5) |
