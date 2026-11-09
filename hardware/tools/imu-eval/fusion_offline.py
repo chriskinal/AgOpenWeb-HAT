@@ -21,6 +21,8 @@ ap.add_argument("log")
 ap.add_argument("--still0", type=float, default=20)
 ap.add_argument("--still1", type=float, default=65)
 ap.add_argument("--after", type=float, default=50)
+ap.add_argument("--shake", type=float, nargs=2, metavar=("FROM", "TO"),
+                help="the stretch to score (default: the longest over 100 mg rms)")
 a = ap.parse_args()
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # analyze.py
 import analyze as A
@@ -50,10 +52,11 @@ while i < n:
     i = j
 
 
-def run(tau, pick, ti=None, learn=lambda i: True):
+def run(tau, pick, ti=None, learn=lambda i: 1.0):
     """pick(i) -> accel vector in mg to pull toward, or None to coast on the gyro. With ti, a
     Mahony filter: the pull goes in as a rate (kp = 1/tau) and its integral (time constant ti)
-    re-learns the gyro bias, only while learn(i)."""
+    re-learns the gyro bias at the rate learn(i) (0 to 1). pick may return (vector, gain) to scale
+    the pull for that sample."""
     v = list(lmean)
     b = [0.0, 0.0, 0.0]  # bias learnt on top of the standstill one, rad/s
     kp, ki = 1.0 / tau, (1.0 / (tau * ti) if ti else 0.0)
@@ -63,13 +66,16 @@ def run(tau, pick, ti=None, learn=lambda i: True):
         dt = t[i] - t[i - 1]
         w = [math.radians((G[k][i] - bias[k]) / 1000) - b[k] for k in range(3)]
         m = pick(i)
+        g = 1.0
+        if m is not None and len(m) == 2:
+            m, g = m
         if m is not None:
             na, nv = math.sqrt(sum(x * x for x in m)), math.sqrt(sum(x * x for x in v))
             an, vn = [x / na for x in m], [x / nv for x in v]
             e = [an[1] * vn[2] - an[2] * vn[1], an[2] * vn[0] - an[0] * vn[2], an[0] * vn[1] - an[1] * vn[0]]
-            w = [w[k] + kp * e[k] for k in range(3)]
-            if ki and learn(i):
-                b = [b[k] - ki * e[k] * dt for k in range(3)]
+            w = [w[k] + g * kp * e[k] for k in range(3)]
+            if ki:
+                b = [b[k] - learn(i) * g * ki * e[k] * dt for k in range(3)]
         # world-fixed vector seen from a body turning at w: dv/dt = v x w
         cx = v[1] * w[2] - v[2] * w[1]
         cy = v[2] * w[0] - v[0] * w[2]
@@ -95,7 +101,7 @@ def lowpass(cols, tau):
 
 
 THR = 100.0  # mg rms: shaking
-quiet = lambda i: shake[i] <= THR
+quiet = lambda i: 1.0 if shake[i] <= THR else 0.0
 Hc = [[x - hoff[k] for x in H[k]] for k in range(3)]
 Lf, Hf = lowpass(L, 0.5), lowpass(Hc, 0.5)
 vec = lambda C: (lambda i: (C[0][i], C[1][i], C[2][i]))
@@ -110,6 +116,25 @@ def off_at(idx):
 print("high-g minus low-g: %.2f C %s, %.2f C %s mg" % (T0, ["%+.1f" % x for x in o0], T1, ["%+.1f" % x for x in o1]))
 Ht = [[H[k][i] - (o0[k] + (o1[k] - o0[k]) * (T_[i] - T0) / (T1 - T0)) for i in range(n)] for k in range(3)]
 Htf = lowpass(Ht, 0.5)
+# Smooth shaking measure: the low-g's rms about its own 0.5 s low-pass, itself low-passed 0.5 s.
+dev2 = [[(L[k][i] - Lf[k][i]) ** 2 for i in range(n)] for k in range(3)]
+rms_s = [math.sqrt(sum(x)) for x in zip(*lowpass(dev2, 0.5))]
+
+
+def blend(half, Hsrc, slow=None):
+    """Gravity from w x low-g + (1 - w) x high-g, w = 1 / (1 + (rms / half)^2): all low-g when
+    quiet, half-and-half at rms = half, high-g above. With slow (mg), the pull also weakens as the
+    shaking grows (gain 1 / (1 + rms / slow)), leaning on the gyro."""
+    def pick(i):
+        r = rms_s[i]
+        w = 1.0 / (1.0 + (r / half) ** 2)
+        v = tuple(w * Lf[k][i] + (1 - w) * Hsrc[k][i] for k in range(3))
+        return (v, 1.0 / (1.0 + r / slow)) if slow else v
+    return pick
+
+
+learn_w = lambda half: (lambda i: 1.0 / (1.0 + (rms_s[i] / half) ** 2))
+
 variants = [
     ("gyro only", None, None, None),
     ("low-g raw, 1 s", 1.0, vec(L), None),
@@ -118,10 +143,15 @@ variants = [
     ("switch lp, 2 s", 2.0, switch(Lf, Hf), 30.0),
     ("switch lp, 5 s", 5.0, switch(Lf, Hf), 30.0),
     ("switch lp+temp, 2 s", 2.0, switch(Lf, Htf), 30.0),
+    ("blend 50 mg, 2 s", 2.0, blend(50, Hf), 30.0, learn_w(50)),
+    ("blend 100 mg, 2 s", 2.0, blend(100, Hf), 30.0, learn_w(100)),
+    ("blend 50+slow, 2 s", 2.0, blend(50, Hf, 200), 30.0, learn_w(50)),
+    ("blend 50+temp, 2 s", 2.0, blend(50, Htf), 30.0, learn_w(50)),
+    ("blend 50+temp+slow", 2.0, blend(50, Htf, 200), 30.0, learn_w(50)),
 ]
 res = {}
-for name, tau, pick, ti in variants:
-    res[name] = run(tau or 1.0, pick or (lambda i: None), ti, quiet)
+for name, tau, pick, ti, *lw in variants:
+    res[name] = run(tau or 1.0, pick or (lambda i: None), ti, lw[0] if lw else quiet)
 
 # The shaking: the longest stretch over the threshold (not the taps).
 runs, start = [], None
@@ -130,17 +160,17 @@ for x, sh in zip(t, shake):
         start = x
     elif sh <= THR and start is not None:
         runs.append((start, x)); start = None
-s0, s1 = max(runs, key=lambda r: r[1] - r[0])
+s0, s1 = a.shake if a.shake else max(runs, key=lambda r: r[1] - r[0])
 print("truth (still at the start): roll %+.3f pitch %+.3f; high-g offset %+.1f %+.1f %+.1f mg" % (truth + tuple(hoff)))
-print("shaking (low-g rms over %.0f mg) %.1f-%.1f s\n" % (THR, s0, s1))
-print("%-18s %22s %22s %22s" % ("", "worst while shaking", "end of shaking", "60 s after"))
+print("shaking %.1f-%.1f s (%s)\n" % (s0, s1, "given" if a.shake else "low-g rms over %.0f mg" % THR))
+print("%-20s %22s %22s %22s" % ("", "worst while shaking", "end of shaking", "60 s after"))
 for name, *_ in variants:
     o = res[name]
     dur = [(x, r - truth[0], p - truth[1]) for x, r, p in o if s0 <= x <= s1]
     worst = max(dur, key=lambda e: math.hypot(e[1], e[2]))
     end = dur[-1]
     after = min(o, key=lambda e: abs(e[0] - (s1 + 60)))
-    print("%-18s %+9.3f %+9.3f    %+9.3f %+9.3f    %+9.3f %+9.3f" % (
+    print("%-20s %+9.3f %+9.3f    %+9.3f %+9.3f    %+9.3f %+9.3f" % (
         name, worst[1], worst[2], end[1], end[2], after[1] - truth[0], after[2] - truth[1]))
 
 print("\nroll / pitch error every 10 s:")

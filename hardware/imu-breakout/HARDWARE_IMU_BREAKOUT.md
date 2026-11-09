@@ -316,7 +316,11 @@ fallback.
    any tilt change is error (rocking it by hand tilts it for real and tests nothing). Fix the plate
    rigidly to the **body** of a random-orbit sander (hose clamps, no foam), not to the pad: the pad
    orbits at about 200 Hz and well over 100 g, the body gives 0.3–0.8 g, a cab-mount level, set by
-   the speed dial. Sander clamped by its handle, pad free and bare, USB leads tied to the body with
+   the speed dial. The sander must hold its speed: the first one was failing, ran at 73–83 Hz
+   (4400–5000 orbits/min against the usual 8000–12000) and wandered on its own. A random-orbit one
+   with a speed dial gives the levels; a fixed-orbit (quarter-sheet palm) sander gives steadier,
+   single-frequency shaking, usually at one speed. Too harsh: a thin rubber pad under the sander's
+   base, never between the plate and the body. Sander clamped by its handle, pad free and bare, USB leads tied to the body with
    a loose loop to the Mac, the MKI257A tied into its socket. A laptop cooler gives the mild end.
    Sequence: tap, 60 s still, 120 s shaking, 60 s still, tap, at two or three intensities, in two
    orientations (Z up, then on its side, Y up) so the shaking hits different axes; not X up, where
@@ -465,8 +469,29 @@ What it says for the filter in `core`:
 
 Not yet within the 0.2° mark while shaking, at 2–5 × the vibration level of the tractor, where the
 SFLP already holds 0.01°. One run, one rough level, Z up, an on/off switch at 100 mg; the plate's
-tilt assumed constant (it moved under 0.06° between the still stretches). Next: a smooth weighting
-in place of the switch, Y up, the cooler, and the tractor runs once K7 gives a roll reference.
+tilt assumed constant (it moved under 0.06° between the still stretches).
+
+**Smooth weighting in place of the switch (2026-11-08).** Gravity from w × low-g + (1 − w) × high-g,
+both low-passed 0.5 s, w = 1 / (1 + (rms / half)²) with rms the low-g's own shaking level; the gyro
+bias learnt at the rate w. Scored on the sander run and on the tractor's fusion-off run (test 4,
+run A, `--shake` for idle and working revs). Worst roll / pitch:
+
+| Filter | Sander, 1.6 g | Tractor idle, 18 mg | Tractor working revs, 43 mg |
+|---|---|---|---|
+| Low-g alone, tau 1 s (as the SFLP) | +5.0° / −10.7° | +0.004° / −0.025° | −0.019° / +0.051° |
+| Switch at 100 mg | −0.56° / +0.37° | +0.001° / −0.021° | +0.007° / +0.037° |
+| Blend, half at 50 mg | −0.55° / +0.36° | +0.005° / +0.020° | −0.036° / +0.024° |
+| Blend, half at 100 mg | −0.54° / +0.35° | +0.001° / −0.021° | +0.000° / +0.037° |
+| Blend at 50 mg, the pull weakened while shaking | −0.65° / +0.15° | +0.005° / +0.020° | −0.035° / +0.020° |
+| Gyro alone | −1.0° / −0.3° | +0.09° / −0.30° | +0.18° / −0.55° |
+
+The blend does as well as the switch with no step at a threshold; its half belongs at about
+100 mg, since at 43 mg the low-g does not rectify and a half at 50 mg brings in 40 % of the
+noisier high-g for nothing. Leaning on the gyro while shaking does not help: its bias moves under
+the shaking too. What is left on the sander, about 0.4°, is mostly the high-g's offset drifting
+with temperature, so that calibration is the next gain. Untested: 0.1–1 g, where the blend is
+between the two accels (only the sander's last 10 s at 0.8 g). Next: a sander that holds its speed
+(test 3), Y up, the cooler, and the tractor driving runs once K7 gives a roll reference.
 
 ### 8.6 If it wins
 
@@ -512,4 +537,4 @@ IDs: **K#** = decision or open item, **B#** = bench check. Status: open, decided
 | **B5** | Vibration comparison on the tractor against the TM171 or BNO085 (§8.3 test 4). | **at rest pass 2026-11-08:** at working revs SFLP within 0.010°, sd 0.014° (TM171 0.07–0.14°, 0.089°); driving runs open (K7) |
 | **B6** | Still baseline: two hours at rest, Allan deviation, random walk near 0.23 °/√h (§8.3 test 2). | **pass 2026-11-06:** 0.14 °/√h, tilt within 0.011° over 2 h (§8.4) |
 | **B7** | Bench vibration: still-to-shaking shifts within the §8.3 table, two orientations (§8.3 test 3). | open: sander Z up 2026-11-08 fails while shaking for both IMUs, SFLP +6°, TM171 +3°, the low-g rectifying (§8.4); cooler and Y up to run |
-| **K8** | **The daemon's own fusion** from the raw low-g, high-g and gyro, GNSS-aided (§8.5). Offline in Python against the test 3 and 4 logs first, then in `core`. | open: first offline try 2026-11-08, sander run held to 0.4–0.6° against the SFLP's 6° (§8.5) |
+| **K8** | **The daemon's own fusion** from the raw low-g, high-g and gyro, GNSS-aided (§8.5). Offline in Python against the test 3 and 4 logs first, then in `core`. | open: offline 2026-11-08, sander run held to 0.4–0.6° against the SFLP's 6°, tractor within 0.04°; low-g/high-g blend, half at 100 mg (§8.5) |
