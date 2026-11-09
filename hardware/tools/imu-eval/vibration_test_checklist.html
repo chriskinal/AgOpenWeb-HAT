@@ -84,7 +84,7 @@ Plan: <code>hardware/imu-breakout/HARDWARE_IMU_BREAKOUT.md</code> §8.3. Ticks a
 <ul class="check">
   <li><label><input type="checkbox"><span><b>MEMS Studio opens with no internet.</b> Turn Wi-Fi off, start it, connect the MKI109V3, see live data. If it wants a login or an update, sort it now.</span></label></li>
   <li><label><input type="checkbox"><span>Python 3 and pyserial installed: <code class="mac">python3 -c "import serial"</code><code class="win">python -c "import serial"</code> gives no error.</span></label></li>
-  <li><label><input type="checkbox"><span><code>tm171_log.py</code> and <code>analyze.py</code> copied onto the laptop, in one folder.</span></label></li>
+  <li><label><input type="checkbox"><span><code>tm171_log.py</code>, <code>analyze.py</code>, <code>fusion_offline.py</code> and, for the driving runs, <code>um982_log.py</code> copied onto the laptop, in one folder.</span></label></li>
   <li><label><input type="checkbox"><span>A folder for the logs:
     <code class="mac">mkdir -p ~/imu-runs</code><code class="win">mkdir C:\imu-runs</code></span></label></li>
   <li><label><input type="checkbox"><span><b>Dress rehearsal:</b> a 30 s run of both loggers with two taps, then <code>analyze.py</code> on the pair. It must say "aligned on the taps" (or "aligned on the shaking") and show segments.</span></label></li>
@@ -108,6 +108,7 @@ Plan: <code>hardware/imu-breakout/HARDWARE_IMU_BREAKOUT.md</code> §8.3. Ticks a
   <li><label><input type="checkbox"><span>A screwdriver handle for the taps.</span></label></li>
   <li><label><input type="checkbox"><span>Phone, for photos of each mounting (the orientation matters later).</span></label></li>
   <li><label><input type="checkbox"><span>Tractor: bolts, clamps or ratchet straps to fix the plate rigidly where the HAT will live. No foam.</span></label></li>
+  <li><label><input type="checkbox"><span>Driving runs: a lead from the dual-antenna receiver to the laptop (its USB, or a USB-serial adapter on a spare COM port), or a network cable to the AiO's switch for <code>--udp 9999</code>.</span></label></li>
 </ul>
 </section>
 
@@ -207,7 +208,7 @@ python tm171_log.py --out C:\imu-runs\r01_tm171.csv</pre>
 <h2>8. Run log</h2>
 <p>Click a cell to type. Saved in this browser; print or copy it when done.</p>
 <div class="scroll"><table id="runlog">
-<tr><th>Run</th><th>Time</th><th>A/B</th><th>Source, intensity</th><th>Orient.</th><th>MEMS Studio file</th><th>TM171 file</th><th>rms g</th><th>Clipped?</th><th>Notes</th></tr>
+<tr><th>Run</th><th>Time</th><th>A/B</th><th>Source, intensity</th><th>Orient.</th><th>MEMS Studio file</th><th>TM171 file</th><th>rms g</th><th>Clipped?</th><th>Notes</th><th>Receiver file</th></tr>
 </table></div>
 </section>
 
@@ -222,12 +223,43 @@ python tm171_log.py --out C:\imu-runs\r01_tm171.csv</pre>
 <ol class="steps">
   <li>Start both loggers, tap, <b>5 min engine off</b>.</li>
   <li>Enter, start the engine, <b>5 min idle</b>.</li>
-  <li>Enter, <b>5 min at working revs</b> (PTO speed, PTO on if it is safe to run unloaded).</li>
+  <li>Enter, <b>5 min at working revs</b> (PTO speed, PTO off).</li>
   <li>Enter, engine off, <b>2 min still</b>, tap, stop both loggers.</li>
 </ol>
 <p>Nothing moves the tractor, so the true roll is constant: any shift when the engine starts is error, no reference needed. A tap on the plate with the engine running may not show above the vibration; tap firmly, and tap again at the end with the engine off.</p>
-<h3>Driving runs (optional today)</h3>
-<p>A straight pass, a headland turn and a side slope, setting A, Enter at each change. There is no true roll to compare with yet (the UM982's dual-antenna roll is not in <code>/api/status</code>, K7), so these give the ST part against the TM171 only. Worth logging for our own fusion later: note the time of each manoeuvre in the run log.</p>
+
+<h3>Bush hog, parked, PTO on: one run per setting (A, then B)</h3>
+<p>The implement's own shaking (blades, gearbox, the driveline's joints at twice PTO speed) on top of the engine's, still with a constant true roll: no reference needed. Worn or chipped blades shake more; note their state.</p>
+<ul class="check">
+  <li><label><input type="checkbox"><span><b>Safety:</b> clear, level ground with nothing to throw (no stones, sticks, wire); deck down; <b>nobody near the deck</b> (the cutter's manual gives the distance); the laptop and you in the cab or well to the front. Shields and chains on.</span></label></li>
+  <li><label><input type="checkbox"><span>Deck height set as for cutting, so it sits as it would in work.</span></label></li>
+</ul>
+<ol class="steps">
+  <li>Start both loggers, tap, <b>3 min engine off</b>.</li>
+  <li>Enter, start the engine, <b>2 min at working revs</b>, PTO off.</li>
+  <li>Enter, <b>PTO on</b> at 540, <b>5 min</b>.</li>
+  <li>Enter, PTO off, wait for the blades to stop, engine off, <b>2 min still</b>, tap, stop both loggers.</li>
+</ol>
+
+<h3>Driving runs with the bush hog (setting A; B too if there is time)</h3>
+<p>The dual-antenna receiver's roll is the reference: its antennas side by side across the tractor (the AgOpenGPS layout), so the receiver's "pitch" is the tractor's roll. Its speed and heading also let our fusion try GNSS aiding later.</p>
+<ul class="check">
+  <li><label><input type="checkbox"><span>Third terminal, the receiver logger, started before the others:
+    <pre class="mac">caffeinate -i python3 um982_log.py --out ~/imu-runs/r10_um982.csv</pre>
+    <pre class="win">python um982_log.py --out C:\imu-runs\r10_um982.csv</pre>
+    It finds the port and rate itself (or add <code>--port</code> and <code>--baud</code>). On an AiO tractor, from the network instead: <code>--udp 9999</code>, with AgOpenGPS or AgOpenWeb on this laptop stopped.</span></label></li>
+  <li><label><input type="checkbox"><span>Its status line shows <b>rows</b> going up, a <b>heading</b> and a <b>roll</b>. "no HPR, KSXT or PAOGI yet" means the receiver sends neither: set it to output HPR (or KSXT) at 10 Hz or more before going on.</span></label></li>
+  <li><label><input type="checkbox"><span>The heading fixed before starting: <code>hq 4</code> on the logger&#39;s status line (the heading&#39;s own quality; 5 is float, noisier roll). It needs no RTK corrections, only a minute or so of open sky; the position&#39;s fix does not matter here.</span></label></li>
+</ul>
+<ol class="steps">
+  <li>Start all three loggers, tap, <b>2 min still</b>, engine running, PTO off.</li>
+  <li>Enter, PTO on, <b>straight pass</b> mowing, steady speed, at least 2 min.</li>
+  <li>Enter, <b>headland turn</b>.</li>
+  <li>Enter, the <b>same pass back</b> the other way (a slope's roll changes sign: it shows any offset).</li>
+  <li>Enter, a <b>side slope</b> along the contour, and a <b>rough patch</b> if there is one.</li>
+  <li>Enter, stop, PTO off, <b>2 min still</b>, tap, stop all three loggers.</li>
+</ol>
+<p>Press Enter in <b>both</b> logger terminals (TM171 and receiver) at each change, and note the time of each manoeuvre in the run log. The receiver's log and the TM171's share the laptop's clock, so all three line up.</p>
 </section>
 
 <section>
@@ -261,9 +293,10 @@ python tm171_log.py --out C:\imu-runs\r01_tm171.csv</pre>
 
   // Checkboxes
   state.checks = state.checks || {};
-  document.querySelectorAll("ul.check input").forEach(function (c, i) {
-    c.checked = !!state.checks[i];
-    c.addEventListener("change", function () { state.checks[i] = c.checked; save(); });
+  document.querySelectorAll("ul.check input").forEach(function (c) {
+    var key = c.parentNode.textContent.replace(/\s+/g, " ").trim().slice(0, 80);
+    c.checked = !!state.checks[key];
+    c.addEventListener("change", function () { state.checks[key] = c.checked; save(); });
   });
 
   // Run log: 16 rows, editable
@@ -271,7 +304,7 @@ python tm171_log.py --out C:\imu-runs\r01_tm171.csv</pre>
   state.log = state.log || {};
   for (var r = 0; r < 16; r++) {
     var tr = document.createElement("tr");
-    for (var c = 0; c < 10; c++) {
+    for (var c = 0; c < 11; c++) {
       var td = document.createElement("td");
       var id = r + ":" + c;
       td.contentEditable = "true";

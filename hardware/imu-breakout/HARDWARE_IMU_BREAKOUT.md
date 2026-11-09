@@ -296,6 +296,10 @@ fallback.
   steps in its level (idle to working revs), and gives each IMU's roll and pitch per
   segment; with `--still`, drift in 10-minute blocks, against temperature, and the Allan deviation
   (DT0064).
+- **The receiver logger** is `hardware/tools/imu-eval/um982_log.py`: HPR, KSXT or PAOGI (heading
+  and roll) with speed and fix, from a serial port (port and rate found by itself) or from UDP (an
+  AiO's PAOGI on port 9999), stamped with the laptop's clock as the TM171 log is; every sentence
+  also to a `.nmea` file.
 - **The offline filter** is `hardware/tools/imu-eval/fusion_offline.py`: tilt filters replayed on a
   fusion-off log, for the daemon's own fusion (§8.5).
 - **MEMS Studio's quirks.** Turning fusion on turns the high-g channel and the temperature column
@@ -328,10 +332,14 @@ fallback.
    off with high-g on (low-g ±16 g and gyro ±500 dps at 240 Hz, high-g ±32 g at 480 Hz: the raw
    data for §8.5), then fusion on (the SFLP's answer).
 4. **Tractor, same plate, where the HAT will live (B5).** Engine off, idle and PTO speed for five
-   minutes each at rest, then a straight pass, a headland turn and a side slope. At rest the true
-   roll is constant, so the shift when the engine starts is the error with no reference needed. For
-   the driving runs the UM982's dual-antenna roll is the vibration-free reference; it is not in the
-   daemon's `/api/status` yet (K7).
+   minutes each at rest; then an 8 ft rotary cutter (bush hog) on, parked with the PTO running, for
+   the implement's own shaking (blades, gearbox, the driveline's joints at twice PTO speed); then
+   mowing: a straight pass, a headland turn, the same pass back, a side slope, a rough patch. At
+   rest the true roll is constant, so the shift when the engine or the PTO starts is the error with
+   no reference needed. For the driving runs the dual-antenna receiver's roll (antennas side by
+   side, so its pitch is the tractor's roll) is the vibration-free reference, logged on the laptop
+   by `hardware/tools/imu-eval/um982_log.py` beside the other two (it is not in the daemon's
+   `/api/status` yet, K7); its speed and heading are what GNSS aiding (§8.5) needs.
 
 For each run, per IMU:
 
