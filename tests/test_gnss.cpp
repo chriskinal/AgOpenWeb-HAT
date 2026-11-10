@@ -160,6 +160,14 @@ int main() {
         CHECK(near(s.speedKnots, 18.52f * 0.539957f, 1e-3));
         CHECK(near(s.dualHeading, 90.5f, 1e-4) && near(s.dualRoll, 2.25f, 1e-4));
         CHECK(nav::select(s, 7) == nav::Sentence::Paogi);
+
+        // No RTK: the position single, the heading fixed, then float; each from its own field
+        feed(r, seal("$KSXT,20260928123519.60,11.516667,48.117300,545.40,90.50,2.25,90.00,18.52,0.10,1,3,1.0,24,22"),
+             &p, 7, &m);
+        CHECK(s.fixQuality == 1 && s.headingQuality == 4);
+        feed(r, seal("$KSXT,20260928123519.70,11.516667,48.117300,545.40,90.50,2.25,90.00,18.52,0.10,1,2,1.0,24,22"),
+             &p, 7, &m);
+        CHECK(s.fixQuality == 1 && s.headingQuality == 5);
     }
 
     // --- INSPVAXA (UM981): status and position type map to fix quality; undulation at 15, the

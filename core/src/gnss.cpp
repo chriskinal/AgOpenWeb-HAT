@@ -108,7 +108,16 @@ bool parseHpr(State& s, const Fields& f) {
     return true;  // no position: lastUpdateUs unchanged
 }
 
-// $KSXT,YYYYMMDDHHMMSS.ss,lon,lat,alt,heading,pitch,track,speed_kmh,roll,quality,...,sats
+// KSXT quality (0 none, 1 single, 2 float, 3 fixed) in GGA's numbers (5 float, 4 fixed).
+uint8_t ksxtQuality(const Fields& f, int i) {
+    uint8_t q = static_cast<uint8_t>(f.integer(i));
+    if (q == 2) q = 5;
+    else if (q == 3) q = 4;
+    return q;
+}
+
+// $KSXT,YYYYMMDDHHMMSS.ss,lon,lat,alt,heading,pitch,track,speed_kmh,roll,
+//       position quality,heading quality,heading sats,position sats,...
 bool parseKsxt(State& s, const Fields& f, uint64_t now) {
     if (f.count() < 10) return false;
     if (std::strlen(f[1]) >= 14) s.fixTime = std::strtod(f[1] + 8, nullptr);
@@ -118,13 +127,10 @@ bool parseKsxt(State& s, const Fields& f, uint64_t now) {
     if (!f.empty(5)) s.dualHeading = static_cast<float>(f.num(5));
     if (!f.empty(6)) s.dualRoll = static_cast<float>(f.num(6));  // pitch: AgOpenGPS's roll
     if (!f.empty(8)) s.speedKnots = static_cast<float>(f.num(8)) * kKmhToKnots;
-    if (!f.empty(10)) {
-        uint8_t q = static_cast<uint8_t>(f.integer(10));
-        if (q == 2) q = 5;       // float
-        else if (q == 3) q = 4;  // fixed
-        s.fixQuality = q;
-        s.headingQuality = q;
-    }
+    if (!f.empty(10)) s.fixQuality = ksxtQuality(f, 10);
+    // AOW HAT: the heading's own quality from field 11; the firmware copies the position's
+    // (field 10), which says single or float for a heading that is fixed without RTK.
+    if (!f.empty(11)) s.headingQuality = ksxtQuality(f, 11);
     if (!f.empty(13)) s.numSatellites = static_cast<uint8_t>(f.integer(13));
     s.hdop = 0;  // not in KSXT
     s.hasDualHeading = true;
