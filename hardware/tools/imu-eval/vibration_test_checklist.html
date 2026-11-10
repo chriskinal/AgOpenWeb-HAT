@@ -84,10 +84,10 @@ Plan: <code>hardware/imu-breakout/HARDWARE_IMU_BREAKOUT.md</code> §8.3. Ticks a
 <ul class="check">
   <li><label><input type="checkbox"><span><b>MEMS Studio opens with no internet.</b> Turn Wi-Fi off, start it, connect the MKI109V3, see live data. If it wants a login or an update, sort it now.</span></label></li>
   <li><label><input type="checkbox"><span>Python 3 and pyserial installed: <code class="mac">python3 -c "import serial"</code><code class="win">python -c "import serial"</code> gives no error.</span></label></li>
-  <li><label><input type="checkbox"><span><code>tm171_log.py</code>, <code>analyze.py</code>, <code>fusion_offline.py</code> and, for the driving runs, <code>um982_log.py</code> copied onto the laptop, in one folder.</span></label></li>
+  <li><label><input type="checkbox"><span><code>field_log.py</code> (the logger: the TM171, and the receiver for the driving runs), <code>analyze.py</code> and <code>fusion_offline.py</code> copied onto the laptop, in one folder.</span></label></li>
   <li><label><input type="checkbox"><span>A folder for the logs:
     <code class="mac">mkdir -p ~/imu-runs</code><code class="win">mkdir C:\imu-runs</code></span></label></li>
-  <li><label><input type="checkbox"><span><b>Dress rehearsal:</b> a 30 s run of both loggers with two taps, then <code>analyze.py</code> on the pair. It must say "aligned on the taps" (or "aligned on the shaking") and show segments.</span></label></li>
+  <li><label><input type="checkbox"><span><b>Dress rehearsal:</b> a 30 s run of MEMS Studio and the logger with two taps, then <code>analyze.py</code> on the pair. It must say "aligned on the taps" (or "aligned on the shaking") and show segments.</span></label></li>
   <li><label><input type="checkbox"><span>Disk: at least 2 GB free. A raw run (high-g on) is about 85 kB/s, a fusion run about 42 kB/s: a 5-minute run is 13–26 MB.</span></label></li>
   <li><label><input type="checkbox"><span>Sleep off while plugged in and on battery
     <span class="mac">(System Settings, Battery: prevent automatic sleeping; the logger runs under <code>caffeinate -i</code>; keep the lid open)</span><span class="win">(Settings, System, Power: screen and sleep "Never"; keep the lid open or set lid close to "Do nothing")</span>.</span></label></li>
@@ -148,12 +148,12 @@ Not X up: with X pointing up the pitch is 90° and roll is undefined, so the til
 <p>About 5 minutes. Run names: <code>r01</code>, <code>r02</code> … Fill in the run log (section 8) as you go.</p>
 <ol class="steps">
   <li>Plate set, sander off, nothing touching the rig. Settings A or B checked in MEMS Studio.</li>
-  <li>Start the TM171 logger in a terminal:
+  <li>Start the logger in a terminal:
     <pre class="mac">cd FOLDER_WITH_THE_SCRIPTS
-caffeinate -i python3 tm171_log.py --out ~/imu-runs/r01_tm171.csv</pre>
+caffeinate -i python3 field_log.py --out ~/imu-runs/r01</pre>
     <pre class="win">cd FOLDER_WITH_THE_SCRIPTS
-python tm171_log.py --out C:\imu-runs\r01_tm171.csv</pre>
-    It prints <code>TM171 on …</code>, then roll/pitch/yaw once a second. (It skips the port MEMS Studio holds. If it finds nothing, add <code>--port</code><span class="win"> <code>COM5</code> from Device Manager</span>.)</li>
+python field_log.py --out C:\imu-runs\r01</pre>
+    It prints <code>TM171 on …</code>, then the TM171's roll and pitch once a second, and writes <code>r01_tm171.csv</code>. (It skips the port MEMS Studio holds. If it finds nothing, add <code>--tm171</code> and the port<span class="win">, <code>COM5</code> from Device Manager</span>.) If a lead is knocked out it says "dropped" and carries on when it is back in.</li>
   <li>Start logging in MEMS Studio. Note the file name.</li>
   <li>Wait 5 s. <b>Tap</b> the plate sharply once with the screwdriver handle.</li>
   <li><b>60 s still.</b> Hands off.</li>
@@ -221,10 +221,10 @@ python tm171_log.py --out C:\imu-runs\r01_tm171.csv</pre>
 </ul>
 <h3>At rest, engine runs: one long run per setting (A, then B)</h3>
 <ol class="steps">
-  <li>Start both loggers, tap, <b>5 min engine off</b>.</li>
+  <li>Start the logger and MEMS Studio, tap, <b>5 min engine off</b>.</li>
   <li>Enter, start the engine, <b>5 min idle</b>.</li>
   <li>Enter, <b>5 min at working revs</b> (PTO speed, PTO off).</li>
-  <li>Enter, engine off, <b>2 min still</b>, tap, stop both loggers.</li>
+  <li>Enter, engine off, <b>2 min still</b>, tap, stop MEMS Studio and the logger.</li>
 </ol>
 <p>Nothing moves the tractor, so the true roll is constant: any shift when the engine starts is error, no reference needed. A tap on the plate with the engine running may not show above the vibration; tap firmly, and tap again at the end with the engine off.</p>
 
@@ -235,37 +235,37 @@ python tm171_log.py --out C:\imu-runs\r01_tm171.csv</pre>
   <li><label><input type="checkbox"><span>Deck height set as for cutting, so it sits as it would in work.</span></label></li>
 </ul>
 <ol class="steps">
-  <li>Start both loggers, tap, <b>3 min engine off</b>.</li>
+  <li>Start the logger and MEMS Studio, tap, <b>3 min engine off</b>.</li>
   <li>Enter, start the engine, <b>2 min at working revs</b>, PTO off.</li>
   <li>Enter, <b>PTO on</b> at 540, <b>5 min</b>.</li>
-  <li>Enter, PTO off, wait for the blades to stop, engine off, <b>2 min still</b>, tap, stop both loggers.</li>
+  <li>Enter, PTO off, wait for the blades to stop, engine off, <b>2 min still</b>, tap, stop MEMS Studio and the logger.</li>
 </ol>
 
 <h3>Driving runs with the bush hog (setting A; B too if there is time)</h3>
 <p>The dual-antenna receiver's roll is the reference: its antennas side by side across the tractor (the AgOpenGPS layout), so the receiver's "pitch" is the tractor's roll. Its speed and heading also let our fusion try GNSS aiding later.</p>
 <ul class="check">
-  <li><label><input type="checkbox"><span>Third terminal, the receiver logger, started before the others:
-    <pre class="mac">caffeinate -i python3 um982_log.py --out ~/imu-runs/r10_um982.csv</pre>
-    <pre class="win">python um982_log.py --out C:\imu-runs\r10_um982.csv</pre>
-    It finds the port and rate itself (or add <code>--port</code> and <code>--baud</code>). On an AiO tractor, from the network instead: <code>--udp 9999</code>, with AgOpenGPS or AgOpenWeb on this laptop stopped.</span></label></li>
-  <li><label><input type="checkbox"><span>Its status line shows <b>rows</b> going up, a <b>heading</b> and a <b>roll</b>. "no HPR, KSXT or PAOGI yet" means the receiver sends neither: set it to output HPR (or KSXT) at 10 Hz or more before going on.</span></label></li>
+  <li><label><input type="checkbox"><span>The same logger, with the receiver too (one terminal, one Enter for both):
+    <pre class="mac">caffeinate -i python3 field_log.py --out ~/imu-runs/r10 --um982</pre>
+    <pre class="win">python field_log.py --out C:\imu-runs\r10 --um982</pre>
+    It writes <code>r10_tm171.csv</code>, <code>r10_um982.csv</code> and <code>r10_um982.nmea</code>, and prints <code>receiver on …</code>. It finds the receiver's port and rate itself; if not, give them: <code>--um982 PORT --baud 460800</code> (<span class="mac"><code>ls /dev/cu.*</code></span><span class="win">Device Manager</span> shows the port). On an AiO tractor, from the network instead: <code>--udp 9999</code> in place of <code>--um982</code>, with AgOpenGPS or AgOpenWeb on this laptop stopped.</span></label></li>
+  <li><label><input type="checkbox"><span>The status line's receiver part shows <b>rows</b> going up, a <b>heading</b> and a <b>roll</b>. "no receiver rows … must output HPR, KSXT or PAOGI" means the receiver sends none of them: set it to output HPR (or KSXT) at 10 Hz or more before going on.</span></label></li>
   <li><label><input type="checkbox"><span>The heading fixed before starting: <code>hq 4</code> on the logger&#39;s status line (the heading&#39;s own quality; 5 is float, noisier roll). It needs no RTK corrections, only a minute or so of open sky; the position&#39;s fix does not matter here.</span></label></li>
 </ul>
 <ol class="steps">
-  <li>Start all three loggers, tap, <b>2 min still</b>, engine running, PTO off.</li>
+  <li>Start the logger and MEMS Studio, tap, <b>2 min still</b>, engine running, PTO off.</li>
   <li>Enter, PTO on, <b>straight pass</b> mowing, steady speed, at least 2 min.</li>
   <li>Enter, <b>headland turn</b>.</li>
   <li>Enter, the <b>same pass back</b> the other way (a slope's roll changes sign: it shows any offset).</li>
   <li>Enter, a <b>side slope</b> along the contour, and a <b>rough patch</b> if there is one.</li>
-  <li>Enter, stop, PTO off, <b>2 min still</b>, tap, stop all three loggers.</li>
+  <li>Enter, stop, PTO off, <b>2 min still</b>, tap, stop MEMS Studio and the logger.</li>
 </ol>
-<p>Press Enter in <b>both</b> logger terminals (TM171 and receiver) at each change, and note the time of each manoeuvre in the run log. The receiver's log and the TM171's share the laptop's clock, so all three line up.</p>
+<p>One Enter in the logger's terminal marks both its logs at each change; note the time of each manoeuvre in the run log too. The receiver's log and the TM171's carry the laptop's clock, so all three line up.</p>
 </section>
 
 <section>
 <h2>10. Before packing up</h2>
 <ul class="check">
-  <li><label><input type="checkbox"><span>Every run in the log has both files, and both open.</span></label></li>
+  <li><label><input type="checkbox"><span>Every run in the log has its files (MEMS Studio&#39;s and the TM171&#39;s; the receiver&#39;s for driving runs), and they open.</span></label></li>
   <li><label><input type="checkbox"><span>Copy all logs to a USB stick or the cloud before leaving.</span></label></li>
   <li><label><input type="checkbox"><span>Print or copy the run log (section 8).</span></label></li>
 </ul>

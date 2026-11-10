@@ -1,2 +1,3 @@
-# Logs from tm171_log.py: kept local
+# Logs from field_log.py and MEMS Studio: kept local
 *.csv
+*.nmea

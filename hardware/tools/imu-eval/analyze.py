@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2026 The AgOpenWeb-HAT contributors
-"""Analyses an LSM6DSK320X log from MEMS Studio against a TM171 log from tm171_log.py
+"""Analyses an LSM6DSK320X log from MEMS Studio against a TM171 log from field_log.py
 (hardware/imu-breakout/HARDWARE_IMU_BREAKOUT.md section 8).
 
     python3 analyze.py ST_LOG.csv [TM171_LOG.csv] [--still] [--allan-csv FILE]

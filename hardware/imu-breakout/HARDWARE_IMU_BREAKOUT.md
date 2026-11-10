@@ -286,8 +286,8 @@ fallback.
   shows the board, not the shaker. The reference IMU bolts beside it, X forward, Z up, leads short
   and tied down.
 - **The reference IMU** is logged separately on the Mac: the TM171 on USB by
-  `hardware/tools/imu-eval/tm171_log.py` (Mac, Linux or Windows; Enter bumps a marker column at
-  each still/shaking change). A sharp tap on the plate at the start and end of each run lines the
+  `hardware/tools/imu-eval/field_log.py` (Mac, Linux or Windows; Enter bumps a marker column at
+  each still/shaking change; a port that drops is reopened). A sharp tap on the plate at the start and end of each run lines the
   two logs up: the TM171's own timestamp runs about 0.27 % fast and wraps every 71.6 min. The
   TM171's gyro output is filtered and often misses the taps (7 dps peak on the sander).
 - **The analysis script** is `hardware/tools/imu-eval/analyze.py` (pure Python): it aligns the logs
@@ -296,10 +296,11 @@ fallback.
   steps in its level (idle to working revs), and gives each IMU's roll and pitch per
   segment; with `--still`, drift in 10-minute blocks, against temperature, and the Allan deviation
   (DT0064).
-- **The receiver logger** is `hardware/tools/imu-eval/um982_log.py`: HPR, KSXT or PAOGI (heading
-  and roll) with speed and fix, from a serial port (port and rate found by itself) or from UDP (an
-  AiO's PAOGI on port 9999), stamped with the laptop's clock as the TM171 log is; every sentence
-  also to a `.nmea` file.
+- **The receiver** is logged by the same script with `--um982` (or `--udp 9999`, an AiO's PAOGI),
+  to its own file beside the TM171's, with the same clock and markers: HPR, KSXT or PAOGI (heading
+  and roll; KSXT's heading quality from its field 11, apart from the position's) with speed and
+  fix, from a serial port (port and rate found by itself) or UDP; every sentence also to a `.nmea`
+  file.
 - **The offline filter** is `hardware/tools/imu-eval/fusion_offline.py`: tilt filters replayed on a
   fusion-off log, for the daemon's own fusion (§8.5).
 - **MEMS Studio's quirks.** Turning fusion on turns the high-g channel and the temperature column
@@ -338,7 +339,7 @@ fallback.
    rest the true roll is constant, so the shift when the engine or the PTO starts is the error with
    no reference needed. For the driving runs the dual-antenna receiver's roll (antennas side by
    side, so its pitch is the tractor's roll) is the vibration-free reference, logged on the laptop
-   by `hardware/tools/imu-eval/um982_log.py` beside the other two (it is not in the daemon's
+   by `hardware/tools/imu-eval/field_log.py --um982` beside the TM171 (it is not in the daemon's
    `/api/status` yet, K7); its speed and heading are what GNSS aiding (§8.5) needs.
 
 For each run, per IMU:
