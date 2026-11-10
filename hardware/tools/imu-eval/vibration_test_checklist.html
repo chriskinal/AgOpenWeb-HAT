@@ -98,6 +98,7 @@ Plan: <code>hardware/imu-breakout/HARDWARE_IMU_BREAKOUT.md</code> §8.3. Ticks a
 
 <section>
 <h2>2. Pack list</h2>
+<h3>Bench (sander and cooler)</h3>
 <ul class="check">
   <li><label><input type="checkbox"><span>The plate: MKI109V3 with the MKI257A in its socket, TM171 beside it, both bolted through all holes.</span></label></li>
   <li><label><input type="checkbox"><span>Two USB cables that fit (and a spare of each), a USB hub if the laptop is short of ports.</span></label></li>
@@ -107,8 +108,18 @@ Plan: <code>hardware/imu-breakout/HARDWARE_IMU_BREAKOUT.md</code> §8.3. Ticks a
   <li><label><input type="checkbox"><span>Vise or bar clamps, a rag for the jaws, a towel.</span></label></li>
   <li><label><input type="checkbox"><span>A screwdriver handle for the taps.</span></label></li>
   <li><label><input type="checkbox"><span>Phone, for photos of each mounting (the orientation matters later).</span></label></li>
-  <li><label><input type="checkbox"><span>Tractor: bolts, clamps or ratchet straps to fix the plate rigidly where the HAT will live. No foam.</span></label></li>
-  <li><label><input type="checkbox"><span>Driving runs: a lead from the dual-antenna receiver to the laptop (its USB, or a USB-serial adapter on a spare COM port), or a network cable to the AiO's switch for <code>--udp 9999</code>.</span></label></li>
+</ul>
+<h3>Tractor and bush hog (section 9)</h3>
+<ul class="check">
+  <li><label><input type="checkbox"><span>The plate's mounting: bolts, clamps or ratchet straps to fix it rigidly where the HAT will live. No foam. Zip ties to hold the leads to the cab so they do not swing.</span></label></li>
+  <li><label><input type="checkbox"><span><b>Three USB devices</b> on the laptop at once (MKI109V3, TM171, receiver): enough ports, or a hub. USB leads long enough from the plate to where the laptop sits, kept away from the door, pedals and seat.</span></label></li>
+  <li><label><input type="checkbox"><span>A lead from the dual-antenna receiver to the laptop (its USB, or a USB-serial adapter on a spare COM port), or a network cable to the AiO's switch for <code>--udp 9999</code>.</span></label></li>
+  <li><label><input type="checkbox"><span><b>Receiver set up before leaving:</b> antennas side by side across the cab roof, the baseline measured and entered, KSXT at 10 Hz on the port the laptop reads. A bench check with <code>field_log.py --um982</code> shows <code>hq 4</code>.</span></label></li>
+  <li><label><input type="checkbox"><span>Laptop power for a few hours: a 12 V inverter or a USB-C car charger, and a place in the cab where the laptop cannot slide (a strap or a box).</span></label></li>
+  <li><label><input type="checkbox"><span>Tape measure: the plate's position from the rear axle centre and its height; the antennas' height and baseline. Phone for photos of the plate, the antennas and the blades.</span></label></li>
+  <li><label><input type="checkbox"><span><b>Bush hog:</b> blades checked and their state noted (worn or chipped ones shake more), shields, chains and the driveline guard on, greased; PTO shaft and its shear bolt or clutch as normal.</span></label></li>
+  <li><label><input type="checkbox"><span>The field picked ahead: a level spot clear of stones and wire for the parked runs, a straight pass with room to turn, a side slope and a rough patch.</span></label></li>
+  <li><label><input type="checkbox"><span>Ear and eye protection; this checklist (or a printout of the run log) and a pen.</span></label></li>
 </ul>
 </section>
 
