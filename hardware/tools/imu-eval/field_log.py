@@ -58,12 +58,21 @@ def crc16(data):
     return c
 
 
+def take(port):
+    """What has arrived, as soon as it has: one byte (or nothing after the timeout), then whatever
+    is waiting. A plain read(4096) on Windows waits for all 4096 bytes, so the receiver's rows came
+    3 s late, stamped in bursts."""
+    data = port.read(1)
+    n = port.in_waiting
+    return data + port.read(n) if data and n else data
+
+
 def frames(port):
     """Yields (object id, timestamp, floats) for each frame with a good CRC; None on each read
     timeout, so the caller can stop."""
     buf = bytearray()
     while True:
-        data = port.read(1024)
+        data = take(port)
         if not data:
             yield None
         buf += data
@@ -95,6 +104,8 @@ class Device:
 
     def run(self, marker, stop):
         with self.open_files() as out:
+            if self.port:
+                self.port.reset_input_buffer()  # what queued up while the other ports were found
             while not stop.is_set():
                 try:
                     self.read(out, marker, stop)
@@ -246,7 +257,7 @@ def serial_lines(port):
     """Lines as they come; an empty one on each read timeout."""
     buf = b""
     while True:
-        data = port.read(4096)
+        data = take(port)
         if not data:
             yield ""
         buf += data
@@ -331,7 +342,7 @@ def listen(name, rate, secs):
         return None, b""
     t, data = time.time() + secs, b""
     while time.time() < t:
-        data += s.read(4096)
+        data += take(s)
     return s, data
 
 

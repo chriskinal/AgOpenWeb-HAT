@@ -95,16 +95,19 @@ def load_tm(path):
     log = Log("TM171")
     keys = ("roll", "pitch", "yaw", "gx", "gy", "gz", "ax", "ay", "az", "temp")
     log.col = {k: array("d") for k in ("t", "marker") + keys}
-    prev, wraps, t0 = None, 0, None
+    prev, base, t0 = None, 0.0, None
     with open(path, newline="") as f:
         for r in csv.DictReader(f):
             if not all(r[k] for k in keys[:9]):
                 continue
-            ts = int(r["dev_ts"])
-            if prev is not None and ts < prev:
-                wraps += 1  # a 32-bit microsecond counter: wraps every 71.6 min
-            prev = ts
-            t = (ts + wraps * 2 ** 32) / 1e6
+            ts, mac = int(r["dev_ts"]), float(r["mac_time"])
+            if prev is not None and ts < prev[0]:
+                if prev[0] > 2 ** 32 - 60e6 and ts < 60e6:
+                    base += 2 ** 32 / 1e6  # a 32-bit microsecond counter: wraps every 71.6 min
+                else:  # the TM171 restarted (its lead replugged): carry on by the laptop's clock
+                    base = prev[1] + (mac - prev[2]) - ts / 1e6
+            t = base + ts / 1e6
+            prev = (ts, t, mac)
             if t0 is None:
                 t0 = t
             log["t"].append(t - t0)
