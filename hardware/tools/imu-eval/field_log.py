@@ -234,6 +234,8 @@ class Nav:
         elif name in ("KSXT", "GPKSXT"):
             # $KSXT,YYYYMMDDHHMMSS.ss,lon,lat,alt,heading,pitch,track,speed_kmh,roll,
             #       position quality,heading quality,heading sats,position sats,...
+            # f[i] counts from $KSXT as 0; Unicore's manual counts it as field 1, so its field
+            # 12, the heading quality, is f[11].
             # Qualities 0 none, 1 single, 2 float, 3 fixed: written as GGA/HPR's 0, 1, 5, 4.
             gga = lambda i: {"2": "5", "3": "4"}.get(f[i], f[i]) if i < len(f) else ""
             self.lon, self.lat, self.alt = num(f, 2), num(f, 3), num(f, 4)

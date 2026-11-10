@@ -118,6 +118,8 @@ uint8_t ksxtQuality(const Fields& f, int i) {
 
 // $KSXT,YYYYMMDDHHMMSS.ss,lon,lat,alt,heading,pitch,track,speed_kmh,roll,
 //       position quality,heading quality,heading sats,position sats,...
+// f[i] counts from $KSXT as 0; Unicore's manual counts it as field 1, so its field 12, the
+// heading quality, is f[11].
 bool parseKsxt(State& s, const Fields& f, uint64_t now) {
     if (f.count() < 10) return false;
     if (std::strlen(f[1]) >= 14) s.fixTime = std::strtod(f[1] + 8, nullptr);
