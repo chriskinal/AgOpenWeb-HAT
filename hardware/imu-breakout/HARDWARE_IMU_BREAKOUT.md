@@ -295,7 +295,12 @@ fallback.
   of the run, 0.99–1.00 on every run so far), splits the run at the markers or at motion and at
   steps in its level (idle to working revs), and gives each IMU's roll and pitch per
   segment; with `--still`, drift in 10-minute blocks, against temperature, and the Allan deviation
-  (DT0064).
+  (DT0064). With the receiver's log beside the TM171's it gives each IMU's roll error against the
+  receiver's, per segment, in 2 s means (`--block`), as shifts from the first segment, so the
+  antennas' own tilt drops out; the receiver's sign is turned over when the run's roll shows the
+  antennas the other way round. The receiver's rows go onto the ST's time by their own UTC and the
+  TM171 log's laptop clock. At rest on a window ledge (1.6 m baseline, half the sky) its roll had
+  0.19° sd at 10 Hz.
 - **The receiver** is logged by the same script with `--um982` (or `--udp 9999`, an AiO's PAOGI),
   to its own file beside the TM171's, with the same clock and markers: HPR, KSXT or PAOGI (heading
   and roll; KSXT's heading quality from its field 11, apart from the position's) with speed and

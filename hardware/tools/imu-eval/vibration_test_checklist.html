@@ -260,6 +260,7 @@ python field_log.py --out C:\imu-runs\r01</pre>
   <li>Enter, stop, PTO off, <b>2 min still</b>, tap, stop MEMS Studio and the logger.</li>
 </ol>
 <p>One Enter in the logger's terminal marks both its logs at each change; note the time of each manoeuvre in the run log too. The receiver's log and the TM171's carry the laptop's clock, so all three line up.</p>
+<p>Check: <code class="mac">python3 analyze.py PATH/Data_Log_….csv ~/imu-runs/r10_tm171.csv</code><code class="win">python analyze.py PATH\Data_Log_….csv C:\imu-runs\r10_tm171.csv</code> finds <code>r10_um982.csv</code> beside it and prints a "Roll against the receiver" table: each IMU's roll error per segment, in 2 s means, against the first (still) segment. The still stretch at the start is the baseline, so keep it.</p>
 </section>
 
 <section>

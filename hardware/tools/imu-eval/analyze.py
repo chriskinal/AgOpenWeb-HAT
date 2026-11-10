@@ -4,7 +4,11 @@
 """Analyses an LSM6DSK320X log from MEMS Studio against a TM171 log from field_log.py
 (hardware/imu-breakout/HARDWARE_IMU_BREAKOUT.md section 8).
 
-    python3 analyze.py ST_LOG.csv [TM171_LOG.csv] [--still] [--allan-csv FILE]
+    python3 analyze.py ST_LOG.csv [RUN_tm171.csv] [--rx RUN_um982.csv] [--block S] [--still]
+                       [--allan-csv FILE]
+
+The receiver's log (RUN_um982.csv beside RUN_tm171.csv) is read when it is there: its roll is the
+reference for the driving runs. It shares the TM171 log's laptop clock, so it lines up through it.
 
 Lines the two logs up on the first and last tap (a gyro spike in both) or, when the TM171 misses
 the taps, on the shaking itself (the accel spread, matched in each half of the run), then reports:
@@ -12,6 +16,8 @@ the taps, on the shaking itself (the accel spread, matched in each half of the r
   - per segment (the TM171 log's markers, or still / shaking found from the accel and gyro): the
     mean and spread of roll and pitch for each IMU, as a shift from the first segment; the
     vibration dose (accel rms about the segment's mean), peaks, clipped samples and gyro bias shift
+  - with the receiver: each IMU's roll against the receiver's, in --block second means (2 s), per
+    segment, all as shifts from the first segment (the antennas' own tilt drops out)
   - with --still (a run at rest): drift of the gyro bias, accel offset and tilt in 10-minute
     blocks and against temperature, and the Allan deviation (ST DT0064) of each gyro and accel axis
 
@@ -21,7 +27,7 @@ positive left side up, pitch positive nose up. MEMS Studio's own "roll" is our p
 "pitch" is minus our roll, so tilt is taken from its gravity vector (fusion on) or the accel.
 Pure Python, no numpy: runs where pyserial runs.
 """
-import argparse, csv, math, statistics as st
+import argparse, csv, math, os, statistics as st
 from array import array
 
 GYRO = ("gyro_x[mdps]", "gyro_y[mdps]", "gyro_z[mdps]")
@@ -94,7 +100,7 @@ def load_st(path):
 def load_tm(path):
     log = Log("TM171")
     keys = ("roll", "pitch", "yaw", "gx", "gy", "gz", "ax", "ay", "az", "temp")
-    log.col = {k: array("d") for k in ("t", "marker") + keys}
+    log.col = {k: array("d") for k in ("t", "marker", "mac") + keys}
     prev, base, t0 = None, 0.0, None
     with open(path, newline="") as f:
         for r in csv.DictReader(f):
@@ -111,6 +117,7 @@ def load_tm(path):
             if t0 is None:
                 t0 = t
             log["t"].append(t - t0)
+            log["mac"].append(mac)
             log["marker"].append(float(r["marker"]))
             for k in keys:
                 v = float(r[k]) if r[k] else math.nan
@@ -120,6 +127,58 @@ def load_tm(path):
                     v = -v * 1000  # g, gravity sign, to mg as the ST part
                 log[k].append(v)
     return log
+
+
+def load_rx(path):
+    """The receiver's log from field_log.py: heading and roll with the heading's quality (4 fixed).
+    Each row's time is its own UTC moved onto the laptop's clock by the earliest arrival: rows can
+    reach the laptop late (USB, a busy laptop) but never early."""
+    rows = []
+    with open(path, newline="") as f:
+        for r in csv.DictReader(f):
+            if not (r["roll"] and r["utc"] and r["mac_time"]):
+                continue
+            u = r["utc"]
+            rows.append((int(u[:2]) * 3600 + int(u[2:4]) * 60 + float(u[4:]), float(r["mac_time"]),
+                         float(r["roll"]), float(r["heading"] or "nan"), float(r["quality"] or 0),
+                         float(r["speed_kmh"] or "nan"), float(r["marker"])))
+    if not rows:
+        raise SystemExit("%s: no receiver rows with a roll" % path)
+    day = 0.0
+    for i in range(1, len(rows)):
+        if rows[i][0] + day < rows[i - 1][0] - 43200:
+            day += 86400  # past midnight UTC
+        rows[i] = (rows[i][0] + day,) + rows[i][1:]
+    lag = min(m - u for u, m, *_ in rows)
+    log = Log("receiver")
+    log.col = {k: array("d") for k in ("mac", "roll", "heading", "q", "speed", "marker")}
+    for u, m, *rest in rows:
+        log["mac"].append(u + lag)
+        for k, v in zip(("roll", "heading", "q", "speed", "marker"), rest):
+            log[k].append(v)
+    return log
+
+
+def mac_to_st(T):
+    """The laptop's clock to the ST's time, through the TM171 rows (both times known for each).
+    Arrival lags, so the earliest-arriving rows in each half give the line."""
+    n = len(T)
+    pts = []
+    for i0, i1 in ((0, n // 2), (n // 2, n)):
+        i = min(range(i0, i1), key=lambda j: T["mac"][j] - T["t"][j])
+        pts.append((T["t"][i], T["mac"][i] - T["t"][i]))
+    (t1, c1), (t2, c2) = pts
+    s = (c2 - c1) / (t2 - t1) if t2 > t1 else 0.0
+    return lambda mac: (mac - c1 + s * t1) / (1 + s)
+
+
+def block_means(t, v, lo, hi, w):
+    """Means of v in w-second blocks between lo and hi, by block index."""
+    out = {}
+    for ti, x in zip(t, v):
+        if lo <= ti < hi and not math.isnan(x):
+            out.setdefault(int((ti - lo) // w), []).append(x)
+    return {b: st.mean(xs) for b, xs in out.items()}
 
 
 def rate_mag(log, keys):
@@ -245,6 +304,60 @@ def levels(S, lo, hi, blk=5.0, step=1.5):
     return edges
 
 
+def against_rx(S, T, R, edges, w):
+    """Each IMU's roll against the receiver's, in w-second means: both as shifts from their first
+    segment, so the antennas' tilt and the plate's sit out. The receiver's roll is noisy (0.2 deg
+    sd at rest) but free of vibration; the means bring its noise down."""
+    lo, hi = edges[0], edges[-1]
+    rb = block_means(R["t"], R["roll"], lo, hi, w)
+    imus = [("ST", block_means(S["t"], S["roll"], lo, hi, w)),
+            ("TM171", block_means(T["t"], T["roll"], lo, hi, w))]
+    first = [b for b in rb if lo + b * w < edges[1]]
+    if not first:
+        print("\nRoll against the receiver: no fixed heading in the first segment, no baseline")
+        return
+    rbase = st.mean(rb[b] for b in first)
+    seg0 = [r for t, r in zip(R["t"], R["roll"]) if lo <= t < edges[1]]
+    fixed0 = sum(1 for r in seg0 if not math.isnan(r)) / len(seg0) if seg0 else 0
+    if fixed0 < 0.8:
+        print("\nReceiver: heading fixed on only %.0f %% of the first segment, the baseline: the errors below "
+              "carry its offset. Start runs with hq 4 steady." % (100 * fixed0))
+    # Which way round the antennas are: from the roll the run went through, when there is enough.
+    sign, how = 1.0, "as logged"
+    sb = imus[0][1]
+    common = [b for b in rb if b in sb]
+    if len(common) > 10 and st.pstdev([rb[b] for b in common]) > 0.5:
+        x, y = [sb[b] for b in common], [rb[b] for b in common]
+        mx, my, sx, sy = st.mean(x), st.mean(y), st.pstdev(x), st.pstdev(y)
+        r = sum((p - mx) * (q - my) for p, q in zip(x, y)) / (len(x) * sx * sy) if sx and sy else 0
+        if r < -0.5:
+            sign, how = -1.0, "turned over (antennas the other way round), r %+.2f" % r
+        else:
+            how = "as logged, r %+.2f" % r
+    print("\nRoll against the receiver (%.0f s means, error = IMU shift - receiver shift; receiver %s):" % (w, how))
+    print("  %-15s %7s   %-26s %-26s" % ("", "rx sd", "ST mean/rms/max err", "TM171 mean/rms/max err"))
+    worst = {}
+    for s0, s1 in zip(edges, edges[1:]):
+        cells = []
+        bl = [b for b in rb if s0 <= lo + b * w and lo + (b + 1) * w <= s1]
+        if not bl:
+            print("  %6.1f-%6.1f s  no receiver blocks" % (s0, s1))
+            continue
+        rsd = st.pstdev([R["roll"][i] for i in range(len(R)) if s0 <= R["t"][i] < s1 and not math.isnan(R["roll"][i])])
+        for name, ib in imus:
+            ibase = st.mean(ib[b] for b in first if b in ib) if any(b in ib for b in first) else None
+            e = [(ib[b] - ibase) - sign * (rb[b] - rbase) for b in bl if b in ib] if ibase is not None else []
+            if not e:
+                cells.append("%-26s" % "-")
+                continue
+            m, rms, mx = st.mean(e), math.sqrt(st.mean(x * x for x in e)), max(e, key=abs)
+            worst[name] = max(worst.get(name, 0.0), abs(mx))
+            cells.append("%+6.3f %6.3f %+7.3f       " % (m, rms, mx))
+        print("  %6.1f-%6.1f s %7.3f   %s" % (s0, s1, rsd, " ".join(cells)))
+    print("  worst block: %s deg; at 3 m antenna height 0.2 deg is 1 cm across the line" % (
+        ", ".join("%s %.3f" % kv for kv in worst.items())))
+
+
 def fit(x, y):
     mx, my = st.mean(x), st.mean(y)
     sxx = sum((a - mx) ** 2 for a in x)
@@ -255,6 +368,8 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("st_log")
     ap.add_argument("tm_log", nargs="?")
+    ap.add_argument("--rx", help="the receiver's log (default: RUN_um982.csv beside RUN_tm171.csv)")
+    ap.add_argument("--block", type=float, default=2.0, help="seconds per mean against the receiver")
     ap.add_argument("--still", action="store_true", help="a run at rest: drift and Allan deviation")
     ap.add_argument("--allan-csv", help="write the Allan deviation curves to this file")
     a = ap.parse_args()
@@ -307,6 +422,23 @@ def main():
                 print("  no taps in both logs and no shaking to match: lined up on the first rows only")
         T.col["t"] = array("d", (x * k + off for x in T["t"]))
 
+    rx_path = a.rx
+    if not rx_path and a.tm_log and a.tm_log.endswith("_tm171.csv"):
+        guess = a.tm_log[:-len("_tm171.csv")] + "_um982.csv"
+        rx_path = guess if os.path.exists(guess) else None
+    R = None
+    if rx_path:
+        if not T:
+            raise SystemExit("the receiver's log lines up through the TM171's: give both")
+        R = load_rx(rx_path)
+        R.col["t"] = array("d", map(mac_to_st(T), R["mac"]))
+        fixed = sum(1 for q in R["q"] if q == 4)
+        span_r = R["t"][-1] - R["t"][0]
+        print("Receiver (%s): %d rows over %.1f s, %.1f Hz; heading fixed on %d (%.0f %%)" % (
+            os.path.basename(rx_path), len(R), span_r, (len(R) - 1) / span_r if span_r else 0,
+            fixed, 100.0 * fixed / len(R)))
+        R.col["roll"] = array("d", (r if q == 4 else math.nan for r, q in zip(R["roll"], R["q"])))
+
     # Tilt for each IMU: the fused gravity vector if there is one, else the accel.
     src = GRAV if GRAV[0] in S else ACC
     S.col["roll"], S.col["pitch"] = (array("d", v) for v in zip(*(tilt(*x) for x in zip(*(S[k] for k in src)))))
@@ -327,13 +459,14 @@ def main():
         how = "activity: accel sd over 10 mg or gyro over 10 dps, split where its level steps 1.5 times"
     edges.append(hi)
     print("\nSegments (%s), roll and pitch in degrees, shift from the first segment:" % how)
-    print("  %-15s %-28s %-28s %-28s" % ("", "ST (%s)" % ("SFLP" if src is GRAV else "accel"),
-                                        "TM171 fusion" if T else "", "TM171 accel" if T else ""))
+    print("  %-15s %-28s %-28s %-28s %s" % ("", "ST (%s)" % ("SFLP" if src is GRAV else "accel"),
+                                           "TM171 fusion" if T else "", "TM171 accel" if T else "",
+                                           "receiver roll" if R else ""))
     base = {}
     for i, (s0, s1) in enumerate(zip(edges, edges[1:])):
         cells = []
         for name, log, keys in (("S", S, ("roll", "pitch")), ("T", T, ("roll", "pitch")),
-                                ("A", T, ("acc_roll", "acc_pitch"))):
+                                ("A", T, ("acc_roll", "acc_pitch")), ("R", R, ("roll",))):
             if not log:
                 continue
             c = []
@@ -347,6 +480,9 @@ def main():
                 c.append("%+6.3f sd %5.3f" % (m - base[(name, key)], st.pstdev(v)))
             cells.append(" ".join(c))
         print("  %6.1f-%6.1f s  %s" % (s0, s1, "  ".join(cells)))
+
+    if R:
+        against_rx(S, T, R, edges, a.block)
 
     # Vibration dose and gyro bias per segment. Dose: accel minus the segment's mean (DT0106's
     # residual linear acceleration, with the mean standing in for gravity while the tilt holds).
