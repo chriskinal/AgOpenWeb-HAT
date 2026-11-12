@@ -21,10 +21,6 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # - PR #793 (issue #656), a lock on the transmit queue's push. The queue is single-producer and
 #   the stack's hardware thread and our aow-isobus thread both send, so frames were lost (seen on
 #   the bench as a missing ETP data packet or DPO).
-# - PR #808 (issue #807), a TP/ETP session's first frame sent once. A transmit started on our
-#   aow-isobus thread while the hardware thread updates could send its RTS twice; the receiver
-#   answered twice and the transfer failed (seen on the bench as a repeated pool upload). Also a
-#   lock on ETP's session list.
 # Fetched before our warning flags are set, so they do not apply to it. Needs the network at
 # the first configure; -DAOW_ISOBUS=OFF builds the daemon without the stack.
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
@@ -34,10 +30,9 @@ if(AOW_ISOBUS)
   include(FetchContent)
   set(CAN_DRIVER "SocketCAN" CACHE STRING "" FORCE)
   FetchContent_Declare(isobus
-    URL https://github.com/Open-Agriculture/AgIsoStack-plus-plus/archive/7b771274422ea0f62d4eac042fa1684ee373d463.tar.gz
+    URL https://github.com/Open-Agriculture/AgIsoStack-plus-plus/archive/a8f832ed11f5edb12324ff9a45f503126acf37fb.tar.gz
     DOWNLOAD_EXTRACT_TIMESTAMP TRUE
-    PATCH_COMMAND git apply ${CMAKE_CURRENT_SOURCE_DIR}/third_party/agisostack-patches/pr793-transmit-queue.patch
-                            ${CMAKE_CURRENT_SOURCE_DIR}/third_party/agisostack-patches/pr808-transport-first-frame.patch)
+    PATCH_COMMAND git apply ${CMAKE_CURRENT_SOURCE_DIR}/third_party/agisostack-patches/pr793-transmit-queue.patch)
   FetchContent_MakeAvailable(isobus)
 endif()
 

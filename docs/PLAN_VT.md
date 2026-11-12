@@ -108,4 +108,5 @@ twice, back to back, and the terminal's answer to both made it abort; its status
 uploaded again. Caught with a capture of the bus, and reproduced on vcan: a race in the stack
 between our aow-isobus thread starting a transfer and the hardware thread updating it (upstream
 issue #807, our PR #808, carried as `third_party/agisostack-patches/pr808-transport-first-frame.patch`
-with the pin moved to e932041). SharpIsoTerm `docs/PLAN.md`, upstream gaps, has the detail.
+with the pin moved to e932041; merged upstream 2026-10-30, and the patch dropped with the pin at
+a8f832e on 2026-11-11). SharpIsoTerm `docs/PLAN.md`, upstream gaps, has the detail.

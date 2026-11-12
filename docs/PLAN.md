@@ -732,6 +732,7 @@ tractor's virtual terminal, carried over.
 - 2026-10-25: a TP or ETP transfer started on the aow-isobus thread while the hardware thread
   updates could send its request-to-send twice (upstream #807): PR #808, carried as a patch
   from 0.2.27 with the pin at e932041. The three ISOBUS probes pass on it.
+  Merged upstream 2026-10-30; the patch was dropped when the pin moved to a8f832e (2026-11-11).
 - Also run with the stand-in on `hatcan3` against the installed daemon on `hatcan2`: the screen
   went up in about 3 s.
 - AgIsoStack++ ties a partner to the first terminal whose NAME matches and never to another, so

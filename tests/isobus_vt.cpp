@@ -81,6 +81,8 @@ public:
     std::uint16_t get_data_mask_area_size_y_pixels() const override { return 480; }
     void suspend_working_set(std::shared_ptr<WorkingSet>) override {}
     void handle_unexpected_working_set_shutdown(std::shared_ptr<WorkingSet>, UnexpectedShutdownReason) override {}
+    // No input is ever open for edit here, so there is nothing for an ESC to abort.
+    std::uint16_t abort_input(std::shared_ptr<WorkingSet>) override { return isobus::NULL_OBJECT_ID; }
     SupportedWideCharsErrorCode get_supported_wide_chars(std::uint8_t, std::uint16_t, std::uint16_t, std::uint8_t& ranges,
                                                          std::vector<std::uint8_t>&) override {
         ranges = 0;

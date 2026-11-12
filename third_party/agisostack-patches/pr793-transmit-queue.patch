@@ -1,5 +1,5 @@
 diff --git a/hardware_integration/include/isobus/hardware_integration/can_hardware_interface.hpp b/hardware_integration/include/isobus/hardware_integration/can_hardware_interface.hpp
-index 30550a4..8a5b885 100644
+index 6bd3475..92bc1c2 100644
 --- a/hardware_integration/include/isobus/hardware_integration/can_hardware_interface.hpp
 +++ b/hardware_integration/include/isobus/hardware_integration/can_hardware_interface.hpp
 @@ -162,8 +162,8 @@ namespace isobus
@@ -10,9 +10,9 @@ index 30550a4..8a5b885 100644
 -			LockFreeQueue<CANMessageFrame> receivedMessagesQueue; ///< Receive message queue for a CAN channel
 +			MPSCQueue<CANMessageFrame> messagesToBeTransmittedQueue; ///< Transmit message queue for a CAN channel, filled from any thread
 +			SPSCQueue<CANMessageFrame> receivedMessagesQueue; ///< Receive message queue for a CAN channel
+ 			const std::size_t maxFramesReceivedPerUpdate; ///< Most frames update() takes from the driver in one call when there are no threads
  		};
  
- 		/// @brief Singleton instance of the CANHardwareInterface class
 diff --git a/utility/include/isobus/utility/thread_synchronization.hpp b/utility/include/isobus/utility/thread_synchronization.hpp
 index fbdec7c..03505d7 100644
 --- a/utility/include/isobus/utility/thread_synchronization.hpp
