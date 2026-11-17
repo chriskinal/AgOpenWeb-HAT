@@ -7,7 +7,10 @@
 
 // AOW HAT: copied from Firmware_Teensy_AiO_26 v26.5.5 web_pages/TouchFriendlyHomePage.h.
 // HAT changes: title; no Work Switch tile (the HAT work switch is digital only). Restart restarts the daemon.
-// ISOBUS and Serial Communications tiles (the HAT's own pages).
+// ISOBUS and Serial Communications tiles (the HAT's own pages). Beside the version, the control
+// loop from /api/status loop: "RT: OK" in green; "late" in amber once a tick was missed or ran
+// over 1 ms late; "off" in amber without FIFO, a PREEMPT_RT kernel or locked memory. The detail
+// is in the tooltip.
 // alert() and confirm() are the in-page uiAlert/uiConfirm (/dialog.js), which work in an AgOpenWeb
 // web card.
 
@@ -97,7 +100,7 @@ const char TOUCH_FRIENDLY_HOME_PAGE[] PROGMEM = R"rawliteral(
         </div>
         
         <div class="info">
-            <p>Firmware: <span id="firmwareVersion">Loading...</span></p>
+            <p>Firmware: <span id="firmwareVersion">Loading...</span> | <span style="white-space: nowrap; color: inherit; font-weight: inherit">RT: <span id="realtime">-</span></span></p>
             <p>WebSocket: <span id="wsStatus">Disconnected</span> | <span id="telemetryRate">0</span> Hz</p>
         </div>
     </div>
@@ -177,6 +180,23 @@ const char TOUCH_FRIENDLY_HOME_PAGE[] PROGMEM = R"rawliteral(
             .then(data => {
                 if (data.version) {
                     document.getElementById('firmwareVersion').textContent = data.version;
+                }
+                const loop = data.loop;
+                const rt = document.getElementById('realtime');
+                if (loop && loop.policy) {
+                    const missing = [];
+                    if (loop.policy === 'other') missing.push('not FIFO');
+                    if (!loop.rtKernel) missing.push('non-RT kernel');
+                    if (!loop.memoryLocked) missing.push('memory not locked');
+                    const late = loop.missed > 0 || loop.lateOver1ms > 0;
+                    rt.textContent = missing.length ? 'off' : late ? 'late' : 'OK';
+                    rt.style.color = missing.length || late ? '#ffb347' : '#8ee59a';
+                    rt.title = (missing.length ? 'Not real-time: ' + missing.join(', ') + '. ' : '') +
+                               'Control loop: ' + loop.policy + ' ' + loop.priority + ', ' +
+                               (loop.rtKernel ? 'PREEMPT_RT' : 'non-RT') + ' kernel, memory ' +
+                               (loop.memoryLocked ? 'locked' : 'not locked') + '; ' +
+                               loop.missed + ' ticks missed, ' + loop.lateOver1ms + ' over 1 ms late, worst ' +
+                               loop.lateMaxEverUs + ' \u00b5s late (a tick is 10 ms)';
                 }
             })
             .catch(err => {

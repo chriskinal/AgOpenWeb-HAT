@@ -12,7 +12,9 @@
 #include <poll.h>
 #include <sys/mman.h>
 #include <sys/signalfd.h>
+#include <sched.h>
 #include <sys/timerfd.h>
+#include <sys/utsname.h>
 #include <unistd.h>
 
 #include <algorithm>
@@ -161,6 +163,51 @@ int openSignalFd() {
     return signalfd(-1, &set, SFD_CLOEXEC);
 }
 
+// Keeps the control loop out of page faults without making every mapping resident. Plain
+// MCL_CURRENT | MCL_FUTURE populated each thread's whole 8 MB stack as it was created: 56 of the
+// daemon's 66 MB resident on the CM4, for threads that use a few KB. MCL_ONFAULT locks each page
+// when it is first touched instead. That would leave code not yet run to be read from the SD
+// card the first time a rare path (a kickout) runs, so the program's and libraries' files are
+// locked and read in now, and the control thread's stack is touched to kStackPrefault.
+// Returns false if the lock failed (no privilege); the daemon carries on.
+bool lockMemory() {
+    if (mlockall(MCL_CURRENT | MCL_FUTURE | MCL_ONFAULT) < 0) return false;
+    std::ifstream maps("/proc/self/maps");
+    std::string line;
+    while (std::getline(maps, line)) {
+        unsigned long start = 0, end = 0;
+        const auto path = line.find('/');
+        if (path == std::string::npos || std::sscanf(line.c_str(), "%lx-%lx", &start, &end) != 2) continue;
+        mlock(reinterpret_cast<void*>(start), end - start);  // populates, unlike the ONFAULT lock
+    }
+    constexpr std::size_t kStackPrefault = 256 * 1024;
+    volatile char stack[kStackPrefault];
+    for (std::size_t i = 0; i < kStackPrefault; i += 4096) stack[i] = 0;
+    (void)stack[0];
+    return true;
+}
+
+// Fills in how this (the control) thread is scheduled and logs it once. The service unit starts
+// the process FIFO 80; run by hand, or on a kernel without PREEMPT_RT, the loop still runs but
+// its timing is not to be trusted, so on the HAT that is a warning. The Pi's RT kernel has no
+// /sys/kernel/realtime; its version string says PREEMPT_RT.
+void reportLoopSetup(aow::LoopSetup& s, bool warn) {
+    const int policy = sched_getscheduler(0);
+    s.policy = policy == SCHED_FIFO ? "fifo" : policy == SCHED_RR ? "rr" : "other";
+    sched_param sp{};
+    if (sched_getparam(0, &sp) == 0) s.priority = sp.sched_priority;
+    utsname u{};
+    s.rtKernel = uname(&u) == 0 && std::strstr(u.version, "PREEMPT_RT");
+    const bool realtime = s.priority > 0 && s.rtKernel && s.memoryLocked;
+    if (realtime || !warn) {
+        LOG_NOTICE(System, "Control loop: %s %d, %s kernel, memory %slocked", s.policy, s.priority,
+                   s.rtKernel ? "PREEMPT_RT" : "non-RT", s.memoryLocked ? "" : "not ");
+    } else {
+        LOG_WARNING(System, "Control loop not real-time: %s %d, %s kernel, memory %slocked (expected fifo 80, PREEMPT_RT, locked)",
+                    s.policy, s.priority, s.rtKernel ? "PREEMPT_RT" : "non-RT", s.memoryLocked ? "" : "not ");
+    }
+}
+
 // Arms (or rearms) the tick timer: the first tick one period from now, then every period.
 // Rearming clears ticks that piled up during startup.
 bool armTickTimer(int fd) {
@@ -288,7 +335,10 @@ int main(int argc, char** argv) {
         return fail(1);
     }
     // Keep the control loop out of page faults. Fails harmlessly without the privilege.
-    if (mlockall(MCL_CURRENT | MCL_FUTURE) < 0) LOG_WARNING(System, "mlockall: %s (continuing)", std::strerror(errno));
+    aow::LoopSetup loopSetup;
+    loopSetup.memoryLocked = lockMemory();
+    if (!loopSetup.memoryLocked) LOG_WARNING(System, "mlockall: %s (continuing)", std::strerror(errno));
+    reportLoopSetup(loopSetup, !std::strcmp(opt.board, "hat"));
 
     aow::linux_io::MonotonicClock clock;
     aow::linux_io::UdpLink udp;
@@ -669,6 +719,7 @@ int main(int argc, char** argv) {
             std::copy(std::begin(ledColors), std::end(ledColors), std::begin(st.leds));
             for (int i = 0; i < 3; ++i) st.canRestarts[i] = shared.canRestarts[i].load(std::memory_order_relaxed);
             st.loop = loopTiming.stats();  // up to the last tick: this one is recorded below
+            st.loopSetup = loopSetup;
             shared.setStatus(st);
 
             if (ticks >= nextSummary) {

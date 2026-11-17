@@ -234,6 +234,23 @@ loaded because the `ondemand` governor drops the cores to 600 MHz (1.5 GHz under
 is the case for the terminal's CAN gateway on CAN2 (`docs/PLAN_VT.md`): a pool upload cannot go
 faster than the bus.
 
+**The loop's setup is reported (2026-11-17).** At startup the daemon logs how the control loop is
+scheduled (policy and priority), whether the kernel is PREEMPT_RT (from its version string: the
+Pi's RT kernel has no `/sys/kernel/realtime`) and whether memory is locked; `/api/status` `loop`
+carries the same (`policy`, `priority`, `rtKernel`, `memoryLocked`). With `--board hat`, anything
+short of FIFO, an RT kernel and locked memory is a warning, so a unit run by hand or booted on
+the standard kernel says so in its log.
+
+**Memory is locked as it is used (2026-11-17).** `mlockall(MCL_CURRENT | MCL_FUTURE)` made every
+thread's whole 8 MB stack resident: 66 MB for the daemon, 56 of it stacks, too much for the
+smaller Pis. It now locks pages as they are first touched (`MCL_ONFAULT`), reads in and locks
+the program's and libraries' files so no code path waits on the SD card, and touches 256 KB of
+the control thread's stack at startup (`lockMemory` in `daemon/main.cpp`). On the dev CM4: 8 MB
+resident, 5.2 MB of it locked; the control thread took no page faults after startup through
+`tests/loop_load.py` (30 s phases: late max 192-319 us, none missed). `VmLck` still reads about
+459 MB: it counts the address space flagged locked, including malloc's untouched per-thread
+reservations, not memory in use; read `VmRSS` instead.
+
 ## 5. Changes needed in AgOpenWeb
 
 | Change | Where | Must not break |

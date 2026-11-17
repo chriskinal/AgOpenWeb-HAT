@@ -210,6 +210,10 @@ Response status(Backend& b, const char* version) {
     loop["lateMaxEverUs"] = st.loop.lateMaxEverUs;
     loop["workMaxEverUs"] = st.loop.workMaxEverUs;
     loop["inputsMaxEverUs"] = st.loop.inputsMaxEverUs;
+    loop["policy"] = st.loopSetup.policy;
+    loop["priority"] = st.loopSetup.priority;
+    loop["rtKernel"] = st.loopSetup.rtKernel;
+    loop["memoryLocked"] = st.loopSetup.memoryLocked;
     isobusStatusJson(b.isobusStatus(), doc["isobus"].to<JsonObject>());  // AOW HAT: not in the firmware's status
     linkGatewayJson(b, doc["linkGateway"].to<JsonObject>());               // AOW HAT: docs/PLAN_VT.md section 2
     doc["insLeverArm"] = b.insLeverArm();                                  // AOW HAT: PGN 247 to the UM981 (aow/ins_setup.h)

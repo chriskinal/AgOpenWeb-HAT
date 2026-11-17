@@ -71,7 +71,10 @@ def phase(name, can, burners):
 
 
 if __name__ == "__main__":
-    print(f"{SECS} s per phase, {os.cpu_count()} cores", flush=True)
+    s = status()
+    print(f"{SECS} s per phase, {os.cpu_count()} cores; loop {s.get('policy')} {s.get('priority')}, "
+          f"{'PREEMPT_RT' if s.get('rtKernel') else 'non-RT'} kernel, "
+          f"memory {'locked' if s.get('memoryLocked') else 'not locked'}", flush=True)
     phase("baseline", False, 0)
     phase("CAN flood", True, 0)
     phase("CAN flood + CPU on all cores", True, os.cpu_count())

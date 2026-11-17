@@ -72,6 +72,7 @@ struct Status {
 
     // The control loop's own timing (loop_timing.h).
     LoopStats loop;
+    LoopSetup loopSetup;
 
     // The four status LEDs (indicators::Color as numbers: 0 off, 1 red, 2 amber, 3 green, 4 blue).
     uint8_t leds[4] = {};

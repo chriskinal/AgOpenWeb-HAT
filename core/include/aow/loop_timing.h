@@ -22,6 +22,15 @@ struct LoopStats {
     uint32_t lateMaxEverUs = 0, workMaxEverUs = 0, inputsMaxEverUs = 0;
 };
 
+// How the control loop is scheduled, found once at startup (daemon/main.cpp). On the HAT it
+// should be FIFO 80 (the service unit), on a PREEMPT_RT kernel, with memory locked.
+struct LoopSetup {
+    const char* policy = "other";  // "fifo", "rr" or "other"
+    int priority = 0;              // 1..99 for fifo and rr
+    bool rtKernel = false;         // the kernel was built PREEMPT_RT
+    bool memoryLocked = false;     // mlockall succeeded
+};
+
 class LoopTiming {
 public:
     LoopTiming(uint32_t periodUs, uint32_t windowTicks);
