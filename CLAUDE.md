@@ -68,7 +68,8 @@ The Teensy firmware is not being rewritten and nothing is ported back to it.
   (RVC) on an RS-232 port or a TM171 on USB (`/dev/ttyACMx`), reopened after an unplug: done on
   ptys, and a real TM171 on the dev CM4 (signs checked on the bench). What is on the
   RS-232 ports and USB (a receiver, radio or IMU) is found by listening (`daemon/serial_hub`,
-  `core/serial_detect`, auto rate); only the new NMEA out and RTCM out and the port rates are
+  `core/serial_detect`, auto rate; the ports are read on a thread of their own,
+  `daemon/serial_reader`, so the loop never waits on the tty layer); only the new NMEA out and RTCM out and the port rates are
   set, on the Serial Communications page (`/serial`). NMEA out carries the app's corrected
   position (PGN 100, `core/app_link` to `GnssLink::onCorrectedFix`) while the app sends it. `--radio` and `--imu` take a device as
   such (bench); USB is looked at only with `--board hat` or `--usb`. LED and buzzer logic

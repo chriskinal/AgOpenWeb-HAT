@@ -241,15 +241,28 @@ carries the same (`policy`, `priority`, `rtKernel`, `memoryLocked`). With `--boa
 short of FIFO, an RT kernel and locked memory is a warning, so a unit run by hand or booted on
 the standard kernel says so in its log.
 
-**Memory is locked as it is used (2026-11-17).** `mlockall(MCL_CURRENT | MCL_FUTURE)` made every
+**Smaller thread stacks (2026-11-17).** `mlockall(MCL_CURRENT | MCL_FUTURE)` made every
 thread's whole 8 MB stack resident: 66 MB for the daemon, 56 of it stacks, too much for the
-smaller Pis. It now locks pages as they are first touched (`MCL_ONFAULT`), reads in and locks
-the program's and libraries' files so no code path waits on the SD card, and touches 256 KB of
-the control thread's stack at startup (`lockMemory` in `daemon/main.cpp`). On the dev CM4: 8 MB
-resident, 5.2 MB of it locked; the control thread took no page faults after startup through
-`tests/loop_load.py` (30 s phases: late max 192-319 us, none missed). `VmLck` still reads about
-459 MB: it counts the address space flagged locked, including malloc's untouched per-thread
-reservations, not memory in use; read `VmRSS` instead.
+smaller Pis. Every thread (AgIsoStack++'s too) now gets a 512 kB stack (`setThreadStackSize` in
+`daemon/main.cpp`), and memory stays locked whole: 13 MB resident on the dev CM4. The deepest
+stack seen there after hours of use was 36 kB, the web thread's; the others touch 12 kB. Locking
+pages only as they are touched (`MCL_ONFAULT`) was tried first (8 MB) and dropped while the late
+ticks below were chased; it was not their cause, but locking whole keeps every page fault, in
+any thread holding a lock the loop needs, out of the picture for 5 MB. `VmLck` reads far more than is in use (about 400
+MB): it counts address space flagged locked, including malloc's untouched per-thread
+reservations; read `VmRSS`.
+
+**Serial ports are read on their own thread (2026-11-18).** The loop had ticks up to 2.8 ms late
+(10 to 21 in a few hours on the dev CM4, with AgOpenWeb's page open), in every build back to the
+nightly; an idle unit (28 hours, worst 387 us) never showed them. An ftrace of a late tick found
+the loop blocked in `poll()` on the serial ports until a kworker ran: Linux's tty layer makes
+`poll()` and `read()` on a port with nothing buffered wait for that port's receive work
+(`n_tty_poll`, `n_tty_read`: `tty_buffer_flush_work`), which runs in an ordinary kworker that
+priority inheritance does not reach, so the FIFO 80 loop waited whenever other work crowded it.
+Writes do not wait. `daemon/serial_reader` now polls and reads every port on a thread of its own
+(`aow-serial`, FIFO 70) into a ring per port and wakes the loop through an eventfd; the loop
+never polls or reads a serial port. Detection, parsing, opening, rate changes and writes stay
+in the loop. After: 16 hours, 5.8 million ticks, none over 1 ms, worst 470 us.
 
 ## 5. Changes needed in AgOpenWeb
 

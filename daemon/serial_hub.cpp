@@ -88,6 +88,7 @@ SerialHub::SerialHub(const Config& c, GnssLink& gnss, imu::Imu& imu, hal::Clock&
         else LOG_WARNING(Imu, "IMU port %s not there yet: opened when it appears", c.imu.c_str());
     }
     scanUsb();
+    listen();
 }
 
 SerialHub::Channel& SerialHub::add(Channel::Place place, const std::string& name, const std::string& path) {
@@ -140,47 +141,68 @@ void SerialHub::apply(const Settings::Ports& p) {
         }
     }
     route();
+    listen();
 }
 
-void SerialHub::fds(std::vector<pollfd>& out) {
-    polled_.clear();
+void SerialHub::listen() {
     for (auto& cp : channels_) {
         Channel& c = *cp;
-        if (c.port.fd() < 0 || c.output() || c.gone) continue;
-        if (lent_ && c.place == Channel::Place::Onboard) continue;  // the UM98x page has it
-        out.push_back({c.port.fd(), POLLIN, 0});
-        polled_.push_back(&c);
-    }
-}
-
-void SerialHub::handle(const pollfd* fds, size_t n) {
-    for (size_t i = 0; i < n && i < polled_.size(); ++i) {
-        Channel& c = *polled_[i];
-        if (fds[i].revents & (POLLERR | POLLHUP | POLLNVAL)) {
-            LOG_WARNING(Gnss, "%s went away", c.name.c_str());
-            c.port.close();
-            c.nextOpenUs = clock_.nowUs() + kReopenUs;
-            if (c.place == Channel::Place::Usb) c.gone = true;
-            continue;
+        const bool want = c.port.fd() >= 0 && !c.output() && !c.gone && !(lent_ && c.place == Channel::Place::Onboard);
+        if (c.slot >= 0 && (!want || c.port.fd() != c.slotFd)) {  // not listened to, or reopened
+            reader_.detach(c.slot);
+            c.lastSlot = c.slot;
+            c.slot = -1;
         }
-        if (fds[i].revents) read(c);
+        if (want && c.slot < 0) {
+            c.slot = reader_.attach(c.port.fd());
+            c.slotFd = c.port.fd();
+            if (c.slot < 0) LOG_WARNING(Gnss, "%s: no reader slot free", c.name.c_str());
+        }
     }
 }
 
-void SerialHub::read(Channel& c) {
+void SerialHub::setLent(bool lent) {
+    if (lent == lent_) return;
+    lent_ = lent;
+    listen();
+}
+
+bool SerialHub::lentReady() const {
+    for (const auto& cp : channels_)
+        if (cp->place == Channel::Place::Onboard) return cp->slot < 0 && reader_.released(cp->lastSlot);
+    return true;
+}
+
+void SerialHub::wentAway(Channel& c) {
+    LOG_WARNING(Gnss, "%s went away", c.name.c_str());
+    c.port.close();
+    c.nextOpenUs = clock_.nowUs() + kReopenUs;
+    if (c.place == Channel::Place::Usb) c.gone = true;
+    listen();
+}
+
+void SerialHub::handle() {
+    reader_.clearWake();
     uint8_t buf[1024];
-    int n;
-    while ((n = c.port.read(buf, sizeof buf)) > 0) {
-        const uint64_t now = clock_.nowUs();
-        const Kind before = c.kind();
-        c.det.feed(buf, static_cast<size_t>(n), now);
-        if (c.kind() != before) announce(c, before);
-        if (&c == gnssIn_) gnss_.feedReceiver(buf, static_cast<size_t>(n));
-        else if (c.kind() == Kind::Radio && !lent_) gnss_.forwardRadio(buf, static_cast<size_t>(n));
-        if (&c == imuIn_ || (!imuIn_ && c.kind() == Kind::Imu)) {
-            imuIn_ = &c;
-            imu_.feed(buf, static_cast<size_t>(n), now);
-        }
+    for (auto& cp : channels_) {
+        Channel& c = *cp;
+        if (c.slot < 0) continue;
+        size_t n;
+        while ((n = reader_.take(c.slot, buf, sizeof buf)) > 0) consume(c, buf, n);
+        if (reader_.failed(c.slot)) wentAway(c);
+    }
+}
+
+void SerialHub::consume(Channel& c, const uint8_t* buf, size_t n) {
+    const uint64_t now = clock_.nowUs();
+    const Kind before = c.kind();
+    c.det.feed(buf, n, now);
+    if (c.kind() != before) announce(c, before);
+    if (&c == gnssIn_) gnss_.feedReceiver(buf, n);
+    else if (c.kind() == Kind::Radio && !lent_) gnss_.forwardRadio(buf, n);
+    if (&c == imuIn_ || (!imuIn_ && c.kind() == Kind::Imu)) {
+        imuIn_ = &c;
+        imu_.feed(buf, n, now);
     }
 }
 
@@ -217,6 +239,8 @@ void SerialHub::tick() {
             if (cp.get() == gnssIn_) gnssIn_ = nullptr;
             if (cp.get() == imuIn_) imuIn_ = nullptr;
         }
+    for (auto& cp : channels_)
+        if (cp->gone && cp->slot >= 0) reader_.detach(cp->slot);
     channels_.erase(std::remove_if(channels_.begin(), channels_.end(), [](const auto& cp) { return cp->gone; }),
                     channels_.end());
     if (channels_.size() != was) changed = true;
@@ -228,6 +252,7 @@ void SerialHub::tick() {
     }
     route();
     if (changed) apply(ports_);
+    listen();
 }
 
 void SerialHub::scanUsb() {

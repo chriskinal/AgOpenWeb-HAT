@@ -10,6 +10,7 @@
 // The web thread (web_thread.cpp) serves the pages and writes the log out.
 #include <dirent.h>
 #include <poll.h>
+#include <pthread.h>
 #include <sys/mman.h>
 #include <sys/signalfd.h>
 #include <sched.h>
@@ -163,23 +164,28 @@ int openSignalFd() {
     return signalfd(-1, &set, SFD_CLOEXEC);
 }
 
-// Keeps the control loop out of page faults without making every mapping resident. Plain
-// MCL_CURRENT | MCL_FUTURE populated each thread's whole 8 MB stack as it was created: 56 of the
-// daemon's 66 MB resident on the CM4, for threads that use a few KB. MCL_ONFAULT locks each page
-// when it is first touched instead. That would leave code not yet run to be read from the SD
-// card the first time a rare path (a kickout) runs, so the program's and libraries' files are
-// locked and read in now, and the control thread's stack is touched to kStackPrefault.
+// Every thread the daemon starts, AgIsoStack++'s included, gets this stack instead of glibc's
+// 8 MB. mlockall(MCL_FUTURE) makes a whole stack resident as the thread starts, so seven 8 MB
+// stacks were 56 of the daemon's 66 MB. The deepest seen on the dev CM4 after hours of use was
+// 36 kB (the web thread); the rest touch 12 kB. Set before the first thread starts.
+constexpr std::size_t kThreadStack = 512 * 1024;
+
+void setThreadStackSize() {
+    pthread_attr_t a;
+    pthread_attr_init(&a);
+    pthread_attr_setstacksize(&a, kThreadStack);
+    pthread_setattr_default_np(&a);
+    pthread_attr_destroy(&a);
+}
+
+// Keeps the control loop out of page faults: every page mapped now or later is made resident
+// and locked. Locking pages only as they were touched (MCL_ONFAULT) saved the same memory but
+// let other threads take page faults while holding a lock the loop needs: ticks up to 2.7 ms
+// late, 11 in 4.5 hours, against none in 28 hours with everything resident. The control
+// thread's stack grows on demand even so, so 256 kB of it is touched now.
 // Returns false if the lock failed (no privilege); the daemon carries on.
 bool lockMemory() {
-    if (mlockall(MCL_CURRENT | MCL_FUTURE | MCL_ONFAULT) < 0) return false;
-    std::ifstream maps("/proc/self/maps");
-    std::string line;
-    while (std::getline(maps, line)) {
-        unsigned long start = 0, end = 0;
-        const auto path = line.find('/');
-        if (path == std::string::npos || std::sscanf(line.c_str(), "%lx-%lx", &start, &end) != 2) continue;
-        mlock(reinterpret_cast<void*>(start), end - start);  // populates, unlike the ONFAULT lock
-    }
+    if (mlockall(MCL_CURRENT | MCL_FUTURE) < 0) return false;
     constexpr std::size_t kStackPrefault = 256 * 1024;
     volatile char stack[kStackPrefault];
     for (std::size_t i = 0; i < kStackPrefault; i += 4096) stack[i] = 0;
@@ -306,6 +312,7 @@ void logSummary(const aow::AppLink& app, const aow::GnssLink* gnss, const aow::s
 int main(int argc, char** argv) {
     Options opt;
     if (!parseArgs(argc, argv, opt)) return 2;
+    setThreadStackSize();
 
     aow::Shared shared;
     aow::SettingsFile settingsFile{opt.config};
@@ -520,11 +527,10 @@ int main(int argc, char** argv) {
     if (opt.gnssDevice) LOG_INFO(Gnss, "GNSS on %s at %u baud, RTCM on :%u", opt.gnssDevice, opt.gnssBaud, opt.rtcmPort);
     aow::log::global().setStartupDone();
 
-    // The fixed entries, then the serial hub's, which come and go (USB devices); rebuilt each
-    // turn into reserved space, so no allocation.
-    enum { kApp, kTick, kSignal, kRtcm, kFixed };
-    std::vector<pollfd> fds;
-    fds.reserve(64);
+    // The serial ports are read on the hub's reader thread: the loop polls its eventfd, never a
+    // port (serial_reader.h: polling a tty can wait on an ordinary kworker).
+    enum { kApp, kTick, kSignal, kRtcm, kSerial, kCount };
+    pollfd fds[kCount];
     const uint64_t startUs = clock.nowUs();
     aow::indicators::Leds leds(startUs / 1000);
     uint32_t lastRtcmPackets = 0, lastRadioBytes = 0, lastButtonPresses = 0;
@@ -539,13 +545,12 @@ int main(int argc, char** argv) {
     armTickTimer(tickFd);
     loopTiming.start(clock.nowUs());
     for (;;) {
-        fds.clear();
-        fds.push_back({udp.fd(), POLLIN, 0});
-        fds.push_back({tickFd, POLLIN, 0});
-        fds.push_back({sigFd, POLLIN, 0});
-        fds.push_back({rtcm.fd(), POLLIN, 0});
-        hub.fds(fds);
-        if (poll(fds.data(), fds.size(), -1) < 0) {
+        fds[kApp] = {udp.fd(), POLLIN, 0};
+        fds[kTick] = {tickFd, POLLIN, 0};
+        fds[kSignal] = {sigFd, POLLIN, 0};
+        fds[kRtcm] = {rtcm.fd(), POLLIN, 0};
+        fds[kSerial] = {hub.wakeFd(), POLLIN, 0};
+        if (poll(fds, kCount, -1) < 0) {
             if (errno == EINTR) continue;
             LOG_ERROR(System, "poll: %s", std::strerror(errno));
             code = 1;
@@ -571,9 +576,9 @@ int main(int argc, char** argv) {
             while ((n = rtcm.receive(buf, sizeof buf)) > 0)
                 if (!gnssLent) gnss.forwardRtcm(buf, static_cast<size_t>(n));
         }
-        {
+        if (fds[kSerial].revents) {
             const aow::imu::Type before = imu.type();
-            hub.handle(fds.data() + kFixed, fds.size() - kFixed);
+            hub.handle();
             if (imu.type() != before) {
                 LOG_INFO(Imu, "%s detected on %s", aow::imu::typeName(imu.type()), hub.imuName().c_str());
                 app.setImuPresent(true);
@@ -602,8 +607,8 @@ int main(int argc, char** argv) {
             }
             // The UM98x page borrowing the GNSS port, or giving it back.
             if (shared.gnssPauseRequested.load() && !shared.gnssPaused.load()) {
-                hub.setLent(true);  // not polled, so its bytes cannot spin the loop
-                shared.gnssPaused = true;
+                hub.setLent(true);  // not read, so its bytes cannot spin the loop
+                if (hub.lentReady()) shared.gnssPaused = true;  // the reader has let the port go
             } else if (!shared.gnssPauseRequested.load() && shared.gnssPaused.load()) {
                 hub.setLent(false);
                 shared.gnssPaused = false;

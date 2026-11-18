@@ -16,7 +16,9 @@
 // receiver; the first IMU sending feeds the Imu. Nothing is ever written to a device before it
 // is identified, except an output.
 //
-// Runs on the control thread: fds() before poll(), handle() after, tick() at 100 Hz.
+// Runs on the control thread: poll wakeFd() and handle() when it is readable; tick() at 100 Hz.
+// The ports are read by a SerialReader on its own thread (serial_reader.h says why); everything
+// else (opening, rates, detection, routing, writes) is done here.
 #pragma once
 
 #include <poll.h>
@@ -32,6 +34,7 @@
 #include "aow/settings.h"
 #include "aow/status.h"
 #include "linux_io.h"
+#include "serial_reader.h"
 
 namespace aow {
 
@@ -52,14 +55,16 @@ public:
     // The outputs and rates. Live.
     void apply(const Settings::Ports& p);
 
-    // The fds to poll for reading, appended; handle() takes the same entries back after poll.
-    void fds(std::vector<pollfd>& out);
-    void handle(const pollfd* fds, size_t n);
+    // Readable when the reader has bytes or a port went away: then handle().
+    int wakeFd() const { return reader_.wakeFd(); }
+    void handle();
     void tick();
 
     // The UM98x page has the onboard receiver: its bytes are left unread, and corrections and
-    // radio bytes are dropped (they would land in the middle of its commands).
-    void setLent(bool lent) { lent_ = lent; }
+    // radio bytes are dropped (they would land in the middle of its commands). The page may use
+    // the port once lentReady(): the reader has stopped reading it.
+    void setLent(bool lent);
+    bool lentReady() const;
     hal::SerialPort* onboardPort();  // for that page; nullptr: none
 
     void status(Status& st) const;
@@ -80,6 +85,9 @@ private:
         SerialDetector det;
         uint64_t nextOpenUs = 0;
         bool gone = false;  // a USB device unplugged: removed at the next tick
+        int slot = -1;      // the reader's slot while it reads this port
+        int slotFd = -1;    // port.fd() when that slot was attached
+        int lastSlot = -1;  // the slot last detached, until the reader has let it go
         SerialDetector::Kind kind() const { return fixed != SerialDetector::Kind::Unknown ? fixed : det.kind(); }
         bool output() const { return nmeaOut || rtcmOut; }
         bool sending(uint64_t nowUs, uint64_t within) const;
@@ -88,7 +96,9 @@ private:
     Channel& add(Channel::Place place, const std::string& name, const std::string& path);
     bool open(Channel& c);
     unsigned outBaud(const Channel& c) const;
-    void read(Channel& c);
+    void consume(Channel& c, const uint8_t* buf, size_t n);
+    void listen();  // the reader reads exactly the ports listened to
+    void wentAway(Channel& c);
     void scanUsb();
     void route();
     void announce(Channel& c, SerialDetector::Kind before);
@@ -96,8 +106,8 @@ private:
     GnssLink& gnss_;
     imu::Imu& imu_;
     hal::Clock& clock_;
+    SerialReader reader_;
     std::vector<std::unique_ptr<Channel>> channels_;
-    std::vector<Channel*> polled_;  // the channel behind each fd handed out by fds()
     std::vector<std::string> taken_;  // real paths not to treat as USB devices
     Settings::Ports ports_;
     Channel* gnssIn_ = nullptr;  // the receiver in use
