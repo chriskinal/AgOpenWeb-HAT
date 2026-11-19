@@ -16,6 +16,7 @@ int main() {
     t.record(1, 1'010'200, 1'010'250, 1'010'300, 1'010'500);
     CHECK(t.stats().ticks == 1);
     CHECK(t.stats().missed == 0);
+    CHECK(t.stats().lastLateTick == 0);
     CHECK(t.stats().lateMaxEverUs == 200);
     CHECK(t.stats().workMaxEverUs == 300);
     CHECK(t.stats().inputsMaxEverUs == 50);
@@ -24,10 +25,12 @@ int main() {
     // Tick 2 starts 1.5 ms late.
     t.record(2, 1'021'500, 1'021'500, 1'021'510, 1'021'600);
     CHECK(t.stats().lateOver1ms == 1);
+    CHECK(t.stats().lastLateTick == 2);
 
     // Two ticks lost: the timer read says 5. On time otherwise; the window (3 passes) closes.
     t.record(5, 1'050'000, 1'050'000, 1'050'020, 1'050'100);
     CHECK(t.stats().missed == 2);
+    CHECK(t.stats().lastLateTick == 5);
     CHECK(t.stats().lateMaxUs == 1500);
     CHECK(t.stats().workMaxUs == 300);
     CHECK(t.stats().inputsMaxUs == 50);
@@ -40,6 +43,7 @@ int main() {
     CHECK(t.stats().workMaxUs == 20);
     CHECK(t.stats().lateMaxEverUs == 1500);
     CHECK(t.stats().missed == 2);
+    CHECK(t.stats().lastLateTick == 5);  // on-time ticks leave it
 
     // Early (timer and clock a few us apart) counts as on time.
     t.record(9, 1'089'990, 1'089'990, 1'090'000, 1'090'010);

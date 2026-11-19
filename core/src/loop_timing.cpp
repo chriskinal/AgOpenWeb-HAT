@@ -28,10 +28,16 @@ void LoopTiming::record(uint64_t ticks, uint64_t beginUs, uint64_t inputsBeginUs
     const uint32_t work = clampUs(endUs - beginUs);
     const uint32_t inputs = clampUs(inputsEndUs - inputsBeginUs);
 
-    if (ticks > lastTicks_ + 1) stats_.missed += static_cast<uint32_t>(ticks - lastTicks_ - 1);
+    if (ticks > lastTicks_ + 1) {
+        stats_.missed += static_cast<uint32_t>(ticks - lastTicks_ - 1);
+        stats_.lastLateTick = ticks;
+    }
     lastTicks_ = ticks;
     stats_.ticks = ticks;
-    if (late > 1000) ++stats_.lateOver1ms;
+    if (late > 1000) {
+        ++stats_.lateOver1ms;
+        stats_.lastLateTick = ticks;
+    }
 
     lateMax_ = std::max(lateMax_, late);
     workMax_ = std::max(workMax_, work);

@@ -8,8 +8,8 @@
 // AOW HAT: copied from Firmware_Teensy_AiO_26 v26.5.5 web_pages/TouchFriendlyHomePage.h.
 // HAT changes: title; no Work Switch tile (the HAT work switch is digital only). Restart restarts the daemon.
 // ISOBUS and Serial Communications tiles (the HAT's own pages). Beside the version, the control
-// loop from /api/status loop: "RT: OK" in green; "late" in amber once a tick was missed or ran
-// over 1 ms late; "off" in amber without FIFO, a PREEMPT_RT kernel or locked memory. The detail
+// loop from /api/status loop, every 5 s: "RT: OK" in green; "late" in amber for a minute after a
+// tick was missed or ran over 1 ms late; "off" in amber without FIFO, a PREEMPT_RT kernel or locked memory. The detail
 // is in the tooltip.
 // alert() and confirm() are the in-page uiAlert/uiConfirm (/dialog.js), which work in an AgOpenWeb
 // web card.
@@ -174,34 +174,40 @@ const char TOUCH_FRIENDLY_HOME_PAGE[] PROGMEM = R"rawliteral(
         // Connect on page load - same as old page
         connectWebSocket();
         
-        // Fetch firmware version
-        fetch('/api/status')
-            .then(response => response.json())
-            .then(data => {
-                if (data.version) {
-                    document.getElementById('firmwareVersion').textContent = data.version;
-                }
-                const loop = data.loop;
-                const rt = document.getElementById('realtime');
-                if (loop && loop.policy) {
-                    const missing = [];
-                    if (loop.policy === 'other') missing.push('not FIFO');
-                    if (!loop.rtKernel) missing.push('non-RT kernel');
-                    if (!loop.memoryLocked) missing.push('memory not locked');
-                    const late = loop.missed > 0 || loop.lateOver1ms > 0;
-                    rt.textContent = missing.length ? 'off' : late ? 'late' : 'OK';
-                    rt.style.color = missing.length || late ? '#ffb347' : '#8ee59a';
-                    rt.title = (missing.length ? 'Not real-time: ' + missing.join(', ') + '. ' : '') +
-                               'Control loop: ' + loop.policy + ' ' + loop.priority + ', ' +
-                               (loop.rtKernel ? 'PREEMPT_RT' : 'non-RT') + ' kernel, memory ' +
-                               (loop.memoryLocked ? 'locked' : 'not locked') + '; ' +
-                               loop.missed + ' ticks missed, ' + loop.lateOver1ms + ' over 1 ms late, worst ' +
-                               loop.lateMaxEverUs + ' \u00b5s late (a tick is 10 ms)';
-                }
-            })
-            .catch(err => {
-                document.getElementById('firmwareVersion').textContent = 'Unknown';
-            });
+        // Fetch firmware version, and the control loop's state every 5 s (AOW HAT)
+        function refreshStatus() {
+            fetch('/api/status')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.version) {
+                        document.getElementById('firmwareVersion').textContent = data.version;
+                    }
+                    const loop = data.loop;
+                    const rt = document.getElementById('realtime');
+                    if (loop && loop.policy) {
+                        const missing = [];
+                        if (loop.policy === 'other') missing.push('not FIFO');
+                        if (!loop.rtKernel) missing.push('non-RT kernel');
+                        if (!loop.memoryLocked) missing.push('memory not locked');
+                        const late = loop.lateAgoS != null && loop.lateAgoS < 60;
+                        rt.textContent = missing.length ? 'off' : late ? 'late' : 'OK';
+                        rt.style.color = missing.length || late ? '#ffb347' : '#8ee59a';
+                        rt.title = (missing.length ? 'Not real-time: ' + missing.join(', ') + '. ' : '') +
+                                   'Control loop: ' + loop.policy + ' ' + loop.priority + ', ' +
+                                   (loop.rtKernel ? 'PREEMPT_RT' : 'non-RT') + ' kernel, memory ' +
+                                   (loop.memoryLocked ? 'locked' : 'not locked') + '; ' +
+                                   loop.missed + ' ticks missed, ' + loop.lateOver1ms + ' over 1 ms late, worst ' +
+                                   loop.lateMaxEverUs + ' \u00b5s late (a tick is 10 ms)' +
+                                   (loop.lateAgoS != null ? '; the last ' + loop.lateAgoS + ' s ago' : '');
+                    }
+                })
+                .catch(err => {
+                    const v = document.getElementById('firmwareVersion');
+                    if (v.textContent === 'Loading...') v.textContent = 'Unknown';  // AOW HAT: a later miss keeps it
+                });
+        }
+        refreshStatus();
+        setInterval(refreshStatus, 5000);
         
         // Prevent zoom on double tap
         document.addEventListener('touchstart', function(event) {

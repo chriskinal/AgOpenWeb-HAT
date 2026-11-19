@@ -16,6 +16,7 @@ struct LoopStats {
     uint64_t ticks = 0;
     uint32_t missed = 0;      // ticks skipped: the loop was a whole period or more behind
     uint32_t lateOver1ms = 0; // ticks that started more than 1 ms late
+    uint64_t lastLateTick = 0; // the last tick missed or over 1 ms late; 0 when none yet
     // Worst cases in the last full window (windowS seconds) and since start, in us.
     uint32_t windowS = 0;
     uint32_t lateMaxUs = 0, workMaxUs = 0, inputsMaxUs = 0;

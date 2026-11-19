@@ -203,6 +203,11 @@ Response status(Backend& b, const char* version) {
     loop["ticks"] = st.loop.ticks;
     loop["missed"] = st.loop.missed;
     loop["lateOver1ms"] = st.loop.lateOver1ms;
+    // Seconds since the last tick missed or over 1 ms late; null when none yet.
+    if (st.loop.lastLateTick)
+        loop["lateAgoS"] = (st.loop.ticks - st.loop.lastLateTick) * st.loop.periodUs / 1'000'000u;
+    else
+        loop["lateAgoS"] = nullptr;
     loop["windowS"] = st.loop.windowS;
     loop["lateMaxUs"] = st.loop.lateMaxUs;
     loop["workMaxUs"] = st.loop.workMaxUs;

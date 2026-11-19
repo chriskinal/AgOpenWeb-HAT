@@ -239,7 +239,9 @@ scheduled (policy and priority), whether the kernel is PREEMPT_RT (from its vers
 Pi's RT kernel has no `/sys/kernel/realtime`) and whether memory is locked; `/api/status` `loop`
 carries the same (`policy`, `priority`, `rtKernel`, `memoryLocked`). With `--board hat`, anything
 short of FIFO, an RT kernel and locked memory is a warning, so a unit run by hand or booted on
-the standard kernel says so in its log.
+the standard kernel says so in its log. The Home page shows it beside the version, checked every
+5 s: "RT: OK", "off" short of all three, or "late" for a minute after a tick was missed or ran over
+1 ms late (`loop` `lateAgoS`, seconds since the last; null when none yet).
 
 **Smaller thread stacks (2026-11-17).** `mlockall(MCL_CURRENT | MCL_FUTURE)` made every
 thread's whole 8 MB stack resident: 66 MB for the daemon, 56 of it stacks, too much for the
