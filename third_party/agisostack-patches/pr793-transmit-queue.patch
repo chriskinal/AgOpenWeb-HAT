@@ -1,8 +1,8 @@
 diff --git a/hardware_integration/include/isobus/hardware_integration/can_hardware_interface.hpp b/hardware_integration/include/isobus/hardware_integration/can_hardware_interface.hpp
-index 6bd3475..92bc1c2 100644
+index ad940bb..a9922b7 100644
 --- a/hardware_integration/include/isobus/hardware_integration/can_hardware_interface.hpp
 +++ b/hardware_integration/include/isobus/hardware_integration/can_hardware_interface.hpp
-@@ -162,8 +162,8 @@ namespace isobus
+@@ -170,8 +170,8 @@ namespace isobus
  
  			std::shared_ptr<CANHardwarePlugin> frameHandler; ///< The CAN driver to use for a CAN channel
  
@@ -14,10 +14,24 @@ index 6bd3475..92bc1c2 100644
  		};
  
 diff --git a/utility/include/isobus/utility/thread_synchronization.hpp b/utility/include/isobus/utility/thread_synchronization.hpp
-index fbdec7c..03505d7 100644
+index ac90eb9..8bd0257 100644
 --- a/utility/include/isobus/utility/thread_synchronization.hpp
 +++ b/utility/include/isobus/utility/thread_synchronization.hpp
-@@ -29,11 +29,11 @@ namespace isobus
+@@ -1,11 +1,11 @@
+-//================================================================================================
++//=========================================================================================
+ /// @file thread_synchronization.hpp
+ ///
+ /// @brief A single header file to automatically include the correct thread synchronization
+ /// @author Daan Steenbergen
+ ///
+ /// @copyright 2024 The Open-Agriculture Developers
+-//================================================================================================
++//=========================================================================================
+ #ifndef THREAD_SYNCHRONIZATION_HPP
+ #define THREAD_SYNCHRONIZATION_HPP
+ 
+@@ -31,11 +31,11 @@ namespace isobus
  /// @brief A template class for a queue, since threads are disabled this is a simple queue.
  /// @tparam T The item type for the queue.
  template<typename T>
@@ -32,7 +46,7 @@ index fbdec7c..03505d7 100644
  
  	/// @brief Push an item to the queue.
  	/// @param item The item to push to the queue.
-@@ -104,14 +104,16 @@ namespace isobus
+@@ -106,14 +106,16 @@ namespace isobus
  /// @param x The mutex to lock.
  #define LOCK_GUARD(type, x) const std::lock_guard<type> x##Lock(x)
  
@@ -53,9 +67,9 @@ index fbdec7c..03505d7 100644
  	  buffer(size), capacity(size)
  	{
  		// Validate the size of the queue, if assertion is disabled, set the size to 1.
-@@ -203,6 +205,57 @@ private:
- 
- #endif
+@@ -221,6 +223,57 @@ namespace isobus
+ 	}
+ }
  
 +/// @brief A bounded queue that any number of threads can push to, with a single consumer.
 +/// @details Wraps an SPSCQueue and serializes the producers with a mutex that is only held

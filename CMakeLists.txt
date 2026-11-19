@@ -30,7 +30,7 @@ if(AOW_ISOBUS)
   include(FetchContent)
   set(CAN_DRIVER "SocketCAN" CACHE STRING "" FORCE)
   FetchContent_Declare(isobus
-    URL https://github.com/Open-Agriculture/AgIsoStack-plus-plus/archive/a8f832ed11f5edb12324ff9a45f503126acf37fb.tar.gz
+    URL https://github.com/Open-Agriculture/AgIsoStack-plus-plus/archive/d29e670580ddd4271fdda55e59e02d79513e5af7.tar.gz
     DOWNLOAD_EXTRACT_TIMESTAMP TRUE
     PATCH_COMMAND git apply ${CMAKE_CURRENT_SOURCE_DIR}/third_party/agisostack-patches/pr793-transmit-queue.patch)
   FetchContent_MakeAvailable(isobus)
