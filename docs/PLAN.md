@@ -266,6 +266,19 @@ Writes do not wait. `daemon/serial_reader` now polls and reads every port on a t
 never polls or reads a serial port. Detection, parsing, opening, rate changes and writes stay
 in the loop. After: 16 hours, 5.8 million ticks, none over 1 ms, worst 470 us.
 
+**The tick is a poll() timeout, not a timerfd (2026-11-19).** With AgOpenWeb's simulator
+working a 250 ha field on the unit (load average 5), the loop still had ticks just over 1 ms
+late, about one every 10 minutes. Three ftrace captures: each tick's timer interrupt came on
+time, but a timerfd on PREEMPT_RT expires in `ktimers/N`, a FIFO 1 thread, so the wakeup waited
+behind whatever ran above it on that CPU: a CAN controller's interrupt thread (`irq/56-spi0.1`,
+FIFO 50) for 0.9 ms, or our own serial reader (FIFO 70) for 0.4 ms, then 0.6 ms of the loop's
+serial and app work before the tick. The loop now waits in `ppoll()` with a timeout at the next
+tick's due time: a FIFO thread's sleep timeout expires in the timer interrupt itself (hard
+hrtimer), so no thread holds it. Ticks are counted from the clock, missed ones included.
+Still open from the same captures: the GNSS UART (`irq/36-uart-pl011`, FIFO 50, CPU0) waits
+behind the CAN interrupt threads at the same priority, longer than its 32-byte FIFO lasts at
+460800 baud (0.7 ms): 138 overruns, about 110 bad checksums in 4 hours.
+
 ## 5. Changes needed in AgOpenWeb
 
 | Change | Where | Must not break |

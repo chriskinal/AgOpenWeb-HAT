@@ -14,7 +14,6 @@
 #include <sys/mman.h>
 #include <sys/signalfd.h>
 #include <sched.h>
-#include <sys/timerfd.h>
 #include <sys/utsname.h>
 #include <unistd.h>
 
@@ -214,23 +213,16 @@ void reportLoopSetup(aow::LoopSetup& s, bool warn) {
     }
 }
 
-// Arms (or rearms) the tick timer: the first tick one period from now, then every period.
-// Rearming clears ticks that piled up during startup.
-bool armTickTimer(int fd) {
-    itimerspec spec{};
-    spec.it_interval.tv_nsec = kTickNs;
-    spec.it_value.tv_nsec = kTickNs;
-    return timerfd_settime(fd, 0, &spec, nullptr) == 0;
-}
-
-int openTickTimer() {
-    const int fd = timerfd_create(CLOCK_MONOTONIC, TFD_CLOEXEC);
-    if (fd < 0) return -1;
-    if (!armTickTimer(fd)) {
-        close(fd);
-        return -1;
+// How long poll() may wait for the tick due at dueUs: zero once it is due. Rounded up to the
+// microsecond, so the wait never ends before the tick.
+timespec untilTick(uint64_t nowUs, uint64_t dueUs) {
+    timespec t{};
+    if (dueUs > nowUs) {
+        const uint64_t us = dueUs - nowUs;
+        t.tv_sec = static_cast<time_t>(us / 1'000'000);
+        t.tv_nsec = static_cast<long>(us % 1'000'000) * 1000;
     }
-    return fd;
+    return t;
 }
 
 // Hands the app's steering PGNs to the autosteer, and settings it changes to the web thread
@@ -325,7 +317,6 @@ int main(int argc, char** argv) {
     }
 
     const int sigFd = openSignalFd();
-    const int tickFd = openTickTimer();
 
     // The web thread also writes the log out, so it starts before anything can fail.
     aow::WebThread web(shared, {opt.webPort, opt.gvretPort, kVersion, settingsFile});
@@ -337,8 +328,8 @@ int main(int argc, char** argv) {
     };
 
     LOG_NOTICE(System, "aow-hatd %s starting", kVersion);
-    if (sigFd < 0 || tickFd < 0) {
-        LOG_ERROR(System, "signalfd/timerfd: %s", std::strerror(errno));
+    if (sigFd < 0) {
+        LOG_ERROR(System, "signalfd: %s", std::strerror(errno));
         return fail(1);
     }
     // Keep the control loop out of page faults. Fails harmlessly without the privilege.
@@ -529,7 +520,11 @@ int main(int argc, char** argv) {
 
     // The serial ports are read on the hub's reader thread: the loop polls its eventfd, never a
     // port (serial_reader.h: polling a tty can wait on an ordinary kworker).
-    enum { kApp, kTick, kSignal, kRtcm, kSerial, kCount };
+    // The tick is poll()'s timeout, not a timerfd: on PREEMPT_RT a timerfd expires in ktimers,
+    // a FIFO 1 thread, so any interrupt thread (or our serial reader) on that CPU held the tick
+    // back, up to 1.1 ms on the dev CM4; a FIFO thread's poll() timeout expires in the timer
+    // interrupt itself (docs/PLAN.md, 2026-11-19).
+    enum { kApp, kSignal, kRtcm, kSerial, kCount };
     pollfd fds[kCount];
     const uint64_t startUs = clock.nowUs();
     aow::indicators::Leds leds(startUs / 1000);
@@ -540,17 +535,18 @@ int main(int argc, char** argv) {
     uint64_t ticks = 0, nextSummary = summaryTicks, nextTurnSensor = 0, nextMotorProcess = 0, nextKick = 0;
     bool watchdogOn = false, isoAppLink = false;
     int code = 0;
-    // Tick n is due n periods after this rearm; each tick's lateness is measured from that.
-    aow::LoopTiming loopTiming(kTickNs / 1000, 1000);  // worst cases over 10 s windows
-    armTickTimer(tickFd);
-    loopTiming.start(clock.nowUs());
+    // Tick n is due n periods after here; each tick's lateness is measured from that.
+    constexpr uint64_t kTickUs = kTickNs / 1000;
+    aow::LoopTiming loopTiming(kTickUs, 1000);  // worst cases over 10 s windows
+    const uint64_t tickStartUs = clock.nowUs();
+    loopTiming.start(tickStartUs);
     for (;;) {
         fds[kApp] = {udp.fd(), POLLIN, 0};
-        fds[kTick] = {tickFd, POLLIN, 0};
         fds[kSignal] = {sigFd, POLLIN, 0};
         fds[kRtcm] = {rtcm.fd(), POLLIN, 0};
         fds[kSerial] = {hub.wakeFd(), POLLIN, 0};
-        if (poll(fds, kCount, -1) < 0) {
+        const timespec wait = untilTick(clock.nowUs(), tickStartUs + (ticks + 1) * kTickUs);
+        if (ppoll(fds, kCount, &wait, nullptr) < 0) {
             if (errno == EINTR) continue;
             LOG_ERROR(System, "poll: %s", std::strerror(errno));
             code = 1;
@@ -584,10 +580,9 @@ int main(int argc, char** argv) {
                 app.setImuPresent(true);
             }
         }
-        if (fds[kTick].revents) {
-            const uint64_t tickBeginUs = clock.nowUs();
-            uint64_t expirations = 0;
-            if (read(tickFd, &expirations, sizeof expirations) == sizeof expirations) ticks += expirations;
+        const uint64_t tickBeginUs = clock.nowUs();
+        if (tickBeginUs >= tickStartUs + (ticks + 1) * kTickUs) {
+            ticks = (tickBeginUs - tickStartUs) / kTickUs;  // more than one up: ticks were missed
             if (!opt.noWatchdog) {
                 if (!watchdogOn) {  // from the first tick: the loop is running
                     watchdogOn = true;
@@ -747,7 +742,6 @@ int main(int argc, char** argv) {
     isobus.stop();
     canWatch.stop();
     if (watchdogOn) board.watchdog(false);
-    close(tickFd);
     close(sigFd);
     return fail(code);
 }
