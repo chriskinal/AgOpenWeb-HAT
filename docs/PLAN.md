@@ -275,9 +275,18 @@ FIFO 50) for 0.9 ms, or our own serial reader (FIFO 70) for 0.4 ms, then 0.6 ms 
 serial and app work before the tick. The loop now waits in `ppoll()` with a timeout at the next
 tick's due time: a FIFO thread's sleep timeout expires in the timer interrupt itself (hard
 hrtimer), so no thread holds it. Ticks are counted from the clock, missed ones included.
-Still open from the same captures: the GNSS UART (`irq/36-uart-pl011`, FIFO 50, CPU0) waits
-behind the CAN interrupt threads at the same priority, longer than its 32-byte FIFO lasts at
-460800 baud (0.7 ms): 138 overruns, about 110 bad checksums in 4 hours.
+After: 9.5 hours under the same load, 3.4 million ticks, none over 1 ms, worst 957 us.
+
+**aow-hatd stays off CPU0 (2026-11-20).** The GNSS UART overran under the same load: `oe` on
+ttyAMA5 in `/proc/tty/driver/ttyAMA` rose about once a minute, each a bad checksum. The Pi's UARTs
+share one interrupt, handled only on CPU0 by `irq/36-uart-pl011` threads at FIFO 50, and the
+32-byte FIFO interrupts half full, so its thread has about 0.35 ms to run at 460800 baud. Raising
+it to FIFO 51 (above the SD card, Wi-Fi, Ethernet and CAN threads) only slowed the overruns.
+Captures triggered on each new overrun showed why: just before it, the UART thread had waited
+0.35 to 0.86 ms on CPU0 behind our own loop (FIFO 80) or serial reader (FIFO 70). The service
+now pins the daemon to CPUs 1-3 (`CPUAffinity=1-3`), and the serial reader raises the UART
+threads to 51 on each port it attaches (Linux makes them when a port opens). After: no overruns
+in 30 minutes, against about 25 before, and no tick over 1 ms.
 
 ## 5. Changes needed in AgOpenWeb
 

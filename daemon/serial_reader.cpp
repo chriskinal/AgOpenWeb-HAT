@@ -3,6 +3,7 @@
 
 #include "serial_reader.h"
 
+#include <dirent.h>
 #include <fcntl.h>
 #include <poll.h>
 #include <pthread.h>
@@ -12,6 +13,11 @@
 
 #include <algorithm>
 #include <cerrno>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+
+#include "aow/log.h"
 
 namespace aow {
 
@@ -112,6 +118,36 @@ void SerialReader::readSlot(Slot& s) {
     }
 }
 
+// The Pi's UARTs (PL011) have a 32-byte receive FIFO: 0.7 ms at 460800 baud. On PREEMPT_RT their
+// interrupt is a thread at FIFO 50 on CPU0, level with the SD card, Wi-Fi and Ethernet ones, and
+// a FIFO thread runs until it blocks. One above them, the UART's short work comes first (the
+// service keeps this daemon's own threads off CPU0: docs/PLAN.md 2026-11-20). The thread is made
+// when a port is opened, so look again on each attach.
+static void raiseUartIrqThreads() {
+    constexpr int kPriority = 51;
+    DIR* d = opendir("/proc");
+    if (!d) return;
+    int raised = 0;
+    while (dirent* e = readdir(d)) {
+        const int pid = std::atoi(e->d_name);
+        if (pid <= 0) continue;
+        char path[32], comm[32] = {};
+        std::snprintf(path, sizeof path, "/proc/%d/comm", pid);
+        FILE* f = std::fopen(path, "r");
+        if (!f) continue;
+        const bool got = std::fgets(comm, sizeof comm, f) != nullptr;
+        std::fclose(f);
+        // "irq/36-uart-pl011"
+        if (!got || std::strncmp(comm, "irq/", 4) != 0 || !std::strstr(comm, "-uart-pl011")) continue;
+        sched_param sp{};
+        if (sched_getscheduler(pid) == SCHED_FIFO && sched_getparam(pid, &sp) == 0 && sp.sched_priority >= kPriority) continue;
+        sp.sched_priority = kPriority;
+        if (sched_setscheduler(pid, SCHED_FIFO, &sp) == 0) ++raised;
+    }
+    closedir(d);
+    if (raised) LOG_INFO(System, "UART interrupt threads raised to FIFO %d: %d", kPriority, raised);
+}
+
 void SerialReader::run() {
     // Below the control loop (80) and above ordinary work, so the bytes still come promptly.
     sched_param sp{};
@@ -127,6 +163,7 @@ void SerialReader::run() {
     while (!stop_) {
         // Take up attaches and detaches, then poll the active slots and the command eventfd.
         int n = 0;
+        bool attached = false;
         fds[n++] = {cmdFd_, POLLIN, 0};
         for (int i = 0; i < kSlots; ++i) {
             Slot& s = slots_[i];
@@ -134,6 +171,7 @@ void SerialReader::run() {
             if (st == Attaching) {
                 s.state.store(Active, std::memory_order_release);
                 st = Active;
+                attached = true;
             }
             if (st == Detaching) {
                 ::close(s.fd);
@@ -145,6 +183,7 @@ void SerialReader::run() {
             slotOf[n] = i;
             fds[n++] = {s.fd, POLLIN, 0};
         }
+        if (attached) raiseUartIrqThreads();
         if (poll(fds, static_cast<nfds_t>(n), -1) < 0) continue;  // EINTR
         if (fds[0].revents) {
             uint64_t v;

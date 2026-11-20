@@ -31,6 +31,10 @@ CPUSchedulingPolicy=fifo
 CPUSchedulingPriority=80
 LimitRTPRIO=90
 LimitMEMLOCK=infinity
+# Off CPU0: the Pi's UART interrupt is handled only there, and a 460800 baud receiver fills the
+# UART's FIFO in 0.7 ms. With the loop (or aow-serial) on CPU0 the GNSS UART overran
+# (docs/PLAN.md, 2026-11-20).
+CPUAffinity=1-3
 
 [Install]
 WantedBy=multi-user.target
