@@ -286,7 +286,8 @@ Captures triggered on each new overrun showed why: just before it, the UART thre
 0.35 to 0.86 ms on CPU0 behind our own loop (FIFO 80) or serial reader (FIFO 70). The service
 now pins the daemon to CPUs 1-3 (`CPUAffinity=1-3`), and the serial reader raises the UART
 threads to 51 on each port it attaches (Linux makes them when a port opens). After: no overruns
-in 30 minutes, against about 25 before, and no tick over 1 ms.
+in 9 hours under the simulator's load (about 25 every 30 minutes before), and in the same 9 hours
+3.76 million ticks, none over 1 ms, worst 817 us.
 
 ## 5. Changes needed in AgOpenWeb
 
