@@ -427,7 +427,8 @@ Response linkGatewaySwitch(Backend& b, const Request& r) {
     return Response::json(doc["enabled"].as<bool>() ? R"({"status":"on"})" : R"({"status":"off"})");
 }
 
-// AOW HAT: the Network page's Wi-Fi section. GET: the state; POST {"fallback": bool}, or a switch:
+// AOW HAT: the Network page's Wi-Fi section. GET: the state; POST {"hostname": "name"} (the
+// unit's name on the network), {"fallback": bool}, or a switch:
 // {"mode": "client", "ssid", "password"} or {"mode": "ap", "ssid", "password", "band": "2.4"|"5",
 // "channel", "activate": false to save the access point without switching to it}.
 Response wifiConfig(Backend& b, const Request& r) {
@@ -475,6 +476,10 @@ Response wifiConfig(Backend& b, const Request& r) {
         e["message"] = err;
         return Response::json(toString(e), 400);
     };
+    if (doc["hostname"].is<const char*>() && doc["mode"].isNull()) {
+        if (!b.setHostname(doc["hostname"].as<std::string>(), err)) return refused();
+        return Response::json(R"({"status":"saved"})");
+    }
     if (doc["fallback"].is<bool>() && doc["mode"].isNull()) {
         if (!b.setWifiFallback(doc["fallback"].as<bool>(), err)) return error500(err);
         return Response::json(R"({"status":"saved"})");

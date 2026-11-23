@@ -8,7 +8,8 @@
 // AOW HAT: copied from Firmware_Teensy_AiO_26 v26.5.5 web_pages/TouchFriendlyNetworkPage.h.
 // HAT changes: the IP form is the firmware's (the API reports that the OS manages the address);
 // a Wi-Fi card is added (/api/wifi): the CM4 as a client of known networks or as the cab's
-// access point, the fallback to the access point after boot, and the networks in range.
+// access point, the fallback to the access point after boot, and the networks in range; and a
+// card for the unit's hostname, its name on the network (http://NAME.local/), on the same API.
 // The firmware's alert() and confirm() are uiAlert/uiConfirm (/dialog.js), which work in an
 // AgOpenWeb web card.
 
@@ -282,8 +283,37 @@ const char TOUCH_FRIENDLY_NETWORK_PAGE[] PROGMEM = R"rawliteral(
             const v = document.getElementById('wifiNetwork').value;
             document.getElementById('wifiOtherRow').style.display = v === '' ? '' : 'none';
         }
+        // AOW HAT: the unit's hostname card.
+        let hostLoaded = false;
+        function hostShow(d) {
+            document.getElementById('hostNow').textContent = d.hostname ? 'http://' + d.hostname + '.local/' : '--';
+            if (!hostLoaded && d.hostname) {
+                hostLoaded = true;
+                document.getElementById('hostName').value = d.hostname;
+            }
+        }
+        async function hostSave() {
+            const input = document.getElementById('hostName');
+            const name = input.value.trim().toLowerCase();
+            input.value = name;
+            const msg = document.getElementById('hostMsg');
+            if (wifiLast && name === wifiLast.hostname) { msg.textContent = 'That is the name it has.'; msg.className = 'wifi-msg'; return; }
+            if (!await uiConfirm('Rename this unit to "' + name + '"? It is then at http://' + name + '.local/ and no longer at its old name. ' +
+                                 'Other devices may take a minute to find it under the new name.', 'Rename')) return;
+            msg.textContent = 'Renaming...';
+            msg.className = 'wifi-msg';
+            fetch('/api/wifi', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ hostname: name }) })
+                .then(r => r.json()).then(d => {
+                    if (d.status === 'error') { msg.textContent = d.message; msg.className = 'wifi-msg failed'; return; }
+                    msg.textContent = 'Renamed. This unit is now at http://' + name + '.local/';
+                    msg.className = 'wifi-msg done';
+                    wifiPoll();
+                })
+                .catch(e => { msg.textContent = 'Error: ' + e; msg.className = 'wifi-msg failed'; });
+        }
         function wifiShow(d) {
             wifiLast = d;
+            hostShow(d);
             const now = document.getElementById('wifiNow');
             if (!d.available) now.textContent = d.unavailable;
             else if (d.apActive) now.textContent = 'Access point "' + d.ssid + '" at ' + d.ap.address + (d.fallbackActive ? ' (fallback)' : '');
@@ -423,6 +453,18 @@ const char TOUCH_FRIENDLY_NETWORK_PAGE[] PROGMEM = R"rawliteral(
             </form>
         </div>
         
+        <div class="card wifi-card">
+            <h2 style="margin-top: 0;">Unit name</h2>
+            <div class="wifi-row"><span>On the network</span><span id="hostNow">Loading...</span></div>
+            <label for="hostName">Hostname</label>
+            <input type="text" id="hostName" maxlength="63" autocapitalize="off" autocorrect="off" spellcheck="false">
+            <div class="help-text">Lowercase letters, digits and hyphens. Give each unit its own name when there are several on one network.</div>
+            <div class="wifi-buttons" style="grid-template-columns: 1fr;">
+                <button type="button" class="touch-button" onclick="hostSave()">Rename</button>
+            </div>
+            <div class="wifi-msg" id="hostMsg"></div>
+        </div>
+
         <div class="card wifi-card">
             <h2 style="margin-top: 0;">Wi-Fi</h2>
             <div class="wifi-row"><span>Now</span><span id="wifiNow">Loading...</span></div>

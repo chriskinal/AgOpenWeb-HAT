@@ -367,6 +367,17 @@ public:
     std::vector<wifi::Seen> wifiSeen() override { return wifi_.seen(); }
     bool setWifi(const wifi::Request& r, bool activate, std::string& error) override { return wifi_.apply(r, activate, error); }
     bool setWifiFallback(bool on, std::string& error) override { return wifi_.setFallback(on, error); }
+    bool setHostname(const std::string& name, std::string& error) override {
+        if (!wifi_.setHostname(name, error)) return false;
+        // The unit's default name ("AOW HAT <host>") follows the hostname: announced again, and
+        // the gateway restarted to take it if it runs under that name.
+        syncAnnouncement(linkGatewayEnabled());
+        announcePages(pagesPort_, unitName());
+        if (linkGatewaySettings().name.empty() &&
+            std::system("systemctl --no-block try-restart aow-linkd.service >/dev/null 2>&1") != 0)
+            LOG_WARNING(Network, "AOW link gateway not restarted (systemctl failed); it takes the new name at its next start");
+        return true;
+    }
 
     void restart() override {
         LOG_WARNING(System, "Restart requested from the web page");

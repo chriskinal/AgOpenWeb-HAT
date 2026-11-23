@@ -48,6 +48,16 @@ std::string defaultApSsid(const std::string& hostname) {
     return s.size() > 32 ? s.substr(0, 32) : s;
 }
 
+std::string hostnameError(const std::string& name) {
+    if (name.empty()) return "Enter a name";
+    if (name.size() > 63) return "The name is too long (at most 63 characters)";
+    for (char c : name)
+        if (!((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-'))
+            return "Use only lowercase letters, digits and hyphens";
+    if (name.front() == '-' || name.back() == '-') return "The name cannot start or end with a hyphen";
+    return "";
+}
+
 Args apProfileArgs(const Request& r, bool exists) {
     Args a = exists ? Args{"nmcli", "connection", "modify", kApProfile}
                     : Args{"nmcli", "connection", "add", "type", "wifi", "ifname", kDevice, "con-name", kApProfile};

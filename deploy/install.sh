@@ -18,6 +18,11 @@
 # AgOpenWeb's own installer, when it differs from what is in /opt/agopenweb; --no-app leaves the
 # app as it is.
 #
+# The unit's hostname is its name on the network (http://NAME.local/, avahi-daemon, which is
+# installed if missing). The first install sets it to "agopenweb"; --hostname NAME sets it to
+# NAME, then or later (--hostname "$(hostname)" keeps the one it has). The Network page changes it
+# too. Later installs and updates leave it alone.
+#
 # Run from a bundle (deploy/package.sh) or from the repo's deploy/ with a built aow-hatd beside
 # it. From a bundle, the bundle is kept in /usr/local/lib/aow-hat/current and the one before it
 # in .../previous, which is what the updater rolls back to. --no-record skips that (the
@@ -31,9 +36,13 @@ choice=""
 record=yes
 gateway=""
 app=yes
+hostname=""
 
-for a in "$@"; do
+while [ $# -gt 0 ]; do
+  a="$1"
+  shift
   case "$a" in
+    --hostname) [ $# -gt 0 ] || { echo "--hostname needs a name" >&2; exit 2; }; hostname="$1"; shift ;;
     --hat) choice=yes ;;
     --no-hat) choice=no ;;
     --no-record) record=no ;;
@@ -45,6 +54,10 @@ for a in "$@"; do
 done
 
 [ "$(id -u)" -eq 0 ] || { echo "run as root (sudo)" >&2; exit 1; }
+if [ -n "$hostname" ] && ! [[ "$hostname" =~ ^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$ ]]; then
+  echo "--hostname: lowercase letters, digits and hyphens, at most 63, not starting or ending with a hyphen" >&2
+  exit 2
+fi
 
 if [ -z "$choice" ]; then
   echo "Which hardware does this machine use?"
@@ -58,7 +71,24 @@ if [ -z "$choice" ]; then
   esac
 fi
 
+# The first install on this unit names it, unless told otherwise.
+[ -f "$CONF" ] || [ -n "$hostname" ] || hostname=agopenweb
 echo "HAT_FITTED=$choice" > "$CONF"
+
+# The unit's name on the network: avahi answers for NAME.local. Installed if missing; on an
+# update without a network it is only a warning, and the unit works on without it.
+if ! dpkg-query -W -f='${Status}' avahi-daemon 2>/dev/null | grep -q 'ok installed'; then
+  export DEBIAN_FRONTEND=noninteractive
+  if apt-get install -y -q avahi-daemon >/dev/null || { apt-get update -q >/dev/null && apt-get install -y -q avahi-daemon >/dev/null; }; then
+    echo "avahi-daemon installed: the unit answers as $(hostname).local."
+  else
+    echo "warning: avahi-daemon could not be installed (no network?); NAME.local will not work until it is" >&2
+  fi
+fi
+systemctl enable --now avahi-daemon.service 2>/dev/null || true
+install -d "$LIB"
+install -m 0755 "$HERE/aow-hostname" "$LIB/aow-hostname"
+[ -z "$hostname" ] || "$LIB/aow-hostname" "$hostname"
 
 if [ "$choice" = yes ]; then
   [ -x "$HERE/aow-hatd" ] || { echo "aow-hatd binary not found next to install.sh" >&2; exit 1; }

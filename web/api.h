@@ -49,6 +49,7 @@ struct Backend {
     virtual std::vector<wifi::Seen> wifiSeen() { return {}; }
     virtual bool setWifi(const wifi::Request&, bool /*activate*/, std::string& error) { error = "not available"; return false; }
     virtual bool setWifiFallback(bool, std::string& error) { error = "not available"; return false; }
+    virtual bool setHostname(const std::string&, std::string& error) { error = "not available"; return false; }
     virtual void restart() = 0;  // restart the daemon (the firmware rebooted the Teensy)
 
     // The uploaded CAN brand file (the firmware's LittleFS /can_config.json). "" if none.

@@ -64,7 +64,8 @@ strip "$B/aow-hatd" 2>/dev/null || true
 install -m 0755 "$BUILD/aow-linkd" "$B/aow-linkd"
 strip "$B/aow-linkd" 2>/dev/null || true
 dtc -@ -q -I dts -O dtb -o "$B/aow-hat.dtbo" "$REPO/boards/hat/aow-hat-overlay.dts"
-install -m 0755 "$HERE/install.sh" "$HERE/aow-hatctl" "$HERE/aow-keymon.py" "$HERE/aow-hat-update" "$HERE/aow-hat-app-tree" "$B/"
+install -m 0755 "$HERE/install.sh" "$HERE/aow-hatctl" "$HERE/aow-keymon.py" "$HERE/aow-hat-update" "$HERE/aow-hat-app-tree" \
+  "$HERE/aow-hostname" "$B/"
 install -m 0644 "$HERE/aow-hatd.service" "$HERE/aow-linkd.service" "$HERE/aow-keymon.service" "$HERE/aow-hat-update.service" \
   "$HERE/80-aow-hat-can.rules" "$HERE/config.txt.hat" "$HERE/update-key.pem" "$B/"
 install -m 0644 "$HERE"/can-config/*.json "$B/can-config/"

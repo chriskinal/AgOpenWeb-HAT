@@ -110,7 +110,11 @@ The Teensy firmware is not being rewritten and nothing is ported back to it.
   is the fallback 90 s after boot when no known network is found (`/etc/aow-hat/wifi.conf`).
   On the dev CM4 (2026-10-26) client to access point and back worked from the page (up in 6 s,
   back on the home network in 13 s); the fallback after boot is not tried yet. A switch cuts
-  the SSH session.
+  the SSH session. The unit's hostname is its name on the network (`NAME.local`, avahi-daemon,
+  which install.sh installs if missing): the first install sets `agopenweb` (`--hostname NAME`
+  otherwise), the Network page's Unit name card changes it, both through `deploy/aow-hostname`,
+  which also switches cloud-init off (it would put the Imager's name back in `/etc/hosts` at
+  every boot).
 - **AgOpenWeb web card:** the pages work in one (AgOpenWeb `Docs/ADD_ON_CARDS.md`; bookmark
   `http://{host}/`). The card's iframe is sandboxed without `allow-modals`, so `alert()` and
   `confirm()` do nothing there: pages use `uiAlert` / `uiConfirm` from `/dialog.js`

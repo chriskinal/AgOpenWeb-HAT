@@ -31,6 +31,9 @@ public:
     // activate false only the access point's profile is written (client mode: for the fallback).
     bool apply(const wifi::Request& r, bool activate, std::string& error);
     bool setFallback(bool on, std::string& error);
+    // The unit's hostname, through deploy/aow-hostname (wifi::kHostnameTool); waits for it, about
+    // a second (it restarts avahi).
+    bool setHostname(const std::string& name, std::string& error);
 
 private:
     struct Profile {

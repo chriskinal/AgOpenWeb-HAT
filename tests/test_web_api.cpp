@@ -87,6 +87,12 @@ struct FakeBackend : Backend {
         return true;
     }
     bool setWifiFallback(bool on, std::string&) override { wifiSt.fallback = on; ++wifiFallbacks; return true; }
+    bool setHostname(const std::string& name, std::string& err) override {
+        err = wifi::hostnameError(name);
+        if (!err.empty()) return false;
+        wifiSt.hostname = name;
+        return true;
+    }
     void restart() override { ++restarts; }
     std::string updatePackage, updateJson;
     int reboots = 0;
@@ -450,6 +456,13 @@ int main() {
     CHECK(b.wifiReq.mode == wifi::Mode::Client && b.wifiReq.password.empty() && b.wifiSwitches == 3);
     CHECK(parse(post(s, port, "/api/wifi", R"({"fallback":false})"))["status"] == "saved" && !b.wifiSt.fallback);
     CHECK(b.wifiFallbacks == 1 && b.wifiSwitches == 3);
+    d = parse(post(s, port, "/api/wifi", R"({"hostname":"Bad Name"})"));
+    CHECK(d["status"] == "error" && d["message"] == "Use only lowercase letters, digits and hyphens");
+    CHECK(parse(post(s, port, "/api/wifi", R"({"hostname":"tractor-2"})"))["status"] == "saved");
+    CHECK(parse(request(s, port, "GET /api/wifi HTTP/1.1\r\n\r\n"))["hostname"] == "tractor-2");
+    CHECK(b.wifiSwitches == 3 && b.wifiFallbacks == 1);
+    r = request(s, port, "GET /network HTTP/1.1\r\n\r\n");
+    CHECK(r.find("hostSave()") != std::string::npos && r.find("Unit name") != std::string::npos);
 
     return finish("web_api");
 }

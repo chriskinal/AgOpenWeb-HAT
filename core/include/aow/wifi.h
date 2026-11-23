@@ -43,6 +43,12 @@ bool validChannel(bool band5, uint8_t channel);
 // The default access point name for a unit with this hostname: "AgOpenWeb-<host>".
 std::string defaultApSsid(const std::string& hostname);
 
+// The unit's hostname, its name on the network (NAME.local): "" if it can be used, else why not.
+// One DNS label: lowercase letters, digits and hyphens, at most 63, no hyphen at either end
+// (deploy/aow-hostname checks the same).
+constexpr const char* kHostnameTool = "/usr/local/lib/aow-hat/aow-hostname";
+std::string hostnameError(const std::string& name);
+
 // What the Network page shows.
 struct State {
     bool available = false;  // NetworkManager and wlan0 are there

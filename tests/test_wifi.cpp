@@ -63,6 +63,20 @@ int main() {
     CHECK(defaultApSsid("") == "AgOpenWeb-HAT");
     CHECK(defaultApSsid(std::string(40, 'h')).size() == 32);
 
+    // The unit's hostname: one DNS label.
+    CHECK(hostnameError("agopenweb").empty());
+    CHECK(hostnameError("tractor-2").empty());
+    CHECK(hostnameError("7").empty());
+    CHECK(hostnameError(std::string(63, 'a')).empty());
+    CHECK(hostnameError("") == "Enter a name");
+    CHECK(hostnameError(std::string(64, 'a')) == "The name is too long (at most 63 characters)");
+    CHECK(hostnameError("AgOpenWeb") == "Use only lowercase letters, digits and hyphens");
+    CHECK(!hostnameError("my unit").empty());
+    CHECK(!hostnameError("unit.local").empty());
+    CHECK(!hostnameError("a;reboot").empty());
+    CHECK(hostnameError("-unit") == "The name cannot start or end with a hyphen");
+    CHECK(!hostnameError("unit-").empty());
+
     // The access point's profile: made or changed, autoconnect off until it is up, the
     // password only if given.
     Args a = apProfileArgs(ap, false);

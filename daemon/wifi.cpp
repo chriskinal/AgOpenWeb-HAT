@@ -168,6 +168,25 @@ bool WifiControl::setFallback(bool on, std::string& error) {
     return true;
 }
 
+bool WifiControl::setHostname(const std::string& name, std::string& error) {
+    error = wifi::hostnameError(name);
+    if (!error.empty()) return false;
+    if (access(wifi::kHostnameTool, X_OK) != 0) {
+        error = "The hostname cannot be changed here (aow-hostname is not installed)";
+        return false;
+    }
+    std::string out;
+    if (spawn({wifi::kHostnameTool, name}, &out, 30) != 0) {
+        error = "The hostname was not changed: " + message(out);
+        LOG_WARNING(Network, "%s", error.c_str());
+        return false;
+    }
+    LOG_NOTICE(Network, "Hostname set to \"%s\" from the Network page (http://%s.local/)", name.c_str(), name.c_str());
+    std::lock_guard<std::mutex> lock(mutex_);
+    state_.hostname = name;
+    return true;
+}
+
 void WifiControl::run() {
     pthread_setname_np(pthread_self(), "aow-wifi");
     const bool afterBoot = uptimeS() < kBootWindowS;
