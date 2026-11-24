@@ -18,6 +18,12 @@ struct MonotonicClock : hal::Clock {
     uint64_t nowUs() override;
 };
 
+// The host's CPU temperature (the first thermal zone), in °C; false if there is none.
+bool cpuTempC(float& c);
+// The Raspberry Pi firmware's get_throttled bits (aow/cpu_health.h), through its mailbox
+// (/dev/vcio, root only), read without clearing them; false on anything that is not a Pi.
+bool piThrottled(uint32_t& bits);
+
 // Receives on listenPort (all interfaces, so the app's subnet broadcasts arrive too) and
 // sends to one fixed address. A link used only to receive (RTCM) gets no destination.
 class UdpLink : public hal::UdpLink {

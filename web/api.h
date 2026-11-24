@@ -10,6 +10,7 @@
 #include <string>
 #include <vector>
 
+#include "aow/cpu_health.h"
 #include "aow/helper_status.h"
 #include "aow/log.h"
 #include "aow/settings.h"
@@ -50,6 +51,8 @@ struct Backend {
     virtual bool setWifi(const wifi::Request&, bool /*activate*/, std::string& error) { error = "not available"; return false; }
     virtual bool setWifiFallback(bool, std::string& error) { error = "not available"; return false; }
     virtual bool setHostname(const std::string&, std::string& error) { error = "not available"; return false; }
+    // AOW HAT: the host's CPU temperature, under-voltage and throttling (aow/cpu_health.h).
+    virtual CpuHealth cpuHealth() { return {}; }
     virtual void restart() = 0;  // restart the daemon (the firmware rebooted the Teensy)
 
     // The uploaded CAN brand file (the firmware's LittleFS /can_config.json). "" if none.

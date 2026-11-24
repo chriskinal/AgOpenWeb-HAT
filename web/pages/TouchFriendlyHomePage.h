@@ -10,7 +10,9 @@
 // ISOBUS and Serial Communications tiles (the HAT's own pages). Beside the version, the control
 // loop from /api/status loop, every 5 s: "RT: OK" in green; "late" in amber for a minute after a
 // tick was missed or ran over 1 ms late; "off" in amber without FIFO, a PREEMPT_RT kernel or locked memory. The detail
-// is in the tooltip.
+// is in the tooltip. After it, the CPU from /api/status cpu: its temperature in green, amber from
+// 75 °C, with "low V" and "slowed" in amber for a minute after the Pi's firmware reported
+// under-voltage or throttling; counts, times and the firmware's record since boot in the tooltip.
 // alert() and confirm() are the in-page uiAlert/uiConfirm (/dialog.js), which work in an AgOpenWeb
 // web card.
 
@@ -100,7 +102,7 @@ const char TOUCH_FRIENDLY_HOME_PAGE[] PROGMEM = R"rawliteral(
         </div>
         
         <div class="info">
-            <p>Firmware: <span id="firmwareVersion">Loading...</span> | <span style="white-space: nowrap; color: inherit; font-weight: inherit">RT: <span id="realtime">-</span></span></p>
+            <p>Firmware: <span id="firmwareVersion">Loading...</span> | <span style="white-space: nowrap; color: inherit; font-weight: inherit">RT: <span id="realtime">-</span></span> | <span style="white-space: nowrap; color: inherit; font-weight: inherit">CPU: <span id="cpuTemp">-</span></span></p>
             <p>WebSocket: <span id="wsStatus">Disconnected</span> | <span id="telemetryRate">0</span> Hz</p>
         </div>
     </div>
@@ -199,6 +201,26 @@ const char TOUCH_FRIENDLY_HOME_PAGE[] PROGMEM = R"rawliteral(
                                    loop.missed + ' ticks missed, ' + loop.lateOver1ms + ' over 1 ms late, worst ' +
                                    loop.lateMaxEverUs + ' \u00b5s late (a tick is 10 ms)' +
                                    (loop.lateAgoS != null ? '; the last ' + loop.lateAgoS + ' s ago' : '');
+                    }
+                    // AOW HAT: the CPU's temperature, under-voltage and throttling.
+                    const cpu = data.cpu;
+                    const ct = document.getElementById('cpuTemp');
+                    if (cpu && cpu.tempC != null) {
+                        const recent = (now, ago) => now || (ago != null && ago < 60);
+                        const lowV = recent(cpu.underVoltage, cpu.underVoltageAgoS);
+                        const slowed = recent(cpu.throttling, cpu.throttleAgoS);
+                        ct.textContent = Math.round(cpu.tempC) + '\u00b0C' + (lowV ? ', low V' : '') + (slowed ? ', slowed' : '');
+                        ct.style.color = cpu.tempC >= cpu.warmC || lowV || slowed ? '#ffb347' : '#8ee59a';
+                        const times = (n, ago) => n ? n + (n === 1 ? ' time' : ' times') + ' since start, the last ' + ago + ' s ago' : 'none since start';
+                        ct.title = 'CPU ' + cpu.tempC + ' \u00b0C, highest ' + cpu.tempMaxC + ' \u00b0C since start (amber from ' +
+                                   cpu.warmC + ' \u00b0C; the Pi slows the CPU at 80 \u00b0C). ' +
+                                   (cpu.firmware ? 'Under-voltage (5 V below about 4.63 V): ' + times(cpu.underVoltageCount, cpu.underVoltageAgoS) +
+                                                   '. Slowed by the firmware: ' + times(cpu.throttleCount, cpu.throttleAgoS) +
+                                                   '. Since boot, the firmware records ' +
+                                                   (cpu.underVoltageOccurred || cpu.throttleOccurred
+                                                        ? [cpu.underVoltageOccurred ? 'under-voltage' : '', cpu.throttleOccurred ? 'slowing' : ''].filter(x => x).join(' and ')
+                                                        : 'neither') + '.'
+                                                 : 'Supply voltage not known (no Raspberry Pi firmware).');
                     }
                 })
                 .catch(err => {

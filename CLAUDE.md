@@ -122,6 +122,11 @@ The Teensy firmware is not being rewritten and nothing is ported back to it.
   smallest card (420 x 350). `aow-hatd` announces them as `_aowcard._tcp` under the unit's name
   (the gateway's, set on the ISOBUS page) while it serves them
   (`/etc/avahi/services/aow-hat-pages.service`).
+- **CPU health:** the home page's status line shows the CPU temperature (amber from 75 °C) and
+  the Pi firmware's under-voltage and throttling (`core/cpu_health`, `/api/status` `cpu`),
+  sampled every second on the web thread through `/dev/vcio`. The firmware's "has occurred"
+  bits are sticky, so they count only as edges. Throttling checked on the Pi 4B by heating it
+  to 82 °C (2026-11-23); under-voltage not yet seen on a unit.
 - **CAN watch:** `daemon/can_watch.cpp` restarts a CAN interface that has frames queued and sends
   none with no bus error (seen once after a bus-off storm; `/api/status` `canRestarts`).
 - **Key monitor:** `deploy/aow-keymon.py`, its own service: key off for 3 s runs `poweroff`.

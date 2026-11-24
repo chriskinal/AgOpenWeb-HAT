@@ -34,6 +34,25 @@ UdpLink::~UdpLink() {
     if (fd_ >= 0) close(fd_);
 }
 
+bool cpuTempC(float& c) {
+    std::ifstream in("/sys/class/thermal/thermal_zone0/temp");
+    long milli = 0;
+    if (!(in >> milli)) return false;
+    c = static_cast<float>(milli) / 1000.0f;
+    return true;
+}
+
+bool piThrottled(uint32_t& bits) {
+    static const int fd = ::open("/dev/vcio", O_RDWR | O_CLOEXEC);  // kept open; -1 off a Pi
+    if (fd < 0) return false;
+    // A property message: its size, a request, the tag GET_THROTTLED with a 4-byte value (0:
+    // read only; the kernel's hwmon driver sends 0xffff, which clears bits 16-19), the end tag.
+    alignas(16) uint32_t msg[7] = {sizeof msg, 0, 0x00030046, 4, 0, 0, 0};
+    if (ioctl(fd, _IOWR(100, 0, char*), msg) != 0 || msg[1] != 0x80000000u) return false;
+    bits = msg[5];
+    return true;
+}
+
 bool UdpLink::setDestination(const char* host, uint16_t port) {
     dest_.sin_family = AF_INET;
     dest_.sin_port = htons(port);

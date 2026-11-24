@@ -8,6 +8,7 @@
 
 #include <ArduinoJson.h>
 
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <fstream>
@@ -219,6 +220,30 @@ Response status(Backend& b, const char* version) {
     loop["priority"] = st.loopSetup.priority;
     loop["rtKernel"] = st.loopSetup.rtKernel;
     loop["memoryLocked"] = st.loopSetup.memoryLocked;
+    // AOW HAT: the host's CPU temperature, and the Pi firmware's under-voltage and throttling,
+    // each "now" (seen in the last 10 s), episodes since start, seconds since the last one, and
+    // the firmware's own record ("Occurred": since boot).
+    const CpuHealth cpu = b.cpuHealth();
+    JsonObject c = doc["cpu"].to<JsonObject>();
+    if (cpu.haveTemp) {
+        c["tempC"] = std::round(cpu.tempC * 10) / 10;
+        c["tempMaxC"] = std::round(cpu.tempMaxC * 10) / 10;
+    } else {
+        c["tempC"] = nullptr;
+        c["tempMaxC"] = nullptr;
+    }
+    c["warmC"] = kCpuWarmC;
+    c["firmware"] = cpu.haveThrottled;  // false: not a Pi, nothing known about voltage
+    c["underVoltage"] = cpu.underVoltage;
+    c["underVoltageCount"] = cpu.underVoltageCount;
+    if (cpu.underVoltageAgoS >= 0) c["underVoltageAgoS"] = cpu.underVoltageAgoS;
+    else c["underVoltageAgoS"] = nullptr;
+    c["underVoltageOccurred"] = cpu.underVoltageOccurred;
+    c["throttling"] = cpu.throttling;
+    c["throttleOccurred"] = cpu.throttleOccurred;
+    c["throttleCount"] = cpu.throttleCount;
+    if (cpu.throttleAgoS >= 0) c["throttleAgoS"] = cpu.throttleAgoS;
+    else c["throttleAgoS"] = nullptr;
     isobusStatusJson(b.isobusStatus(), doc["isobus"].to<JsonObject>());  // AOW HAT: not in the firmware's status
     linkGatewayJson(b, doc["linkGateway"].to<JsonObject>());               // AOW HAT: docs/PLAN_VT.md section 2
     doc["insLeverArm"] = b.insLeverArm();                                  // AOW HAT: PGN 247 to the UM981 (aow/ins_setup.h)

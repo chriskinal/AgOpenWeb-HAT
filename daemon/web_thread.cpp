@@ -367,6 +367,23 @@ public:
     std::vector<wifi::Seen> wifiSeen() override { return wifi_.seen(); }
     bool setWifi(const wifi::Request& r, bool activate, std::string& error) override { return wifi_.apply(r, activate, error); }
     bool setWifiFallback(bool on, std::string& error) override { return wifi_.setFallback(on, error); }
+    // Sampled every second (the firmware's "has occurred" bits last 2 s), changes logged.
+    void tickCpuHealth() {
+        float temp = 0;
+        uint32_t bits = 0;
+        const bool haveTemp = linux_io::cpuTempC(temp);
+        const bool haveBits = linux_io::piThrottled(bits);
+        const uint64_t now = std::chrono::duration_cast<std::chrono::seconds>(Clock::now().time_since_epoch()).count();
+        const CpuMonitor::Change c = cpu_.sample(now, haveTemp, temp, haveBits, bits);
+        if (c.underVoltageStarted) LOG_WARNING(System, "Under-voltage: the 5 V supply is low (below about 4.63 V)");
+        if (c.underVoltageEnded) LOG_INFO(System, "5 V supply back to normal");
+        if (c.throttleStarted) LOG_WARNING(System, "CPU slowed by the Pi's firmware (%.0f \u00b0C)", temp);
+        if (c.throttleEnded) LOG_INFO(System, "CPU at full speed again (%.0f \u00b0C)", temp);
+    }
+    CpuHealth cpuHealth() override {
+        return cpu_.health(std::chrono::duration_cast<std::chrono::seconds>(Clock::now().time_since_epoch()).count());
+    }
+
     bool setHostname(const std::string& name, std::string& error) override {
         if (!wifi_.setHostname(name, error)) return false;
         // The unit's default name ("AOW HAT <host>") follows the hostname: announced again, and
@@ -592,6 +609,7 @@ private:
     const SettingsFile& file_;
     HelperListener& helpers_;
     WifiControl wifi_;
+    CpuMonitor cpu_;
     uint16_t pagesPort_ = 0;
 };
 
@@ -649,6 +667,7 @@ void WebThread::run() {
             while (n < Shared::kOwnAddresses) shared_.ownAddresses[n++].store(0, std::memory_order_relaxed);
             shared_.networkUp = up;
             backend.tickLeverArm();
+            backend.tickCpuHealth();
         }
         if (shared_.takeSaveRequest()) {
             std::string err;

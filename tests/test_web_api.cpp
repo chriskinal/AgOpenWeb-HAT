@@ -87,6 +87,8 @@ struct FakeBackend : Backend {
         return true;
     }
     bool setWifiFallback(bool on, std::string&) override { wifiSt.fallback = on; ++wifiFallbacks; return true; }
+    CpuHealth cpu;
+    CpuHealth cpuHealth() override { return cpu; }
     bool setHostname(const std::string& name, std::string& err) override {
         err = wifi::hostnameError(name);
         if (!err.empty()) return false;
@@ -163,6 +165,18 @@ int main() {
     CHECK(d["version"] == "0.1.0" && d["uptime"] == 12345 && d["moduleId"] == 126);
     CHECK(d["network"]["interfaces"].size() == 3 && d["gnss"]["fixQuality"] == 4);
     CHECK(d["isobus"]["state"] == "disabled" && d["isobus"]["address"].isNull());
+    CHECK(d["cpu"]["tempC"].isNull() && d["cpu"]["firmware"] == false && d["cpu"]["underVoltageAgoS"].isNull());
+    b.cpu.haveTemp = b.cpu.haveThrottled = true;
+    b.cpu.tempC = 61.27f;
+    b.cpu.tempMaxC = 64.0f;
+    b.cpu.underVoltage = true;
+    b.cpu.underVoltageCount = 2;
+    b.cpu.underVoltageAgoS = 3;
+    d = parse(request(s, port, "GET /api/status HTTP/1.1\r\n\r\n"));
+    CHECK(d["cpu"]["tempC"].as<float>() > 61.29f && d["cpu"]["tempC"].as<float>() < 61.31f && d["cpu"]["tempMaxC"] == 64);
+    CHECK(d["cpu"]["firmware"] == true && d["cpu"]["underVoltage"] == true && d["cpu"]["underVoltageCount"] == 2);
+    CHECK(d["cpu"]["underVoltageAgoS"] == 3 && d["cpu"]["throttling"] == false && d["cpu"]["throttleAgoS"].isNull());
+    CHECK(d["cpu"]["warmC"] == 75 && d["cpu"]["underVoltageOccurred"] == false && d["cpu"]["throttleOccurred"] == false);
     b.iso.state = IsobusStatus::State::Claimed;
     b.iso.channel = 2;
     b.iso.address = 247;
