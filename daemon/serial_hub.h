@@ -102,6 +102,7 @@ private:
     void scanUsb();
     void route();
     void announce(Channel& c, SerialDetector::Kind before);
+    void useImu(Channel* c);  // the port the IMU is read from; another one resets the IMU
 
     GnssLink& gnss_;
     imu::Imu& imu_;

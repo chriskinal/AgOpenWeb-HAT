@@ -575,7 +575,7 @@ int main(int argc, char** argv) {
         if (fds[kSerial].revents) {
             const aow::imu::Type before = imu.type();
             hub.handle();
-            if (imu.type() != before) {
+            if (imu.type() != before && imu.type() != aow::imu::Type::None) {
                 LOG_INFO(Imu, "%s detected on %s", aow::imu::typeName(imu.type()), hub.imuName().c_str());
                 app.setImuPresent(true);
             }

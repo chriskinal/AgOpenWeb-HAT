@@ -76,6 +76,14 @@ public:
     // PGN 251's "use Y axis" bit: the IMU is mounted turned 90 degrees, so roll and pitch swap.
     void setSwapXY(bool swap) { swapXY_ = swap; }
 
+    // Another IMU from now on (another port, or one swapped for another): detect its type again.
+    // The Y-axis swap stays.
+    void reset() {
+        const bool swap = swapXY_;
+        *this = Imu();
+        swapXY_ = swap;
+    }
+
     Type type() const { return type_; }
     // A packet in the last 100 ms, as the firmware.
     bool valid(uint64_t nowUs) const { return packets_ && nowUs - lastUs_ < 100'000; }

@@ -162,6 +162,21 @@ int main() {
         CHECK(near(m.data().yawRate, 5.0, 0.05));
     }
 
+    // --- Another IMU after a reset (one swapped for another): a TM171, then a BNO085
+    {
+        imu::Imu m;
+        m.setSwapXY(true);
+        for (int i = 0; i < 3; ++i) feed(m, tmRpy(0, 0, 0), static_cast<uint64_t>(i) * 10'000);
+        CHECK(m.type() == imu::Type::Tm171);
+        for (int i = 0; i < 3; ++i) feed(m, bno(static_cast<uint8_t>(i), 0, 3.0, -2.0), 100'000 + static_cast<uint64_t>(i) * 10'000);
+        CHECK(m.type() == imu::Type::Tm171 && !m.valid(130'000));  // locked: the BNO085 is not read
+        m.reset();
+        CHECK(m.type() == imu::Type::None && m.packets() == 0);
+        for (int i = 0; i < 3; ++i) feed(m, bno(static_cast<uint8_t>(i), 0, 3.0, -2.0), 200'000 + static_cast<uint64_t>(i) * 10'000);
+        CHECK(m.type() == imu::Type::Bno085 && m.valid(230'000));
+        CHECK(near(m.data().roll, 3.0, 1e-3) && near(m.data().pitch, -2.0, 1e-3));  // the swap kept
+    }
+
     // --- Y-axis swap (PGN 251): roll and pitch trade places
     {
         imu::Imu m;

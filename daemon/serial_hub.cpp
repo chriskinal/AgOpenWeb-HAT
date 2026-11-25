@@ -200,10 +200,15 @@ void SerialHub::consume(Channel& c, const uint8_t* buf, size_t n) {
     if (c.kind() != before) announce(c, before);
     if (&c == gnssIn_) gnss_.feedReceiver(buf, n);
     else if (c.kind() == Kind::Radio && !lent_) gnss_.forwardRadio(buf, n);
-    if (&c == imuIn_ || (!imuIn_ && c.kind() == Kind::Imu)) {
-        imuIn_ = &c;
-        imu_.feed(buf, n, now);
-    }
+    if (!imuIn_ && c.kind() == Kind::Imu) useImu(&c);
+    if (&c == imuIn_) imu_.feed(buf, n, now);
+}
+
+void SerialHub::useImu(Channel* c) {
+    if (c == imuIn_) return;
+    imuIn_ = c;
+    // The parser keeps the first type it found: a BNO085 after a TM171 would not be read.
+    if (c) imu_.reset();
 }
 
 void SerialHub::announce(Channel& c, Kind before) {
@@ -308,7 +313,7 @@ void SerialHub::route() {
     if (!imuIn_ || !imuIn_->sending(now, kInUseUs))
         for (auto& cp : channels_)
             if (cp.get() != imuIn_ && !cp->gone && !cp->output() && cp->kind() == Kind::Imu && cp->sending(now, kInUseUs)) {
-                imuIn_ = cp.get();
+                useImu(cp.get());
                 break;
             }
 
