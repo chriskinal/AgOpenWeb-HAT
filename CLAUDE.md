@@ -71,7 +71,9 @@ The Teensy firmware is not being rewritten and nothing is ported back to it.
   arrives inverted and is never found (its AA 55 header reads as 95 D5), which the Serial page hints at.
   A BNO085 through a TTL to RS-232 adapter on the 4B was picked up on each move between Port 1
   and Port 2 with the daemon running, and on each switch between it and the TM171 on USB: the
-  IMU's type is found again when its port changes. What is on the
+  IMU's type is found again when its port changes. Hello is answered as the IMU (121, AgOpenWeb's
+  IMU light) while IMU data comes in, and not after 2 s without (no PGN 211: as the AiO, the IMU
+  reaches the app only in PANDA/PAOGI). Checked on the 4B with both IMUs plugged and unplugged. What is on the
   RS-232 ports and USB (a receiver, radio or IMU) is found by listening (`daemon/serial_hub`,
   `core/serial_detect`, auto rate; the ports are read on a thread of their own,
   `daemon/serial_reader`, so the loop never waits on the tty layer); only the new NMEA out and RTCM out and the port rates are

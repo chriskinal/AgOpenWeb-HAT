@@ -9,8 +9,9 @@ Starts aow-hatd with --gnss and --imu on the ptys, sends hello (no IMU yet: no 1
 then streams RVC packets turning at +10 deg/s at 100 Hz alongside GGA at 10 Hz. Checks that
 hello is then answered as the IMU (121) and that PANDA carries the IMU heading, roll, pitch
 and a yaw rate near 10 deg/s. Then stops the IMU and checks PANDA goes back to "no IMU".
-Last, it unplugs the IMU (closes the pty, as a USB IMU vanishing does) and plugs a new one in
-under the same name (a symlink, as /dev/serial/by-id is), and checks the daemon reopens it.
+Last, it unplugs the IMU (closes the pty, as a USB IMU vanishing does), checks hello is no
+longer answered as the IMU once it has sent nothing for 2 s, and plugs a new one in under the
+same name (a symlink, as /dev/serial/by-id is): the daemon reopens it and answers as 121 again.
 
 Stop AgOpenWeb first: this binds the app's port (9999).
 
@@ -112,6 +113,7 @@ def main():
 
     # 2 s turning at +10 deg/s through north.
     panda, yaw = stream(gps_m, imu_m, app, 2.0, 355.0)
+    stopped = time.time()
 
     src = hello_sources(app)
     print("hello with the IMU: sources %s" % src)
@@ -143,13 +145,19 @@ def main():
     # Unplugged, then a new one under the same name: reopened within about a second.
     os.close(imu_m)
     os.close(imu_s)
-    time.sleep(0.3)
+    time.sleep(max(0.0, stopped + 2.5 - time.time()))
+    src = hello_sources(app)
+    print("hello 2.5 s after the IMU's last packet: sources %s" % src)
+    ok &= src == [120, 126]
     imu_m, imu_s = new_imu(link)
     time.sleep(1.5)
     panda, yaw = stream(gps_m, imu_m, app, 1.0, yaw)
     back = [p for p in panda if ",65535," not in p]
     print("after unplug and replug: %d of %d PANDA carry the IMU" % (len(back), len(panda)))
     ok &= len(back) >= 5
+    src = hello_sources(app)
+    print("hello with the new IMU: sources %s" % src)
+    ok &= src == [120, 121, 126]
 
     proc.terminate()
     proc.wait(timeout=5)

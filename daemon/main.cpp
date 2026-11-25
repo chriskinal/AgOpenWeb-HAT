@@ -56,6 +56,7 @@ namespace {
 constexpr const char* kVersion = AOW_VERSION;
 constexpr long kTickNs = 10'000'000;           // 100 Hz, the rate the app sends PGN 254
 constexpr uint64_t kAppLinkTimeoutUs = 2'000'000;  // the firmware's steer watchdog
+constexpr uint64_t kImuGoneUs = 2'000'000;  // no IMU packet for this long: the IMU is gone
 
 struct Options {
     const char* appHost = "127.0.0.1";
@@ -502,6 +503,8 @@ int main(int argc, char** argv) {
     autosteer.setMotor(motor.get());
     autosteer.setPopup(hooks.popup);
     unsigned settingsSeen = shared.settingsVersion();
+    uint64_t imuSeenUs = 0;  // the last valid IMU packet
+    bool imuAnswered = false;  // answering AgOpenWeb's hello as the IMU
     SteerAdapter steerAdapter(autosteer, shared);
     app.setSteerModule(&steerAdapter);
     FixAdapter fixAdapter(gnss);
@@ -575,10 +578,8 @@ int main(int argc, char** argv) {
         if (fds[kSerial].revents) {
             const aow::imu::Type before = imu.type();
             hub.handle();
-            if (imu.type() != before && imu.type() != aow::imu::Type::None) {
+            if (imu.type() != before && imu.type() != aow::imu::Type::None)
                 LOG_INFO(Imu, "%s detected on %s", aow::imu::typeName(imu.type()), hub.imuName().c_str());
-                app.setImuPresent(true);
-            }
         }
         const uint64_t tickBeginUs = clock.nowUs();
         if (tickBeginUs >= tickStartUs + (ticks + 1) * kTickUs) {
@@ -658,6 +659,17 @@ int main(int argc, char** argv) {
             st.navSent = gnss.counters().navSent;
             st.imuType = aow::imu::typeName(imu.type());
             st.imuValid = imu.valid(clock.nowUs());
+            // AgOpenWeb sees an IMU while the HAT answers its hello as 121: from the first packet
+            // until kImuGoneUs without one (unplugged), so its IMU light goes out too.
+            if (st.imuValid) imuSeenUs = clock.nowUs();
+            const bool imuOn = imuSeenUs && clock.nowUs() - imuSeenUs < kImuGoneUs;
+            if (imuOn != imuAnswered) {
+                imuAnswered = imuOn;
+                app.setImuPresent(imuOn);
+                if (!imuOn)
+                    LOG_WARNING(Imu, "No IMU data for %u s: AgOpenWeb no longer sees an IMU",
+                                static_cast<unsigned>(kImuGoneUs / 1'000'000));
+            }
             st.radioBytes = gnss.counters().radioBytes;
             st.nmeaOutSent = gnss.counters().nmeaOutSent;
             st.rtcmOutBytes = gnss.counters().rtcmOutBytes;
