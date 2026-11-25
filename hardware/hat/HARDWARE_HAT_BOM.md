@@ -64,7 +64,7 @@
 | 2.2 MΩ | 1 | R10 | C2998080 | Ext |
 | 121 kΩ 1% | 1 | R13 | C11693 | Ext |
 | 10 MΩ | 1 | R15 | C2933065 | Ext |
-| 10 kΩ | 7 | R8, R18, R19, R31, R32, R33, R41 | C25744 | Basic |
+| 10 kΩ | 8 | R8, R18, R19, R31, R32, R33, R41, R43 | C25744 | Basic |
 | 33 Ω 1% | 3 | R20, R21, R22 | C2906868 | Ext |
 | 120 Ω 1% | 3 | R23, R24, R25 | C2909315 | Ext |
 | 330 Ω | 5 | R34, R35, R36, R38, R39 | C25104 | Basic |
@@ -72,7 +72,7 @@
 | 100 Ω | 1 | R40 | C25076 | Basic |
 | 470 Ω | 1 | R42 | C25117 | Basic |
 
-40 resistors, R3–R42 (R1, R2 removed with the direct-power change).
+41 resistors, R3–R43 (R1, R2 removed with the direct-power change; R43, the `STEER_EN` pull-down, added 2026-11-25, issues H18).
 
 ## 4. Capacitors
 

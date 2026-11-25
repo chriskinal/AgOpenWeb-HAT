@@ -75,8 +75,10 @@ On a Pi 4B:
   of and 3.5 mm below the HAT's J2 centre (15.5, 32.0, §2.1). Its pins are in the same order as J2's,
   pin 1 (`GLOBAL_EN`) at the +x end. Leave J2's socket off and run three short wires from J2's pads to
   the Pi's J2, pin 1 to pin 1 (issues H17).
-- **Power:** it has no 12 V input. A 12 V → 5 V converter (3 A) feeds header pins 2/4 from the
-  vehicle's constant 12 V, in place of the IO board's J20 (§4). It runs with the key off, so its
+- **Power:** it has no 12 V input. A 12 V → 5 V converter (5.1 V, 3 A) from the vehicle's constant
+  12 V feeds the Pi's USB-C jack, in place of the IO board's J20 (§4). It stays off the HAT
+  (decided 2026-11-25). The Pi's PoE pins are not a way in: they carry only the Ethernet jack's
+  centre taps, for a PoE HAT's own converter. The converter runs with the key off, so its
   standby current sets the battery drain. On the bench: USB-C for the Pi, and 12 V from a separate
   supply on J3.21 (key) and J3.1 (sense), its ground on J3.2.
 - **Heat:** the SoC sits under the HAT. Fit a low heatsink that clears the 11 mm standoffs.
@@ -110,14 +112,14 @@ so the board lies at negative Y. **X_editor = x, Y_editor = −(y + 16).** The b
 | H1 / H2 (HAT mount) | 3.50 / 61.50 | −19.50 | 2.7 |
 | H3 / H4 (HAT mount) | 3.50 / 61.50 | −68.50 | 2.7 |
 | H5 / H6 (GNSS A / B) | 22.00 / 56.30 | −4.00 | 3.3 |
-| H9 / H10 (GNSS E / F) | 22.00 / 58.00 | −40.00 / −39.50 | 3.6 |
+| H9 / H10 (GNSS E / F) | 22.00 / 58.00 | −40.00 | 3.3 |
 | J1 pin 1 / pin 2 | 8.37 | −20.82 / −18.28 | |
 | J2 pin 1 | 18.04 | −48.00 | |
 | **J1 origin** (header centre), 0° | 32.50 | −19.55 | |
 | **J2 origin** (pin 2), **180°** | 15.50 | −48.00 | |
 | **J6** (EMAX): pin 1 / pin 8, pins run +X | 31.12 / 48.90 | −41.20 | |
 | **J7** (UM982EB): pins 1, 2 / 27, 28, pins run −X | 52.00 / 26.00 | −69.80 odd, −67.80 even | |
-| **J3** (field header) centre, pins run along Y | 5.90 | −43.32 | pin 1 (4.63, −28.08), pin 2 (7.17, −28.08) |
+| **J3** (field header) centre, pins run along Y | 5.20 | −43.32 | pin 1 (3.93, −28.08), pin 2 (6.47, −28.08) |
 
 ### 2.1 Outline, holes and host connectors
 
@@ -452,6 +454,8 @@ three unpopulated pads under the HAT: 1 = `GLOBAL_EN`, 2 = GND, 3 = `RUN_PG`.
     in the harness notes.
 - **Steering outputs:** PWM (GPIO18, hardware PWM0), DIR (GPIO2) and EN (GPIO24; low at boot means
   steering off). Direct 3.3 V logic through 330 Ω (R34–R36), for MD13S / IBT-2 style drivers.
+  R43 10 k from `STEER_EN_OUT` (J3.12) to GND holds EN low whatever the host does, powered or
+  not: it sits on the J3 side of R36 (issues H18).
 - **Status LEDs:** 4 × SK6812SIDE-A (D19–D22) on `5V_MAIN`.
   - Data comes from **GPIO21**, whose PCM function gives the WS2812-class timing.
   - U11 SN74AHCT1G125 shifts it from 3.3 V to 5 V, through R39 330 Ω.
@@ -536,8 +540,8 @@ three unpopulated pads under the HAT: 1 = `GLOBAL_EN`, 2 = GND, 3 = `RUN_PG`.
   with a strain-relief clip or tie it to the enclosure close to J3, and use strain relief at the
   panel end too.
 - **Placement: the left strip** (X 0–16, outside both GNSS boards).
-  - Centre at **X 5.90, Y −43.32**, pins running along Y.
-  - Pin 1 at (4.63, −28.08), pin 2 at (7.17, −28.08); pins 25/26 at Y −58.56.
+  - Centre at **X 5.20, Y −43.32**, pins running along Y; the body spans X 0.65–9.77.
+  - Pin 1 at (3.93, −28.08), pin 2 at (6.47, −28.08); pins 25/26 at Y −58.56.
   - The body spans X 1.3–10.4 and Y −23.0 to −63.6. That clears J1's pins, the H1/H3 standoff nuts
     (~2 mm), J2's pads (1.6 mm) and the IO board's coin-cell holder underneath (~3 mm to the pin
     tails).

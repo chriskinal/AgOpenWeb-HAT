@@ -222,6 +222,7 @@ Vehicle 12 V goes **straight to the IO board's J20**, not through the HAT. The H
 | R28, R29, R30 | C11702 |
 | R31, R32, R33 | C25744 |
 | R34, R35, R36 | C25104 |
+| R43 | C25744 |
 | C40, C41, C42 | C1525 |
 
 **J3**
@@ -257,9 +258,9 @@ Vehicle 12 V goes **straight to the IO board's J20**, not through the HAT. The H
 | `MOT_DIR` | J1.3, R35.1 |
 | `STEER_DIR` | R35.2, J3.11 |
 | `STEER_EN` | J1.18, R36.1 |
-| `STEER_EN_OUT` | R36.2, J3.12 |
+| `STEER_EN_OUT` | R36.2, J3.12, R43.1 |
 | `+3V3` | R31.2, R32.2, R33.2, D18.5 |
-| GND | J3.2, J3.5, J3.13, J3.20, D13.2, D14.2, D15.A, D16.A, D17.A, C40.2, C41.2, C42.2, D18.2 |
+| GND | J3.2, J3.5, J3.13, J3.20, D13.2, D14.2, D15.A, D16.A, D17.A, C40.2, C41.2, C42.2, D18.2, R43.2 |
 | no connect | J3.22, D18.6 |
 
 ---
