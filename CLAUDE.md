@@ -66,7 +66,9 @@ The Teensy firmware is not being rewritten and nothing is ported back to it.
   INS receiver, no external IMU, steering off and the vehicle stopped; the GPS page shows it
   (`/api/status` `insLeverArm`). Tested against a fake UM981 only (`tests/ins_probe.py`). External IMU (`core/imu`): a BNO085
   (RVC) on an RS-232 port or a TM171 on USB (`/dev/ttyACMx`), reopened after an unplug: done on
-  ptys, and a real TM171 on the dev CM4 (signs checked on the bench). What is on the
+  ptys, and a real TM171 on the dev CM4 (signs checked on the bench) and on the Pi 4B, found on
+  each of its four USB ports (2026-11-24). The TM171's serial is 3.3 V (TTL): on an RS-232 port it
+  arrives inverted and is never found (its AA 55 header reads as 95 D5), which the Serial page hints at. What is on the
   RS-232 ports and USB (a receiver, radio or IMU) is found by listening (`daemon/serial_hub`,
   `core/serial_detect`, auto rate; the ports are read on a thread of their own,
   `daemon/serial_reader`, so the loop never waits on the tty layer); only the new NMEA out and RTCM out and the port rates are

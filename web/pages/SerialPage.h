@@ -9,7 +9,9 @@
 // out (each output's port, position source, sentences or RTCM messages, rate and drops) and what
 // is coming in on each port and USB device: parsed for what the HAT reads, else the first 20
 // characters of the last lines. Uses the firmware pages' stylesheet and layout. Settings from
-// /api/serial, live state from /api/status.
+// /api/serial, live state from /api/status. An RS-232 port that has data coming in but nothing
+// found after 10 s gets a hint: a 3.3 V (TTL) device on an RS-232 input arrives inverted and never
+// decodes (a TM171 there: its AA 55 header reads as 95 D5).
 // Long USB device names wrap, so the page fits AgOpenWeb's smallest web card.
 
 #ifndef SERIAL_PAGE_H
@@ -174,6 +176,8 @@ const char SERIAL_PAGE[] PROGMEM = R"rawliteral(
         }
 
         const lastIn = {};
+        const unknownSince = {};  // an RS-232 port: when data started coming in with nothing found
+        const TTL_HINT_MS = 10000;
         let lastPoll = 0;
         let lastOut = null;
         function pollStatus() {
@@ -205,7 +209,16 @@ const char SERIAL_PAGE[] PROGMEM = R"rawliteral(
                         } else if (p.kind === 'unknown') {
                             what = p.autoBaud ? 'listening, trying ' + p.baud : 'listening at ' + p.baud;
                             body = linesView(p, perSec);
+                            if (p.place !== 'usb' && p.place !== 'onboard' && perSec > 0) {
+                                if (unknownSince[p.name] === undefined) unknownSince[p.name] = now;
+                                if (now - unknownSince[p.name] >= TTL_HINT_MS)
+                                    body += '<div class="warn">Data is coming in but nothing is recognised. ' +
+                                        (p.autoBaud ? '' : 'Check the rate, or set it to auto. ') +
+                                        'A device with 3.3 V or 5 V (TTL) serial, not RS-232, reads as garbage here: ' +
+                                        'connect it through a TTL to RS-232 adapter, or by USB (a TM171 goes on USB).</div>';
+                            } else delete unknownSince[p.name];
                         } else {
+                            delete unknownSince[p.name];
                             what = '<span class="found">' + KIND[p.kind] + '</span> at ' + p.baud + (p.inUse ? ', in use' : '');
                             if (p.kind === 'gnss') body = p.inUse ? gnssView(data) : '<span class="quiet">Not in use: the onboard receiver comes first.</span>';
                             else if (p.kind === 'imu') body = (p.inUse && imuView(imu)) || linesView(p, perSec);
