@@ -69,12 +69,28 @@ mounting holes are laid out as the Pi 4B's, so the HAT bolts onto either one. Th
 carry the same three signals in the same order as the IO board's J1 (1 = `GLOBAL_EN`, 2 = GND,
 3 = `RUN`), so the latch, the restart and the watchdog (§4, §5) work unchanged. It is the same
 BCM2711 with the same GPIO, so the overlay, the device names and the software are the same too.
+**Two PCB layouts, one schematic** (2026-11-25). The Pi 4B is the preferred host: the IO board's
+only gain was an SSD, and the daemon's reduced writes make SD storage workable. The two layouts
+differ only in J2:
+
+| EasyEDA PCB | Host | J2 |
+|---|---|---|
+| AOW-HAT-Pi-4B-Ready-For-Order | Pi 4B (preferred) | SMD 1 × 3 socket, 5 mm, on the **bottom** layer over the Pi's J2 (C42379196) |
+| AOW-HAT-CM4-IO-Ready-For-Order | CM4 IO Board | through-hole 1 × 3 socket, 8.5 mm, over the IO board's J1 pads (C22373889) |
+
+The schematic's J2 is the 4B's socket, so only the 4B layout takes Design → Update PCB. EasyEDA
+Standard has no variants: the IO layout's through-hole J2 is a footprint swapped in the PCB with
+its three pad nets set by hand, and an Update PCB there replaces it with the SMD socket. Run the
+audit scripts against each layout; they match parts by designator and pad number, so both pass.
+
 On a Pi 4B:
-- **J2 doesn't mate: wire it.** Raspberry Pi's Pi 4B mechanical drawing puts the centre of its J2
-  (pin 2) 12.0 mm from the left edge and 20.5 mm from the bottom edge: HAT (12.0, 35.5), 3.5 mm left
-  of and 3.5 mm below the HAT's J2 centre (15.5, 32.0, §2.1). Its pins are in the same order as J2's,
-  pin 1 (`GLOBAL_EN`) at the +x end. Leave J2's socket off and run three short wires from J2's pads to
-  the Pi's J2, pin 1 to pin 1 (issues H17).
+- **J2:** Raspberry Pi's Pi 4B mechanical drawing puts the centre of its J2 (pin 2) 12.0 mm from
+  the left edge and 20.5 mm from the bottom edge: HAT (12.0, 35.5), 3.5 mm left of and 3.5 mm below
+  the IO board's J1 pads (15.5, 32.0, §2.1). Its pins are in the same order, pin 1 (`GLOBAL_EN`) at
+  the +x end. The 4B layout puts J2 there (§2.1). Through-hole pads would land in J3's body and on D6,
+  so it is an SMD socket on the underside. A **long-pin 1 × 3 male header** soldered into the Pi's
+  J2 pads mates with it (§2.1). The bench unit (2026-11-05) ran on the IO layout with J2's pads wired
+  to the Pi's J2, pin 1 to pin 1 (issues H17).
 - **Power:** it has no 12 V input. A 12 V → 5 V converter (5.1 V, 3 A) from the vehicle's constant
   12 V feeds the Pi's USB-C jack, in place of the IO board's J20 (§4). It stays off the HAT
   (decided 2026-11-25). The Pi's PoE pins are not a way in: they carry only the Ethernet jack's
@@ -114,9 +130,10 @@ so the board lies at negative Y. **X_editor = x, Y_editor = −(y + 16).** The b
 | H5 / H6 (GNSS A / B) | 22.00 / 56.30 | −4.00 | 3.3 |
 | H9 / H10 (GNSS E / F) | 22.00 / 58.00 | −40.00 | 3.3 |
 | J1 pin 1 / pin 2 | 8.37 | −20.82 / −18.28 | |
-| J2 pin 1 | 18.04 | −48.00 | |
+| J2 pin 1, CM4 IO layout | 18.04 | −48.00 | |
 | **J1 origin** (header centre), 0° | 32.50 | −19.55 | |
-| **J2 origin** (pin 2), **180°** | 15.50 | −48.00 | |
+| **J2 origin** (pin 2), **180°**, CM4 IO layout | 15.50 | −48.00 | |
+| **J2 origin** (body centre), **bottom**, Pi 4B layout | 12.00 | −51.50 | pads 1 / 3 (14.54 / 9.46, −53.04), pad 2 (12.00, −49.96) |
 | **J6** (EMAX): pin 1 / pin 8, pins run +X | 31.12 / 48.90 | −41.20 | |
 | **J7** (UM982EB): pins 1, 2 / 27, 28, pins run −X | 52.00 / 26.00 | −69.80 odd, −67.80 even | |
 | **J3** (field header) centre, pins run along Y | 5.20 | −43.32 | pin 1 (3.93, −28.08), pin 2 (6.47, −28.08) |
@@ -133,18 +150,31 @@ so the board lies at negative Y. **X_editor = x, Y_editor = −(y + 16).** The b
 | **J1 pin 1** (CM4 3.3 V) | **8.37, 4.82** | 87.37, 108.82 | mates with the IO board's 40-pin header (its J8); odd pins on the inner row |
 | J1 pin 2 (5 V) | 8.37, 2.28 | 87.37, 106.28 | even pins on the edge row |
 | J1 pins 39 / 40 | 56.63, 4.82 / 56.63, 2.28 | | 2.54 mm pitch along x |
-| **J2 pin 1 `GLOBAL_EN`** | **18.04, 32.00** | 97.04, 136.00 | mates with the IO board's J1 pads; runs in **−x** from pin 1 |
-| J2 pin 2 GND | 15.50, 32.00 | 94.50, 136.00 | |
-| J2 pin 3 `RUN_PG` | 12.96, 32.00 | 91.96, 136.00 | |
+| **J2 pin 1 `GLOBAL_EN`**, CM4 IO layout | **18.04, 32.00** | 97.04, 136.00 | mates with the IO board's J1 pads; runs in **−x** from pin 1 |
+| J2 pin 2 GND, CM4 IO layout | 15.50, 32.00 | 94.50, 136.00 | |
+| J2 pin 3 `RUN_PG`, CM4 IO layout | 12.96, 32.00 | 91.96, 136.00 | |
+| **J2 pin 1 `GLOBAL_EN`**, Pi 4B layout | **14.54, 35.50** | | mates with the Pi 4B's J2; runs in **−x** from pin 1 |
+| J2 pin 2 GND, Pi 4B layout | 12.00, 35.50 | | |
+| J2 pin 3 `RUN_PG`, Pi 4B layout | 9.46, 35.50 | | |
 
 - The hole pattern is confirmed as 58.0 × 49.0 mm.
-- **J2 is not on J1's 2.54 mm grid** (9.67 mm, 27.18 mm from J1 pin 1). Place it by coordinates.
-- **J1 and J2: keep the footprints on the TOP layer; fit the socket bodies on the underside.** The
-  pads are through-hole, so a top-layer footprint puts every pin at the right XY. Flipping the
-  footprint to the bottom in EasyEDA would **mirror** the pin order, and no rotation fixes that.
-  Hand-solder the sockets from the top. Both are **8.5 mm tall** so they seat together.
-- **Stacking:** 11 mm M2.5 standoffs. The IO board needs one change: **a 1 × 3 male header soldered
-  into its J1 pads**.
+- **J2 is not on J1's 2.54 mm grid** (9.67 mm, 27.18 mm from J1 pin 1 on the IO layout). Place it by coordinates.
+- **J1, and J2 on the IO layout: keep the footprints on the TOP layer; fit the socket bodies on the
+  underside.** The pads are through-hole, so a top-layer footprint puts every pin at the right XY.
+  Flipping the footprint to the bottom in EasyEDA would **mirror** the pin order, and no rotation
+  fixes that. Hand-solder the sockets from the top. Both are **8.5 mm tall** so they seat together.
+- **J2 on the Pi 4B layout is SMD, on the bottom layer** (Hanxia HX PM2.54-1x3P TP-YQ, C42379196):
+  a 5 mm socket with staggered legs, pads 1 and 3 at −y, pad 2 at +y; its contacts lie on the row
+  through the origin. Flipping an SMD footprint mirrors it too, so it is rotated until pad 1 is at
+  +x. Its pads were the only clash at this spot (the IO layout's J2 pads), and that layout's J2 isn't
+  on this board. Bottom-layer clearance as routed (2026-11-25): 0.235 mm from pad 1 to a CAN1_L via,
+  0.34 mm from pad 3 to CAN3_L.
+- **Stacking:** 11 mm M2.5 standoffs. One change to the host:
+  - IO board: **a 1 × 3 male header soldered into its J1 pads**.
+  - Pi 4B: **a long-pin 1 × 3 male header soldered into its J2 pads**. The socket face hangs 5 mm
+    below the HAT, about 6 mm above the Pi, so a standard header (about 6 mm of pin above its
+    plastic) only just reaches it. Use one with about 8 mm of pin above the plastic, plated to
+    match the socket.
 
 ### 2.2 IO board parts under the HAT
 
@@ -403,8 +433,11 @@ shutdown: about 1.9 Ah a day, a 100 Ah battery in about 50 days.
 The 40-pin header doesn't carry `GLOBAL_EN` or `RUN_PG`. The IO board brings both out on its **J1**,
 three unpopulated pads under the HAT: 1 = `GLOBAL_EN`, 2 = GND, 3 = `RUN_PG`.
 
-- **IO board:** solder a 1 × 3 male header into J1.
-- **HAT:** J2, a 1 × 3 female socket at the §2.1 coordinates (footprint on the top layer, body fitted underneath).
+The Pi 4B has the same three signals, in the same order, on its own **J2** pads.
+
+- **IO board:** solder a 1 × 3 male header into J1. **Pi 4B:** a long-pin 1 × 3 male header into J2 (§2.1).
+- **HAT:** J2, a 1 × 3 female socket at the §2.1 coordinates for the layout: through-hole on the IO
+  layout (footprint on the top layer, body fitted underneath), SMD on the bottom on the 4B layout.
 - **J2 pin 1 `GLOBAL_EN`** ← Q1 (held low while the latch is off, keeping the CM4 off) and Q5 (the
   block E restart pulse). Releasing it, or pulling it low for > 1 ms and then releasing it, starts a
   halted or held-off CM4.
@@ -577,6 +610,6 @@ three unpopulated pads under the HAT: 1 = `GLOBAL_EN`, 2 = GND, 3 = `RUN_PG`.
 | Watchdog | discrete STWD100 (1.6 s) | independent of everything else |
 | Power path | **12 V straight to the IO board's J20** (2026-09-25); the HAT switches only its own 5 V and holds the CM4 off via `GLOBAL_EN` | the IO board draws ~150 µA with the CM4 off, so switching its 12 V gained nothing |
 | Input protection | the IO board's own reverse-polarity FET; SMBJ24A on the HAT's sense inputs; optional inline TVS at J20 | field-proven on AgOpenGPS boards |
-| Restart / watchdog path | J2 socket onto the IO board's J1 pads | keeps both circuits simple; both tested through these pads |
+| Restart / watchdog path | J2 socket onto the IO board's J1 pads, or the Pi 4B's J2 (its own layout) | keeps both circuits simple; both tested through these pads |
 | GNSS | EMAX UM981 or UM982EB only | the boards on hand; remix for others |
 | Board size | standard HAT + ~16 mm upward | fits the GNSS footprint; the right-hand extension is held in reserve |

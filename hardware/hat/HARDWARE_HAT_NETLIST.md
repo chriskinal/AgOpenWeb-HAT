@@ -19,10 +19,10 @@ connects. Placement and the reasons behind the design are in `HARDWARE_HAT_DESIG
 | Ref | Part # |
 |---|---|
 | J1 | C22373925 |
-| J2 | C22373889 |
+| J2 | C42379196 (Pi 4B layout, SMD, bottom); C22373889 (CM4 IO layout, through-hole) |
 | J8 | C146690 (optional) |
 
-J1 and J2: footprints on the **top** layer (don't flip; that mirrors the pins). The socket bodies are fitted on the underside.
+J1, and J2 on the CM4 IO layout: footprints on the **top** layer (don't flip; that mirrors the pins). The socket bodies are fitted on the underside. J2 on the Pi 4B layout is an SMD socket on the **bottom** layer, rotated so pin 1 is at +X (design §2.1). The schematic carries the 4B part; the IO layout's J2 is swapped in its PCB, same pads and nets.
 
 **J1**
 

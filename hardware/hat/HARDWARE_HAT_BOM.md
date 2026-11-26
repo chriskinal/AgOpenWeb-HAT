@@ -93,8 +93,9 @@
 
 | Ref | Qty | Part | LCSC | Type | Notes |
 |---|---|---|---|---|---|
-| J1 | 1 | 2 × 20 female 2.54 mm, 8.5 mm (Hong Cheng HC-PM254-8.5H-2x20PZ) | C22373925 | Ext | footprint on top, body fitted underneath; same series as J2 |
-| J2 | 1 | 1 × 3 female 2.54 mm, 8.5 mm (Hong Cheng HC-PM254-8.5H-1x3PZ-02A) | C22373889 | Ext | footprint on top, body fitted underneath; off-grid |
+| J1 | 1 | 2 × 20 female 2.54 mm, 8.5 mm (Hong Cheng HC-PM254-8.5H-2x20PZ) | C22373925 | Ext | footprint on top, body fitted underneath; same series as the CM4 IO layout's J2 |
+| J2 (Pi 4B layout) | 1 | 1 × 3 female 2.54 mm SMD, 5 mm (Hanxia HX PM2.54-1x3P TP-YQ) | C42379196 | Ext | **bottom layer**; hand-solder it, with "Add into BOM" off, or JLC adds bottom-side assembly |
+| J2 (CM4 IO layout) | 1 | 1 × 3 female 2.54 mm, 8.5 mm (Hong Cheng HC-PM254-8.5H-1x3PZ-02A) | C22373889 | Ext | footprint on top, body fitted underneath; off-grid |
 | J3 | 1 | 2 × 13 IDC box header, straight, shrouded + keyed, **no latch** (CONNFLY DS1013-26SSiB1-B-0) | C75755 | Ext | 40.64 × 9.12 mm; EasyEDA footprint IDC-TH_DS1013-26SSIB1-B-0. Latched versions (52.5 mm long) don't fit the left strip. |
 | J6 | 1 | 1 × 8 female 2.54 mm (BOOMELE) | C27438 | Ext | EMAX UM981, 8.5 mm body |
 | J7 | 1 | 2 × 14 female **2.0 mm** (Hong Cheng HC-PM200-4.3H-2x14PZ) | C22436146 | Ext | UM982EB, **4.3 mm body**, low stock (~1.1k) |
@@ -109,14 +110,16 @@
 
 | Item | Notes |
 |---|---|
-| Raspberry Pi CM4 IO Board + CM4 module | the host |
-| 1 × 3 male 2.54 mm header | **soldered into the IO board's J1 pads**, to mate with J2 |
-| 4 × M2.5 standoffs, 11 mm | HAT ↔ IO board |
+| Raspberry Pi 4 Model B (preferred), or CM4 IO Board + CM4 module | the host; each has its own PCB layout |
+| 1 × 3 male 2.54 mm header, **long pin** (about 8 mm above the plastic), plated to match J2 | Pi 4B: **soldered into the Pi's J2 pads**, to mate with J2 |
+| 1 × 3 male 2.54 mm header | CM4 IO Board: **soldered into the IO board's J1 pads**, to mate with J2 |
+| 12 V → 5.1 V 3 A converter, USB-C out | Pi 4B only: from the vehicle's constant 12 V to the Pi's USB-C jack |
+| 4 × M2.5 standoffs, 11 mm | HAT ↔ IO board or Pi 4B |
 | 3–4 × M3 standoffs | GNSS board ↔ HAT. **Length depends on the board:** J6 is 8.5 mm tall, J7 is 4.3 mm |
 | GNSS board: EMAX UM981 **or** Unicore UM982EB | fit one only |
 | Antenna pigtails → panel bulkheads | one for the UM981, two for the UM982EB |
-| NVMe + M.2-to-PCIe ×1 adapter | in the IO board's PCIe slot |
-| 12 V lead: panel connector → IO board J20 | **TE 171822-4 Berg housing** + contacts at the IO board end, on J20 pin 1 (+12 V) and pins 2 + 3 (GND). **J20's pin order is the reverse of floppy-cable colours**: meter it first. Wire for ≥ 2 A (18 AWG). Optional: an inline TVS (SMBJ24A-class) across +12 V/GND at the J20 end |
+| NVMe + M.2-to-PCIe ×1 adapter | CM4 IO Board only: in its PCIe slot |
+| 12 V lead: panel connector → IO board J20 | CM4 IO Board only. **TE 171822-4 Berg housing** + contacts at the IO board end, on J20 pin 1 (+12 V) and pins 2 + 3 (GND). **J20's pin order is the reverse of floppy-cable colours**: meter it first. Wire for ≥ 2 A (18 AWG). Optional: an inline TVS (SMBJ24A-class) across +12 V/GND at the J20 end |
 | Ribbon | 26-way 1.27 mm flat cable + 2 × 2 × 13 IDC sockets, with strain relief |
 | Panel connector | Deutsch/ATS-style, 26+ ways: the J3 signals (ribbon) + the 12 V/GND power pair (to J20) |
 | Fuses (in the harness) | **5 A** on constant 12 V at the battery (feeds J20); **1 A** on the keyed feed (J3.21); **1 A** on the 12 V sense wire (J3.1), which can share the constant feed after the 5 A fuse |

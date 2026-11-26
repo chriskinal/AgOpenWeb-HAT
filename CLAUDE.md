@@ -14,8 +14,9 @@ This file provides guidance to Claude Code when working with this repository.
 
 Two things live here:
 
-1. **The AOW HAT board design**: a 40-pin HAT for the official Raspberry Pi CM4 IO Board. It
-   replaces an AgOpenGPS AiO board. Designed in **EasyEDA Standard** (not Pro).
+1. **The AOW HAT board design**: a 40-pin HAT for a Raspberry Pi 4 Model B (preferred since
+   2026-11-25) or the official CM4 IO Board, one schematic with a PCB layout for each (they differ
+   only in J2). It replaces an AgOpenGPS AiO board. Designed in **EasyEDA Standard** (not Pro).
 2. **`aow-hatd`**: the Linux daemon that runs on the CM4 and does what the AiO board's Teensy
    firmware did: steering, wheel-angle sensing, GNSS, RTK corrections, tractor CAN.
 
@@ -255,7 +256,8 @@ python3 pcb.py        # PCB pad nets vs schematic
 python3 conn.py       # routing completeness: nets still split into islands
 ```
 
-Run all three whenever the user supplies new EasyEDA exports. In `doccheck.py` output, mismatches
+Run all three whenever the user supplies new EasyEDA exports, once per PCB layout (Pi 4B and
+CM4 IO) against the one schematic. In `doccheck.py` output, mismatches
 on D2/D5/D15-D17/TV1/TV2 `.A`/`.K` and "J8 not in schematic" are pin-naming only, not errors.
 
 ## Rules
@@ -270,7 +272,10 @@ on D2/D5/D15-D17/TV1/TV2 `.A`/`.K` and "J8 not in schematic" are pin-naming only
   reaching a valid low.
 - **BZ1 stays outside X 16-62 mm.** It is too tall to sit under the UM982EB.
 - EasyEDA editor frame: origin at the board's top-left, Y up, board spans (0,0) to (65, -72.5).
-  J1/J2 footprints stay on the top layer; the socket bodies are fitted underneath.
+  J1 (and J2 on the CM4 IO layout) footprints stay on the top layer; the socket bodies are fitted
+  underneath. J2 on the Pi 4B layout is an SMD socket on the bottom layer, rotated so pin 1 is at +X.
+- **The schematic's J2 is the Pi 4B part.** Only the 4B layout takes Update PCB; the CM4 IO layout's
+  through-hole J2 is swapped in by hand and an Update PCB there would replace it.
 
 ### Daemon
 - **Follow the Teensy firmware's code, not its docs.** Its `CLAUDE.md` and `docs/` have stale pin
