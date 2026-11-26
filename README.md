@@ -5,7 +5,7 @@
 
 The **AOW HAT** board design and its hardware daemon, `aow-hatd`.
 
-The HAT is a 40-pin board for the Raspberry Pi CM4 IO Board. It replaces an AgOpenGPS AiO board,
+The HAT is a 40-pin board for the Raspberry Pi 4B or CM4 IO Board. It replaces an AgOpenGPS AiO board,
 and the daemon does the work the AiO board's Teensy firmware did: steering, wheel-angle sensing,
 GNSS, RTK corrections and tractor CAN.
 
