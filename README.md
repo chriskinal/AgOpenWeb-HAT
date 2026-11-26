@@ -22,7 +22,7 @@ The software plan is in [docs/PLAN.md](docs/PLAN.md).
 
 | | Hardware | Steering, GNSS, CAN handled by |
 |---|---|---|
-| 1 | CM4 + AOW HAT | this daemon |
+| 1 | 4B or CM4 + AOW HAT | this daemon |
 | 2 | any Pi + an existing AiO board (v4.x / v5.x) on Ethernet | the board's own Teensy firmware |
 
 The installer asks once which one applies. With no HAT the daemon stays disabled.
