@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 The AgOpenWeb-HAT contributors
+#
+# Prints the tag of AgOpenWeb's latest numbered release (vX.Y.Z, highest version, drafts left
+# out), the AgOpenWeb a HAT release ships (release.yml, dev.sh --agopenweb latest). AgOpenWeb marks
+# its numbered releases as pre-releases, so GitHub's "latest" can't be used. Needs gh.
+set -euo pipefail
+tag=$(gh release list -R AgOpenGPS-Official/AgOpenWeb --exclude-drafts -L 100 --json tagName -q '.[].tagName' |
+      grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1 || true)
+[ -n "$tag" ] || { echo "no numbered AgOpenWeb release found" >&2; exit 1; }
+echo "$tag"

@@ -8,8 +8,9 @@
 #   deploy/dev.sh build                      configure and build (incremental)
 #   deploy/dev.sh test                       build, then ctest
 #   deploy/dev.sh package --version X.Y.Z    signed .aowpkg and .tar.gz into dist/
-#       [--agopenweb FILE|beta]              with AgOpenWeb in it: its linux-arm64 tarball, or
-#                                            "beta" to download AgOpenWeb's Beta (needs gh)
+#       [--agopenweb FILE|latest|beta]       with AgOpenWeb in it: its linux-arm64 tarball, or
+#                                            download AgOpenWeb's latest numbered release (as
+#                                            release.yml does) or its Beta (needs gh)
 #   deploy/dev.sh install FILE [HOST]        upload a .aowpkg to HOST's update page and follow it
 #   deploy/dev.sh shell                      a shell in the container
 #
@@ -62,11 +63,14 @@ case "$cmd" in
     args=()
     while [ $# -gt 0 ]; do
       if [ "$1" = --agopenweb ]; then
-        app="${2:?--agopenweb FILE|beta}"
+        app="${2:?--agopenweb FILE|latest|beta}"
         shift 2
-        if [ "$app" = beta ]; then
+        if [ "$app" = latest ] || [ "$app" = beta ]; then
+          tag=beta
+          [ "$app" = latest ] && tag=$("$REPO/deploy/agopenweb-latest")
+          echo "AgOpenWeb $tag"
           app="$REPO/dist/agopenweb-linux-arm64.tar.gz"
-          gh release download beta -R AgOpenGPS-Official/AgOpenWeb -p agopenweb-linux-arm64.tar.gz -O "$app" --clobber
+          gh release download "$tag" -R AgOpenGPS-Official/AgOpenWeb -p agopenweb-linux-arm64.tar.gz -O "$app" --clobber
         fi
         [ -f "$app" ] || { echo "no such file: $app" >&2; exit 1; }
         EXTRA+=(-v "$(cd "$(dirname "$app")" && pwd)/$(basename "$app")":/agopenweb.tar.gz:ro)
